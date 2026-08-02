@@ -51,19 +51,31 @@ public class BatchProcessor {
         queue.append(image)
     }
     
-    public func processBatch(film: FilmProfile, iso: Int, shutter: Double, 
-                            completion: @escaping (Int) -> Void) {
+    /// Applies the film + exposure pipeline to every queued image.
+    /// `completion` reports running progress; the processed images are returned.
+    @discardableResult
+    public func processBatch(film: FilmProfile, iso: Int, shutter: Double,
+                             completion: @escaping (Int) -> Void) -> [UIImage] {
         processing = true
-        var processed = 0
-        
-        for image in queue {
-            // Process image through pipeline
-            processed += 1
-            completion(processed)
+        defer {
+            queue.removeAll()
+            processing = false
         }
-        
-        queue.removeAll()
-        processing = false
+
+        let engine = PreviewEngine()
+        var output: [UIImage] = []
+
+        for (index, image) in queue.enumerated() {
+            guard let cgImage = image.cgImage else { continue }
+            let pixels = engine.convertToPixels(cgImage)
+            let processed = engine.processPixels(pixels, film: film, iso: iso, shutter: shutter)
+            if let result = engine.convertToImage(processed, width: cgImage.width, height: cgImage.height) {
+                output.append(result)
+            }
+            completion(index + 1)
+        }
+
+        return output
     }
 }
 
@@ -107,8 +119,6 @@ public class GridOverlay {
     public func renderGrid(_ type: GridType, size: CGSize) -> UIImage? {
         UIGraphicsBeginImageContextWithOptions(size, false, 0)
         defer { UIGraphicsEndImageContext() }
-        
-        let context = UIGraphicsGetCurrentContext()!
         
         UIColor.white.withAlphaComponent(0.3).setStroke()
         let path = UIBezierPath()

@@ -70,10 +70,14 @@ public class HistogramEngine {
             let blueHeight = CGFloat(data.blueBuckets[i]) / CGFloat(maxBucket) * size.height
             
             let x = CGFloat(i) * barWidth
-            
-            // Red channel
-            UIColor.red.withAlphaComponent(0.5).setFill()
-            context.fill(CGRect(x: x, y: size.height - redHeight, width: barWidth, height: redHeight))
+
+            // Additive blend so overlapping channels read as a combined histogram
+            for (color, height) in [(UIColor.red, redHeight),
+                                    (UIColor.green, greenHeight),
+                                    (UIColor.blue, blueHeight)] {
+                color.withAlphaComponent(0.5).setFill()
+                context.fill(CGRect(x: x, y: size.height - height, width: barWidth, height: height))
+            }
         }
         
         return UIGraphicsGetImageFromCurrentImageContext()

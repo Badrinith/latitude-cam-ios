@@ -5,46 +5,58 @@
 	};
 	objectVersion = 56;
 	objects = {
+
 /* Begin PBXBuildFile section */
 		A001 /* LatitudeCamApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B001 /* LatitudeCamApp.swift */; };
-		A002 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = B002 /* Theme.swift */; };
-		A003 /* Screens.swift in Sources */ = {isa = PBXBuildFile; fileRef = B003 /* Screens.swift */; };
-		A004 /* FilmProfiles.swift in Sources */ = {isa = PBXBuildFile; fileRef = B004 /* FilmProfiles.swift */; };
-		A005 /* ExposureControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = B005 /* ExposureControl.swift */; };
-		A006 /* CameraManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B006 /* CameraManager.swift */; };
-		A007 /* CameraView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B007 /* CameraView.swift */; };
-		A008 /* PhotoExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B008 /* PhotoExporter.swift */; };
-		A009 /* PreviewEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = B009 /* PreviewEngine.swift */; };
-		A010 /* PhotoGallery.swift in Sources */ = {isa = PBXBuildFile; fileRef = B010 /* PhotoGallery.swift */; };
-		A011 /* HistogramEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = B011 /* HistogramEngine.swift */; };
-		A012 /* AdvancedFeatures.swift in Sources */ = {isa = PBXBuildFile; fileRef = B012 /* AdvancedFeatures.swift */; };
-		A013 /* ProductionFeatures.swift in Sources */ = {isa = PBXBuildFile; fileRef = B013 /* ProductionFeatures.swift */; };
+		A002 /* FilmProfiles.swift in Sources */ = {isa = PBXBuildFile; fileRef = B002 /* FilmProfiles.swift */; };
+		A003 /* ExposureControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = B003 /* ExposureControl.swift */; };
+		A004 /* CameraManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B004 /* CameraManager.swift */; };
+		A005 /* PhotoExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B005 /* PhotoExporter.swift */; };
+		A006 /* PreviewEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = B006 /* PreviewEngine.swift */; };
+		A007 /* PhotoGallery.swift in Sources */ = {isa = PBXBuildFile; fileRef = B007 /* PhotoGallery.swift */; };
+		A008 /* HistogramEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = B008 /* HistogramEngine.swift */; };
+		A009 /* AdvancedFeatures.swift in Sources */ = {isa = PBXBuildFile; fileRef = B009 /* AdvancedFeatures.swift */; };
+		A010 /* ProductionFeatures.swift in Sources */ = {isa = PBXBuildFile; fileRef = B010 /* ProductionFeatures.swift */; };
+		A011 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = B011 /* Theme.swift */; };
+		A012 /* Components.swift in Sources */ = {isa = PBXBuildFile; fileRef = B012 /* Components.swift */; };
+		A013 /* EntryScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = B013 /* EntryScreens.swift */; };
+		A014 /* ViewfinderScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = B014 /* ViewfinderScreen.swift */; };
+		A015 /* LibraryScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = B015 /* LibraryScreens.swift */; };
+		A016 /* ReviewSettingsScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = B016 /* ReviewSettingsScreens.swift */; };
+		A100 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B100 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		B001 /* LatitudeCamApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LatitudeCamApp.swift; sourceTree = "<group>"; };
-		B002 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
-		B003 /* Screens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Screens.swift; sourceTree = "<group>"; };
-		B004 /* FilmProfiles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilmProfiles.swift; sourceTree = "<group>"; };
-		B005 /* ExposureControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExposureControl.swift; sourceTree = "<group>"; };
-		B006 /* CameraManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraManager.swift; sourceTree = "<group>"; };
-		B007 /* CameraView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraView.swift; sourceTree = "<group>"; };
-		B008 /* PhotoExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoExporter.swift; sourceTree = "<group>"; };
-		B009 /* PreviewEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewEngine.swift; sourceTree = "<group>"; };
-		B010 /* PhotoGallery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoGallery.swift; sourceTree = "<group>"; };
-		B011 /* HistogramEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistogramEngine.swift; sourceTree = "<group>"; };
-		B012 /* AdvancedFeatures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdvancedFeatures.swift; sourceTree = "<group>"; };
-		B013 /* ProductionFeatures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProductionFeatures.swift; sourceTree = "<group>"; };
+		B002 /* FilmProfiles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilmProfiles.swift; sourceTree = "<group>"; };
+		B003 /* ExposureControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExposureControl.swift; sourceTree = "<group>"; };
+		B004 /* CameraManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraManager.swift; sourceTree = "<group>"; };
+		B005 /* PhotoExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoExporter.swift; sourceTree = "<group>"; };
+		B006 /* PreviewEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewEngine.swift; sourceTree = "<group>"; };
+		B007 /* PhotoGallery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoGallery.swift; sourceTree = "<group>"; };
+		B008 /* HistogramEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistogramEngine.swift; sourceTree = "<group>"; };
+		B009 /* AdvancedFeatures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdvancedFeatures.swift; sourceTree = "<group>"; };
+		B010 /* ProductionFeatures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProductionFeatures.swift; sourceTree = "<group>"; };
+		B011 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+		B012 /* Components.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Components.swift; sourceTree = "<group>"; };
+		B013 /* EntryScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntryScreens.swift; sourceTree = "<group>"; };
+		B014 /* ViewfinderScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewfinderScreen.swift; sourceTree = "<group>"; };
+		B015 /* LibraryScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryScreens.swift; sourceTree = "<group>"; };
+		B016 /* ReviewSettingsScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewSettingsScreens.swift; sourceTree = "<group>"; };
+		B100 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		C001 /* LatitudeCam.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LatitudeCam.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		C002 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
+		D000 /* UI */ = {
+			isa = PBXGroup;
+			children = (B011, B012, B013, B014, B015, B016);
+			path = UI;
+			sourceTree = "<group>";
+		};
 		D001 /* Sources */ = {
 			isa = PBXGroup;
-			children = (
-				B001, B002, B003, B004, B005, B006, B007, B008, B009, B010, B011, B012, B013
-			);
+			children = (B001, D000, B002, B003, B004, B005, B006, B007, B008, B009, B010);
 			path = Sources;
 			sourceTree = "<group>";
 		};
@@ -56,7 +68,7 @@
 		};
 		D003 /* LatitudeCam */ = {
 			isa = PBXGroup;
-			children = (D001, C002, D002);
+			children = (D001, B100, D002);
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -64,13 +76,13 @@
 /* Begin PBXNativeTarget section */
 		E001 /* LatitudeCam */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = E010;
-			buildPhases = (F001);
+			buildConfigurationList = E010 /* Build configuration list for PBXNativeTarget "LatitudeCam" */;
+			buildPhases = (F001 /* Sources */, F002 /* Resources */);
 			buildRules = ();
 			dependencies = ();
 			name = LatitudeCam;
 			productName = LatitudeCam;
-			productReference = C001;
+			productReference = C001 /* LatitudeCam.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -81,11 +93,9 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastUpgradeCheck = 1500;
-				TargetAttributes = {
-					E001 = {CreatedOnToolsVersion = 15.0;};
-				};
+				TargetAttributes = { E001 = {CreatedOnToolsVersion = 15.0;}; };
 			};
-			buildConfigurationList = G010;
+			buildConfigurationList = G010 /* Build configuration list for PBXProject "LatitudeCam" */;
 			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
@@ -98,11 +108,20 @@
 		};
 /* End PBXProject section */
 
+/* Begin PBXResourcesBuildPhase section */
+		F002 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (A100 /* Assets.xcassets in Resources */);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		F001 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
-			files = (A001, A002, A003, A004, A005, A006, A007, A008, A009, A010, A011, A012, A013);
+			files = (A001, A002, A003, A004, A005, A006, A007, A008, A009, A010, A011, A012, A013, A014, A015, A016);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
@@ -121,14 +140,13 @@
 				ENABLE_TESTABILITY = YES;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_OPTIMIZATION_LEVEL = 0;
-				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.9;
-				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Debug;
 		};
@@ -144,13 +162,12 @@
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				GCC_OPTIMIZATION_LEVEL = s;
-				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				SDKROOT = iphoneos;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 5.9;
-				TARGETED_DEVICE_FAMILY = 1;
 				VALIDATE_PRODUCT = YES;
 			};
 			name = Release;
@@ -159,11 +176,20 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
-				MARKETING_VERSION = 0.1.0;
+				INFOPLIST_KEY_CFBundleDisplayName = Latitude;
+				INFOPLIST_KEY_NSCameraUsageDescription = "Latitude uses the camera to shoot photos with manual controls and film simulations.";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Latitude saves your captures to your photo library.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UIStatusBarStyle = UIStatusBarStyleLightContent;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				INFOPLIST_KEY_UIUserInterfaceStyle = Dark;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.latitude.cam;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -177,11 +203,20 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
-				MARKETING_VERSION = 0.1.0;
+				INFOPLIST_KEY_CFBundleDisplayName = Latitude;
+				INFOPLIST_KEY_NSCameraUsageDescription = "Latitude uses the camera to shoot photos with manual controls and film simulations.";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Latitude saves your captures to your photo library.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UIStatusBarStyle = UIStatusBarStyleLightContent;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				INFOPLIST_KEY_UIUserInterfaceStyle = Dark;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.latitude.cam;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -209,5 +244,5 @@
 		};
 /* End XCConfigurationList section */
 	};
-	rootObject = G001;
+	rootObject = G001 /* Project object */;
 }

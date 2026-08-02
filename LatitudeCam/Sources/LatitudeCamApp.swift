@@ -2,50 +2,41 @@
 //  LatitudeCamApp.swift
 //  LatitudeCam
 //
-//  Phase 0: Film Photography on iPhone with Professional Design
+//  Pro camera app with original film-look color grading.
+//
 
 import SwiftUI
 
 @main
 struct LatitudeCamApp: App {
-    @StateObject private var appState = AppState()
+    @StateObject private var app = AppState()
 
     var body: some Scene {
         WindowGroup {
-            AppContentView()
-                .environmentObject(appState)
+            RootView()
+                .environmentObject(app)
+                .preferredColorScheme(.dark)
         }
     }
 }
 
-struct AppContentView: View {
-    @EnvironmentObject var appState: AppState
+struct RootView: View {
+    @EnvironmentObject var app: AppState
 
     var body: some View {
         ZStack {
-            LatitudePalette.backgroundDark.ignoresSafeArea()
+            Ink.base.ignoresSafeArea()
 
-            Group {
-                switch appState.currentScreen {
-                case .launch:
-                    LaunchScreen()
-                case .onboarding:
-                    OnboardingScreen()
-                case .login:
-                    LoginScreen()
-                case .viewfinder:
-                    ViewfinderScreen()
-                case .filmSim:
-                    FilmSimScreen()
-                case .library:
-                    LibraryScreen()
-                case .edit:
-                    LibraryScreen()
-                case .review:
-                    ReviewScreen()
-                case .settings:
-                    SettingsScreen()
-                }
+            switch app.screen {
+            case .launch:     LaunchScreen()
+            case .onboarding: OnboardingScreen()
+            case .login:      LoginScreen()
+            case .viewfinder: ViewfinderScreen()
+            case .filmSim:    FilmSimScreen()
+            case .library:    LibraryScreen()
+            case .edit:       EditScreen()
+            case .review:     ReviewScreen()
+            case .settings:   SettingsScreen()
             }
         }
     }
