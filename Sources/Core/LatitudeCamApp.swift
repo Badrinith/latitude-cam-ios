@@ -3,7 +3,9 @@
 //  LatitudeCam
 //
 //  Phase 0: Film Photography on iPhone
-//
+//  0.1: Film Profiles ✅
+//  0.2: Exposure Control ✅
+//  0.3: Camera Integration ✅
 
 import SwiftUI
 
@@ -11,19 +13,7 @@ import SwiftUI
 struct LatitudeCamApp: App {
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            CameraView()
         }
-    }
-}
-
-struct ContentView: View {
-    var body: some View {
-        VStack {
-            Text("Latitude Cam - Phase 0")
-                .font(.title)
-            Text("Film Photography on iPhone")
-                .font(.subheadline)
-        }
-        .padding()
     }
 }
