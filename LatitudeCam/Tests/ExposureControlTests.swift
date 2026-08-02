@@ -63,7 +63,8 @@ final class ExposureControlTests: XCTestCase {
     }
     
     func testISOPreservesColorBalance() {
-        let pixel = Pixel(r: 255, g: 128, b: 64)  // Orange
+        // Needs 2x headroom: a channel that clips at 255 cannot preserve hue.
+        let pixel = Pixel(r: 120, g: 60, b: 30)  // Orange
         let iso = ISOControl(baseISO: 100)
         let result = iso.adjust(pixel, toISO: 200)
         
@@ -120,7 +121,8 @@ final class ExposureControlTests: XCTestCase {
     }
     
     func testShutterPreservesColorBalance() {
-        let pixel = Pixel(r: 200, g: 100, b: 50)  // Orange
+        // Needs 2x headroom: a channel that clips at 255 cannot preserve hue.
+        let pixel = Pixel(r: 120, g: 60, b: 30)  // Orange
         let shutter = ShutterControl(baseShutter: 1.0)
         let result = shutter.adjust(pixel, exposureTime: 2.0)
         
@@ -153,7 +155,8 @@ final class ExposureControlTests: XCTestCase {
     }
     
     func testCombinedExposurePreservesColor() {
-        let pixel = Pixel(r: 128, g: 64, b: 32)
+        // ISO 2x then shutter 2x = 4x total, so this needs 4x headroom.
+        let pixel = Pixel(r: 60, g: 30, b: 15)
         
         let iso = ISOControl(baseISO: 100)
         let step1 = iso.adjust(pixel, toISO: 200)

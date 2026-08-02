@@ -7,19 +7,38 @@
 //
 
 import XCTest
+import AVFoundation
 @testable import LatitudeCam
+
+/// True only where a real capture device exists — the Simulator has none, so
+/// capture-path tests are skipped there rather than reported as failures.
+private var hasCaptureDevice: Bool {
+    AVCaptureDevice.default(for: .video) != nil
+}
 
 final class CameraIntegrationTests: XCTestCase {
     
     var cameraManager: CameraManager!
     
+    /// CameraManager persists to the shared UserDefaults, so settings written
+    /// by one test would otherwise leak into the next one's defaults.
+    private static let persistedKeys = [
+        "LatitudeCam.ISO", "LatitudeCam.ShutterTime", "LatitudeCam.FilmProfile"
+    ]
+
+    private func clearPersistedSettings() {
+        Self.persistedKeys.forEach { UserDefaults.standard.removeObject(forKey: $0) }
+    }
+
     override func setUp() {
         super.setUp()
+        clearPersistedSettings()
         cameraManager = CameraManager()
     }
-    
+
     override func tearDown() {
         cameraManager = nil
+        clearPersistedSettings()
         super.tearDown()
     }
     
@@ -178,7 +197,8 @@ final class CameraIntegrationTests: XCTestCase {
     
     // MARK: - Photo Capture Tests
     
-    func testCapturePhotoReturnsImage() {
+    func testCapturePhotoReturnsImage() throws {
+        try XCTSkipUnless(hasCaptureDevice, "Requires camera hardware")
         let captureExpectation = expectation(description: "Should capture a photo")
         
         cameraManager.capturePhoto { image in
@@ -189,7 +209,8 @@ final class CameraIntegrationTests: XCTestCase {
         waitForExpectations(timeout: 5.0)
     }
     
-    func testCapturedPhotoHasFilmApplied() {
+    func testCapturedPhotoHasFilmApplied() throws {
+        try XCTSkipUnless(hasCaptureDevice, "Requires camera hardware")
         let captureExpectation = expectation(description: "Captured photo should have film applied")
         
         // Set Mono film (should convert to B&W)

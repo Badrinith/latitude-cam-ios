@@ -24,6 +24,11 @@
 		A015 /* LibraryScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = B015 /* LibraryScreens.swift */; };
 		A016 /* ReviewSettingsScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = B016 /* ReviewSettingsScreens.swift */; };
 		A100 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B100 /* Assets.xcassets */; };
+		A200 /* FilmProfileTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200 /* FilmProfileTests.swift */; };
+		A201 /* ExposureControlTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B201 /* ExposureControlTests.swift */; };
+		A202 /* CameraIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B202 /* CameraIntegrationTests.swift */; };
+		A203 /* PreviewEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B203 /* PreviewEngineTests.swift */; };
+		A204 /* Phase0_4_AllTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B204 /* Phase0_4_AllTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -45,6 +50,12 @@
 		B016 /* ReviewSettingsScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewSettingsScreens.swift; sourceTree = "<group>"; };
 		B100 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		C001 /* LatitudeCam.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LatitudeCam.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		C002 /* LatitudeCamTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = LatitudeCamTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		B200 /* FilmProfileTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilmProfileTests.swift; sourceTree = "<group>"; };
+		B201 /* ExposureControlTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExposureControlTests.swift; sourceTree = "<group>"; };
+		B202 /* CameraIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraIntegrationTests.swift; sourceTree = "<group>"; };
+		B203 /* PreviewEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewEngineTests.swift; sourceTree = "<group>"; };
+		B204 /* Phase0_4_AllTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Phase0_4_AllTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -62,13 +73,19 @@
 		};
 		D002 /* Products */ = {
 			isa = PBXGroup;
-			children = (C001);
+			children = (C001, C002);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		D004 /* Tests */ = {
+			isa = PBXGroup;
+			children = (B200, B201, B202, B203, B204);
+			path = Tests;
 			sourceTree = "<group>";
 		};
 		D003 /* LatitudeCam */ = {
 			isa = PBXGroup;
-			children = (D001, B100, D002);
+			children = (D001, D004, B100, D002);
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -85,7 +102,36 @@
 			productReference = C001 /* LatitudeCam.app */;
 			productType = "com.apple.product-type.application";
 		};
+		E002 /* LatitudeCamTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E020 /* Build configuration list for PBXNativeTarget "LatitudeCamTests" */;
+			buildPhases = (F003 /* Sources */);
+			buildRules = ();
+			dependencies = (E030 /* PBXTargetDependency */);
+			name = LatitudeCamTests;
+			productName = LatitudeCamTests;
+			productReference = C002 /* LatitudeCamTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
+
+/* Begin PBXTargetDependency section */
+		E030 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = E001 /* LatitudeCam */;
+			targetProxy = E031 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin PBXContainerItemProxy section */
+		E031 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = G001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = E001;
+			remoteInfo = LatitudeCam;
+		};
+/* End PBXContainerItemProxy section */
 
 /* Begin PBXProject section */
 		G001 /* Project object */ = {
@@ -104,7 +150,7 @@
 			productRefGroup = D002;
 			projectDirPath = "";
 			projectRoot = "";
-			targets = (E001);
+			targets = (E001, E002);
 		};
 /* End PBXProject section */
 
@@ -122,6 +168,12 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (A001, A002, A003, A004, A005, A006, A007, A008, A009, A010, A011, A012, A013, A014, A015, A016);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F003 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (A200, A201, A202, A203, A204);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
@@ -227,6 +279,42 @@
 			};
 			name = Release;
 		};
+		H005 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.latitude.cam.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.9;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/LatitudeCam.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/LatitudeCam";
+			};
+			name = Debug;
+		};
+		H006 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.latitude.cam.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.9;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/LatitudeCam.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/LatitudeCam";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -239,6 +327,12 @@
 		E010 /* Build configuration list for PBXNativeTarget "LatitudeCam" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (H003, H004);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		E020 /* Build configuration list for PBXNativeTarget "LatitudeCamTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (H005, H006);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};

@@ -44,6 +44,11 @@ public class PhotoGallery {
     
     public func deletePhoto(_ id: String) {
         photos.removeAll { $0.id == id }
+
+        // The file must go too — dropping only the in-memory entry meant
+        // loadPhotos() resurrected deleted photos on the next launch.
+        let photoFile = getGalleryDirectory().appendingPathComponent("\(id).jpg")
+        try? fileManager.removeItem(at: photoFile)
     }
     
     private func savePhoto(_ photo: Photo) {

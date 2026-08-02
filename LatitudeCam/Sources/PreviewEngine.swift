@@ -20,7 +20,9 @@ public class PreviewEngine {
     private let pixelBufferSize: Int = 1024
     
     // State
-    private var lastPreviewTime: Date = Date()
+    /// Must start in the distant past — seeding this with `Date()` makes the
+    /// throttle drop the very first frame after construction.
+    private var lastPreviewTime: Date = .distantPast
     private var pixelBuffer: [Pixel] = []
     
     // Callbacks

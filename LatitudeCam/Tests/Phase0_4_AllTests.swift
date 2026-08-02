@@ -9,6 +9,14 @@ import XCTest
 @testable import LatitudeCam
 
 final class PhotoGalleryTests: XCTestCase {
+    // The gallery persists to disk, so state survives between runs. Start from
+    // a known-empty gallery rather than asserting an absolute count.
+    override func setUp() {
+        super.setUp()
+        let gallery = PhotoGallery()
+        gallery.getPhotos().forEach { gallery.deletePhoto($0.id) }
+    }
+
     func testGalleryCanStorePhotos() {
         let gallery = PhotoGallery()
         let testImage = UIImage(systemName: "camera") ?? UIImage()

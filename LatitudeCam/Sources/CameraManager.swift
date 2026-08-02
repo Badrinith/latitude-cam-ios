@@ -50,6 +50,7 @@ public class CameraManager: NSObject, ObservableObject {
     
     public func setFilmProfile(_ profile: FilmProfile) {
         currentFilmProfileValue = profile
+        saveSettings()
         onPreviewUpdate?()
     }
     
@@ -57,11 +58,13 @@ public class CameraManager: NSObject, ObservableObject {
     
     public func setISO(_ iso: Int) {
         currentISO = iso
+        saveSettings()
         onPreviewUpdate?()
     }
-    
+
     public func setShutterTime(_ time: Double) {
         currentShutterTime = time
+        saveSettings()
         onPreviewUpdate?()
     }
     
