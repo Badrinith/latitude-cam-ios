@@ -102,7 +102,7 @@ public class CustomFilmProfileEditor {
 // MARK: - Grid Overlays
 
 public class GridOverlay {
-    enum GridType { case thirdRule, goldenRatio, grid }
+    public enum GridType { case thirdRule, goldenRatio, grid }
     
     public func renderGrid(_ type: GridType, size: CGSize) -> UIImage? {
         UIGraphicsBeginImageContextWithOptions(size, false, 0)

@@ -8,6 +8,7 @@
 import Foundation
 import Photos
 import AVFoundation
+import UIKit
 
 // MARK: - Permission Manager
 
