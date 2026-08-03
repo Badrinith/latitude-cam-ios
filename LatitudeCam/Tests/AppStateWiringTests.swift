@@ -103,15 +103,21 @@ final class AppStateWiringTests: XCTestCase {
         XCTAssertLessThan(app.cameraManager.currentSettings.ev, 0)
     }
 
+    /// A viewfinder's job is to show the scene. Grain is a look you ask for, not
+    /// something the camera does to you before you have chosen it.
+    func testGrainIsOffUntilAskedFor() {
+        XCTAssertFalse(AppState().grainOn)
+    }
+
     // MARK: - Look toggles
 
     func testLookTogglesReachTheRenderPipeline() {
         let app = AppState()
 
-        app.grainOn = false
-        XCTAssertFalse(app.cameraManager.currentSettings.grain)
         app.grainOn = true
         XCTAssertTrue(app.cameraManager.currentSettings.grain)
+        app.grainOn = false
+        XCTAssertFalse(app.cameraManager.currentSettings.grain)
 
         app.halationOn = true
         XCTAssertTrue(app.cameraManager.currentSettings.halation)

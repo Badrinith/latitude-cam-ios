@@ -207,7 +207,7 @@ final class AppState: ObservableObject {
     // Every control below feeds the render pipeline, so each one syncs on write.
     @Published var selectedFilm: FilmPreset = FilmPreset.all[0] { didSet { syncCamera() } }
     @Published var intensity: Double = 0.8 { didSet { syncCamera() } }
-    @Published var grainOn = true { didSet { syncCamera() } }
+    @Published var grainOn = false { didSet { syncCamera() } }
     @Published var halationOn = false { didSet { syncCamera() } }
     @Published var vignetteOn = false { didSet { syncCamera() } }
 
@@ -423,7 +423,7 @@ final class AppState: ObservableObject {
 
     static let defaultControls = ControlSnapshot(
         filmID: "amber", intensity: 0.8,
-        grain: true, halation: false, vignette: false,
+        grain: false, halation: false, vignette: false,
         shutter: 0.36, iso: 0.21, whiteBalance: 0.64, exposureComp: 0.5,
         focusPeaking: true, autoExposure: false
     )

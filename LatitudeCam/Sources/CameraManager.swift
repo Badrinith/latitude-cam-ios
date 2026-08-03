@@ -463,12 +463,23 @@ extension CameraManager {
             ])
         }
 
-        // 6. Grain. The noise tile is generated once at init — CIRandomGenerator
-        //    per frame is far too expensive.
+        // 6. Grain, scaled by film speed. Soft light rather than overlay: CoreImage
+        //    works in linear light, where mid-grey is about 0.21, so overlay's
+        //    shadow branch multiplies by 2·blend and turns a gentle noise into
+        //    white salt across everything dark. Soft light scales with the base
+        //    instead, so blacks stay black.
         if s.grain, let noise = noiseTile {
+            let amplitude = Self.grainAmplitude(forISO: s.iso)
+            let bias = (1 - amplitude) / 2
             image = noise
+                .applyingFilter("CIColorMatrix", parameters: [
+                    "inputRVector": CIVector(x: amplitude, y: 0, z: 0, w: 0),
+                    "inputGVector": CIVector(x: 0, y: amplitude, z: 0, w: 0),
+                    "inputBVector": CIVector(x: 0, y: 0, z: amplitude, w: 0),
+                    "inputBiasVector": CIVector(x: bias, y: bias, z: bias, w: 1)
+                ])
                 .cropped(to: extent)
-                .applyingFilter("CIOverlayBlendMode", parameters: [
+                .applyingFilter("CISoftLightBlendMode", parameters: [
                     kCIInputBackgroundImageKey: image
                 ])
         }
@@ -521,8 +532,11 @@ extension CameraManager {
         )
     }
 
-    /// A grey-noise field centred on 0.5 so an overlay blend leaves mid-tones
-    /// alone and only perturbs the frame slightly.
+    /// Unit grey noise, 0…1. The per-frame amplitude is applied at render time so
+    /// grain can follow film speed without rebuilding this.
+    ///
+    /// Enlarged 2.4× because CIRandomGenerator is one random value per pixel, and
+    /// pixel-sized speckle reads as sensor noise. Film grain is clumps.
     ///
     /// CIRandomGenerator is already infinite in extent. An earlier version cropped
     /// it to 512pt and then tiled with an identity transform — an identity lattice
@@ -530,14 +544,23 @@ extension CameraManager {
     /// patch at the origin, which CoreImage puts in the bottom-left corner.
     static func makeNoiseTile() -> CIImage? {
         guard let random = CIFilter(name: "CIRandomGenerator")?.outputImage else { return nil }
-        let amplitude: CGFloat = 0.09
-        let bias = (1 - amplitude) / 2
-        let luma = CIVector(x: 0.2126 * amplitude, y: 0.7152 * amplitude, z: 0.0722 * amplitude, w: 0)
-        return random.applyingFilter("CIColorMatrix", parameters: [
-            "inputRVector": luma,
-            "inputGVector": luma,
-            "inputBVector": luma,
-            "inputBiasVector": CIVector(x: bias, y: bias, z: bias, w: 1)
-        ])
+        let luma = CIVector(x: 0.2126, y: 0.7152, z: 0.0722, w: 0)
+        return random
+            .transformed(by: CGAffineTransform(scaleX: 2.4, y: 2.4))
+            .applyingFilter("CIColorMatrix", parameters: [
+                "inputRVector": luma,
+                "inputGVector": luma,
+                "inputBVector": luma,
+                "inputBiasVector": CIVector(x: 0, y: 0, z: 0, w: 1)
+            ])
+    }
+
+    /// Fast film is grainy and slow film is not — the one place where tying an
+    /// effect to a dial is truer than a fixed amount.
+    static func grainAmplitude(forISO iso: Int) -> CGFloat {
+        let lowest = 50.0, highest = 3200.0
+        let clamped = min(max(Double(iso), lowest), highest)
+        let fraction = log2(clamped / lowest) / log2(highest / lowest)
+        return CGFloat(0.02 + 0.05 * fraction)
     }
 }

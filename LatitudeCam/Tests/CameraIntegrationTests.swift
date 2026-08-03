@@ -290,6 +290,7 @@ final class RenderPipelineTests: XCTestCase {
 
         var grainy = s
         grainy.grain = true
+        grainy.iso = 3200
 
         let big = CGRect(x: 0, y: 0, width: 900, height: 900)
         let wide = CIImage(color: CIColor(red: 0.5, green: 0.5, blue: 0.5)).cropped(to: big)
@@ -312,6 +313,64 @@ final class RenderPipelineTests: XCTestCase {
         XCTAssertGreaterThan(delta, 0, "grain must reach beyond the first 512pt of the frame")
     }
 
+    /// The blend that made grain read as white salt: CoreImage works in linear
+    /// light, so overlay's shadow branch multiplies by 2·blend and a gentle noise
+    /// becomes a loud one everywhere the frame is dark. Soft light scales with the
+    /// base, so a near-black frame has to stay near black.
+    /// Mean absolute deviation across a block, so one unlucky grain cannot decide
+    /// the result.
+    private func meanLevel(_ image: CIImage) -> Double {
+        let side = 16
+        var pixels = [UInt8](repeating: 0, count: side * side * 4)
+        context.render(
+            image, toBitmap: &pixels, rowBytes: side * 4,
+            bounds: CGRect(x: 8, y: 8, width: side, height: side),
+            format: .RGBA8, colorSpace: CGColorSpaceCreateDeviceRGB()
+        )
+        let total = stride(from: 0, to: pixels.count, by: 4).reduce(0.0) { $0 + Double(pixels[$1]) }
+        return total / Double(side * side)
+    }
+
+    /// The blend that made grain read as white salt: CoreImage works in linear
+    /// light, so overlay's shadow branch multiplies by 2·blend and turns a gentle
+    /// noise into a loud one everywhere the frame is dark. Soft light scales with
+    /// the base instead, so the shadows barely move.
+    ///
+    /// Both renders use the same ISO — changing it would also change the simulated
+    /// exposure, and the test would be measuring brightness rather than grain.
+    func testGrainBarelyMovesTheShadows() {
+        let manager = CameraManager()
+        var plain = neutralSettings()
+        plain.intensity = 0
+        plain.iso = 3200                  // the noisiest the dial goes
+        var grainy = plain
+        grainy.grain = true
+
+        let dark = CIImage(color: CIColor(red: 0.01, green: 0.01, blue: 0.01))
+            .cropped(to: extent)
+
+        let before = meanLevel(manager.render(dark, with: plain))
+        let after = meanLevel(manager.render(dark, with: grainy))
+
+        XCTAssertLessThan(abs(after - before), 12,
+                          "shadow grain must be a texture, not white speckle")
+    }
+
+    func testGrainFollowsFilmSpeed() {
+        let slow = CameraManager.grainAmplitude(forISO: 50)
+        let fast = CameraManager.grainAmplitude(forISO: 3200)
+        XCTAssertLessThan(slow, fast, "fast film is the grainy one")
+        XCTAssertGreaterThan(slow, 0)
+        XCTAssertLessThan(fast, 0.15, "grain is a texture, not a subject")
+    }
+
+    func testGrainAmplitudeClampsOutsideTheDial() {
+        XCTAssertEqual(CameraManager.grainAmplitude(forISO: 1),
+                       CameraManager.grainAmplitude(forISO: 50), accuracy: 0.0001)
+        XCTAssertEqual(CameraManager.grainAmplitude(forISO: 99_999),
+                       CameraManager.grainAmplitude(forISO: 3200), accuracy: 0.0001)
+    }
+
     func testGrainPerturbsTheFrame() {
         let manager = CameraManager()
         var s = neutralSettings()
@@ -319,6 +378,7 @@ final class RenderPipelineTests: XCTestCase {
 
         var grainy = s
         grainy.grain = true
+        grainy.iso = 3200
 
         let plain = sample(manager.render(source(), with: s))
         let noisy = sample(manager.render(source(), with: grainy))
@@ -333,7 +393,7 @@ final class RenderPipelineTests: XCTestCase {
     func testEveryFilterNameResolves() {
         let names = [
             "CITemperatureAndTint", "CIExposureAdjust", "CIColorMatrix",
-            "CIBloom", "CIVignette", "CIOverlayBlendMode",
+            "CIBloom", "CIVignette", "CISoftLightBlendMode",
             "CIEdges", "CIScreenBlendMode", "CIRandomGenerator", "CIAffineTile"
         ]
         for name in names {
