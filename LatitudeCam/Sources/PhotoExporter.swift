@@ -18,9 +18,11 @@ public class PhotoExporter {
         _ image: UIImage,
         completion: @escaping (Bool, String?) -> Void
     ) {
-        PHPhotoLibrary.requestAuthorization { status in
-            guard status == .authorized else {
-                completion(false, "Photo library access denied")
+        // .addOnly is all this app needs, and it is the prompt users are far more
+        // willing to accept than full library access.
+        PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in
+            guard status == .authorized || status == .limited else {
+                completion(false, "Latitude needs permission to add photos. Settings › Latitude › Photos.")
                 return
             }
             

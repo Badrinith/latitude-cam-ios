@@ -21,6 +21,13 @@ public final class FrameBuffer: ObservableObject {
     @Published public internal(set) var image: UIImage?
 }
 
+/// Thumbnails of the current scene developed through each stock, keyed by film
+/// id. Its own object for the same reason frames have one: the film knob
+/// redraws at 4Hz and must not drag the viewfinder along.
+public final class FilmPreviewBuffer: ObservableObject {
+    @Published public internal(set) var thumbnails: [String: UIImage] = [:]
+}
+
 // MARK: - Render settings
 
 /// Everything the render pipeline needs for one frame. A value type so it can be
@@ -43,6 +50,9 @@ public struct RenderSettings: Equatable {
     /// Named rather than a colour triple so RenderSettings stays Equatable and
     /// the value survives a round trip through UserDefaults.
     public var peakingColorName = "Amber"
+    /// Either dial on its A position hands the whole exposure back to the camera,
+    /// the way a Fuji body behaves with its dials on A.
+    public var autoExposure = false
 
     public init() {}
 }
@@ -64,6 +74,9 @@ public final class CameraManager: NSObject, ObservableObject {
 
     /// Live frames. Observe this (not the manager) to redraw the preview.
     public let frames = FrameBuffer()
+
+    /// Per-stock thumbnails for the film knob.
+    public let filmPreviews = FilmPreviewBuffer()
 
     @Published public private(set) var status: Status = .idle
 
@@ -92,6 +105,11 @@ public final class CameraManager: NSObject, ObservableObject {
 
     private var lastFrameTime: CFTimeInterval = 0
     private let minFrameInterval: CFTimeInterval = 1.0 / 30.0
+
+    // The knob only needs to keep up with the eye, not the sensor.
+    private var lastPreviewTime: CFTimeInterval = 0
+    private let previewInterval: CFTimeInterval = 1.0 / 4.0
+    private static let previewEdge: CGFloat = 96
 
     override public init() {
         if let device = MTLCreateSystemDefaultDevice() {
@@ -123,6 +141,7 @@ public final class CameraManager: NSObject, ObservableObject {
         settingsLock.lock()
         let exposureChanged = new.iso != _settings.iso
             || new.shutterDenominator != _settings.shutterDenominator
+            || new.autoExposure != _settings.autoExposure
         _settings = new
         settingsLock.unlock()
 
@@ -227,6 +246,20 @@ public final class CameraManager: NSObject, ObservableObject {
     /// genuine exposure changes rather than a brightness curve.
     private func applyDeviceExposure(_ s: RenderSettings) {
         guard let device = videoDevice else { return }
+
+        if s.autoExposure {
+            guard device.isExposureModeSupported(.continuousAutoExposure) else { return }
+            do {
+                try device.lockForConfiguration()
+                defer { device.unlockForConfiguration() }
+                device.exposureMode = .continuousAutoExposure
+                usingDeviceExposure = true
+            } catch {
+                usingDeviceExposure = false
+            }
+            return
+        }
+
         guard device.isExposureModeSupported(.custom) else {
             usingDeviceExposure = false
             return
@@ -319,7 +352,48 @@ extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate {
         DispatchQueue.main.async { [weak self] in
             self?.frames.image = uiImage
         }
+
+        if now - lastPreviewTime >= previewInterval {
+            lastPreviewTime = now
+            makeFilmPreviews(from: source, settings: settings)
+        }
     }
+
+    /// One downscale, then a colour matrix per stock. Four 96pt renders at 4Hz is
+    /// nothing next to the 1080p pipeline they sit alongside.
+    private func makeFilmPreviews(from source: CIImage, settings s: RenderSettings) {
+        let extent = source.extent
+        guard extent.width > 1, extent.height > 1 else { return }
+
+        let scale = Self.previewEdge / max(extent.width, extent.height)
+        let small = source
+            .applyingFilter("CILanczosScaleTransform", parameters: [
+                kCIInputScaleKey: scale, kCIInputAspectRatioKey: 1.0
+            ])
+
+        var built: [String: UIImage] = [:]
+        for film in Self.previewFilmIDs {
+            var perStock = s
+            perStock.filmID = film
+            perStock.intensity = max(s.intensity, 0.85)
+            // No grain or peaking at thumbnail size — both are invisible there and
+            // only cost time.
+            perStock.grain = false
+            perStock.focusPeaking = false
+
+            let rendered = render(small, with: perStock)
+            if let cg = ciContext.createCGImage(rendered, from: small.extent) {
+                built[film] = UIImage(cgImage: cg)
+            }
+        }
+
+        guard !built.isEmpty else { return }
+        DispatchQueue.main.async { [weak self] in
+            self?.filmPreviews.thumbnails = built
+        }
+    }
+
+    static let previewFilmIDs = ["amber", "slate", "rust", "mono"]
 
     public func captureOutput(
         _ output: AVCaptureOutput,
@@ -447,22 +521,23 @@ extension CameraManager {
         )
     }
 
-    /// A tileable grey-noise field centred on 0.5 so an overlay blend leaves
-    /// mid-tones alone and only perturbs the frame slightly.
+    /// A grey-noise field centred on 0.5 so an overlay blend leaves mid-tones
+    /// alone and only perturbs the frame slightly.
+    ///
+    /// CIRandomGenerator is already infinite in extent. An earlier version cropped
+    /// it to 512pt and then tiled with an identity transform — an identity lattice
+    /// places every tile at the same spot, so the grain became a single 512pt
+    /// patch at the origin, which CoreImage puts in the bottom-left corner.
     static func makeNoiseTile() -> CIImage? {
         guard let random = CIFilter(name: "CIRandomGenerator")?.outputImage else { return nil }
         let amplitude: CGFloat = 0.09
         let bias = (1 - amplitude) / 2
-        return random
-            .cropped(to: CGRect(x: 0, y: 0, width: 512, height: 512))
-            .applyingFilter("CIColorMatrix", parameters: [
-                "inputRVector": CIVector(x: 0.2126 * amplitude, y: 0.7152 * amplitude, z: 0.0722 * amplitude, w: 0),
-                "inputGVector": CIVector(x: 0.2126 * amplitude, y: 0.7152 * amplitude, z: 0.0722 * amplitude, w: 0),
-                "inputBVector": CIVector(x: 0.2126 * amplitude, y: 0.7152 * amplitude, z: 0.0722 * amplitude, w: 0),
-                "inputBiasVector": CIVector(x: bias, y: bias, z: bias, w: 1)
-            ])
-            .applyingFilter("CIAffineTile", parameters: [
-                kCIInputTransformKey: CGAffineTransform.identity
-            ])
+        let luma = CIVector(x: 0.2126 * amplitude, y: 0.7152 * amplitude, z: 0.0722 * amplitude, w: 0)
+        return random.applyingFilter("CIColorMatrix", parameters: [
+            "inputRVector": luma,
+            "inputGVector": luma,
+            "inputBVector": luma,
+            "inputBiasVector": CIVector(x: bias, y: bias, z: bias, w: 1)
+        ])
     }
 }

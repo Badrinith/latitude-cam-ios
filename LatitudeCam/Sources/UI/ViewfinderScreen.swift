@@ -205,10 +205,7 @@ struct ViewfinderScreen: View {
                 hud
 
                 HStack {
-                    Button {
-                        Haptics.tap()
-                        app.go(.settings)
-                    } label: {
+                    Button { app.go(.settings) } label: {
                         Text("SETTINGS")
                             .font(.mono(10, .semibold))
                             .kerning(0.5)
@@ -276,17 +273,63 @@ struct ViewfinderScreen: View {
             .padding(.horizontal, 16)
             .padding(.top, 12)
 
-            Spacer()
+            Spacer(minLength: 0)
+        }
+        .overlay(alignment: .bottom) { deck }
+    }
 
-            bottomBar
-                .padding(.bottom, 18)
+    /// The knob and the shutter share one region, so the thumb turns the roll and
+    /// lands on the release without repositioning.
+    private var deck: some View {
+        ZStack(alignment: .bottom) {
+            LinearGradient(
+                colors: [.clear, Color.black.opacity(0.66)],
+                startPoint: .top, endPoint: .bottom
+            )
+            .frame(height: 340)
+            .allowsHitTesting(false)
 
-            FilmRing(
+            FilmKnob(
                 presets: FilmPreset.all,
                 selection: $app.selectedFilm,
+                previews: app.cameraManager.filmPreviews,
+                counts: app.frameCounts,
                 onOpenDetail: { app.go(.filmSim) }
             )
-            .padding(.bottom, 14)
+            .frame(height: 340)
+
+            HStack {
+                Button { app.proSheetOpen = true } label: {
+                    Text("PRO")
+                        .font(.ui(13, .semibold))
+                        .foregroundStyle(Accent.amber)
+                }
+                .buttonStyle(.plain)
+
+                Spacer()
+
+                ShutterButton { fire() }
+
+                Spacer()
+
+                Button { app.go(.library) } label: {
+                    LibraryThumbnail(gallery: app.gallery)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 30)
+            .padding(.bottom, 22)   // FilmKnob.hubFromBottom assumes 22 + 37
+
+        }
+    }
+
+    /// A heavy thump when a frame is taken, a warning when there was nothing to
+    /// take. The two must not feel the same.
+    private func fire() {
+        if app.capture() {
+            Haptics.shutter()
+        } else {
+            Haptics.blocked()
         }
     }
 
@@ -336,40 +379,6 @@ struct ViewfinderScreen: View {
             .glass(radius: 16)
             .contentShape(Rectangle())
     }
-
-    /// A heavy thump when a frame is taken, a warning when there was nothing to
-    /// take. The two must not feel the same.
-    private func fire() {
-        if app.capture() {
-            Haptics.shutter()
-        } else {
-            Haptics.blocked()
-        }
-    }
-
-    private var bottomBar: some View {
-        HStack(spacing: 56) {
-            Button {
-                Haptics.tap()
-                app.proSheetOpen = true
-            } label: {
-                Text("PRO")
-                    .font(.ui(13, .semibold))
-                    .foregroundStyle(Accent.amber)
-            }
-            .buttonStyle(.plain)
-
-            ShutterButton { fire() }
-
-            Button {
-                Haptics.tap()
-                app.go(.library)
-            } label: {
-                LibraryThumbnail(gallery: app.gallery)
-            }
-            .buttonStyle(.plain)
-        }
-    }
 }
 
 /// The most recent shot, so the corner button reflects the roll.
@@ -400,56 +409,41 @@ struct LibraryThumbnail: View {
 struct ManualControlsSheet: View {
     @EnvironmentObject var app: AppState
 
+    private let columns = [GridItem(.flexible(), spacing: 14), GridItem(.flexible(), spacing: 14)]
+
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                Text("Manual Controls")
-                    .font(.ui(15, .semibold))
-                    .foregroundStyle(Tone.primary)
-                Spacer()
-                Button {
-                    Haptics.tap()
-                    app.proSheetOpen = false
-                } label: {
-                    Text("Done")
-                        .font(.ui(13, .semibold))
-                        .foregroundStyle(Accent.amber)
-                }
-                .buttonStyle(.plain)
+            header
+
+            LazyVGrid(columns: columns, spacing: 18) {
+                RotaryDial(
+                    label: "Shutter",
+                    values: AppState.shutterLabels,
+                    index: Binding(get: { app.shutterIndex }, set: { app.shutterIndex = $0 }),
+                    hasAuto: true,
+                    highlighted: app.proFocus == "shutter"
+                )
+                RotaryDial(
+                    label: "ISO",
+                    values: AppState.isoLabels,
+                    index: Binding(get: { app.isoIndex }, set: { app.isoIndex = $0 }),
+                    hasAuto: true,
+                    highlighted: app.proFocus == "iso"
+                )
+                RotaryDial(
+                    label: "White Balance",
+                    values: AppState.whiteBalanceLabels,
+                    index: Binding(get: { app.whiteBalanceIndex }, set: { app.whiteBalanceIndex = $0 }),
+                    highlighted: app.proFocus == "wb"
+                )
+                RotaryDial(
+                    label: "Exposure",
+                    values: AppState.exposureLabels,
+                    index: Binding(get: { app.exposureIndex }, set: { app.exposureIndex = $0 }),
+                    neutralIndex: AppState.evDetents / 2
+                )
             }
-            .padding(.bottom, 16)
-
-            DialRow(
-                label: "Shutter Speed",
-                values: AppState.shutterLabels,
-                index: Binding(get: { app.shutterIndex }, set: { app.shutterIndex = $0 }),
-                highlighted: app.proFocus == "shutter"
-            )
-            .padding(.bottom, 14)
-
-            DialRow(
-                label: "ISO",
-                values: AppState.isoLabels,
-                index: Binding(get: { app.isoIndex }, set: { app.isoIndex = $0 }),
-                highlighted: app.proFocus == "iso"
-            )
-            .padding(.bottom, 14)
-
-            DialRow(
-                label: "White Balance",
-                values: AppState.whiteBalanceLabels,
-                index: Binding(get: { app.whiteBalanceIndex }, set: { app.whiteBalanceIndex = $0 }),
-                highlighted: app.proFocus == "wb"
-            )
-            .padding(.bottom, 14)
-
-            DialRow(
-                label: "Exposure Comp.",
-                values: AppState.exposureLabels,
-                index: Binding(get: { app.exposureIndex }, set: { app.exposureIndex = $0 }),
-                neutralIndex: AppState.evDetents / 2
-            )
-            .padding(.bottom, 18)
+            .padding(.bottom, 20)
 
             ToggleRow(label: "Focus Peaking", isOn: $app.focusPeaking)
             ToggleRow(label: "ProRAW", isOn: $app.proRAW)
@@ -457,5 +451,59 @@ struct ManualControlsSheet: View {
         // The highlight is a pointer, not a mode — it clears once the sheet has
         // done its job of showing you where the control lives.
         .onDisappear { app.proFocus = nil }
+    }
+
+    private var header: some View {
+        HStack(spacing: 14) {
+            Text("Manual Controls")
+                .font(.ui(15, .semibold))
+                .foregroundStyle(Tone.primary)
+
+            Spacer()
+
+            // Reset is recoverable: the previous state goes on the undo stack, so
+            // a mistaken tap costs one more tap rather than your whole setup.
+            historyButton(systemName: "arrow.uturn.backward", enabled: app.canUndo) {
+                app.undoControls()
+            }
+            historyButton(systemName: "arrow.uturn.forward", enabled: app.canRedo) {
+                app.redoControls()
+            }
+
+            Button { app.resetControls() } label: {
+                Text("Reset")
+                    .font(.ui(12, .semibold))
+                    .foregroundStyle(Tone.secondary)
+                    .padding(.horizontal, 11)
+                    .padding(.vertical, 6)
+                    .background(Color.white.opacity(0.07), in: Capsule())
+            }
+            .buttonStyle(.plain)
+
+            Button { app.proSheetOpen = false } label: {
+                Text("Done")
+                    .font(.ui(13, .semibold))
+                    .foregroundStyle(Accent.amber)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.bottom, 18)
+    }
+
+    private func historyButton(
+        systemName: String, enabled: Bool, action: @escaping () -> Void
+    ) -> some View {
+        Button {
+            Haptics.toggle()
+            action()
+        } label: {
+            Image(systemName: systemName)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(enabled ? Tone.primary : Tone.quaternary)
+                .frame(width: 30, height: 30)
+                .background(Color.white.opacity(enabled ? 0.07 : 0.03), in: Circle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled)
     }
 }

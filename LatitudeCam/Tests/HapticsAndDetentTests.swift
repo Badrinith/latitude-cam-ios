@@ -214,14 +214,15 @@ final class DialIndexTests: XCTestCase {
     func testEveryDialIndexRoundTrips() {
         let app = AppState()
 
+        // Shutter and ISO carry a leading A, so stop n sits at dial index n + 1.
         for index in AppState.shutterStops.indices {
-            app.shutterIndex = index
-            XCTAssertEqual(app.shutterIndex, index)
+            app.shutterIndex = index + 1
+            XCTAssertEqual(app.shutterIndex, index + 1)
             XCTAssertEqual(app.shutterValue, AppState.shutterStops[index])
         }
         for index in AppState.isoStops.indices {
-            app.isoIndex = index
-            XCTAssertEqual(app.isoIndex, index)
+            app.isoIndex = index + 1
+            XCTAssertEqual(app.isoIndex, index + 1)
             XCTAssertEqual(app.isoValue, AppState.isoStops[index])
         }
         for index in AppState.whiteBalanceStops.indices {
@@ -239,27 +240,27 @@ final class DialIndexTests: XCTestCase {
     func testDialIndexClampsAtBothEnds() {
         let app = AppState()
         app.shutterIndex = 99
-        XCTAssertEqual(app.shutterIndex, AppState.shutterStops.count - 1)
+        XCTAssertEqual(app.shutterIndex, AppState.shutterStops.count)
         app.shutterIndex = -4
-        XCTAssertEqual(app.shutterIndex, 0)
+        XCTAssertEqual(app.shutterIndex, 0, "past the slow end is A")
     }
 
     func testDialsReachTheRenderPipeline() {
         let app = AppState()
-        app.isoIndex = AppState.isoStops.count - 1
+        app.isoIndex = AppState.isoStops.count
         XCTAssertEqual(app.cameraManager.currentSettings.iso, AppState.isoStops.last)
     }
 
     func testEveryDialHasALabelPerStop() {
-        XCTAssertEqual(AppState.shutterLabels.count, AppState.shutterStops.count)
-        XCTAssertEqual(AppState.isoLabels.count, AppState.isoStops.count)
+        XCTAssertEqual(AppState.shutterLabels.count, AppState.shutterStops.count + 1)
+        XCTAssertEqual(AppState.isoLabels.count, AppState.isoStops.count + 1)
         XCTAssertEqual(AppState.whiteBalanceLabels.count, AppState.whiteBalanceStops.count)
         XCTAssertEqual(AppState.exposureLabels.count, AppState.evDetents)
     }
 
     func testDialLabelsMatchTheirValues() {
-        XCTAssertEqual(AppState.shutterLabels.first, "1/15")
-        XCTAssertEqual(AppState.isoLabels.first, "50")
+        XCTAssertEqual(AppState.shutterLabels[1], "1/15")
+        XCTAssertEqual(AppState.isoLabels[1], "50")
         XCTAssertEqual(AppState.whiteBalanceLabels.first, "2500K")
     }
 
@@ -335,5 +336,189 @@ final class HapticStrengthTests: XCTestCase {
             Haptics.tap(); Haptics.shutter(); Haptics.success(); Haptics.blocked()
         }
         UserDefaults.standard.removeObject(forKey: Pref.haptics)
+    }
+}
+
+
+// MARK: - A positions
+
+@MainActor
+final class AutoExposureDialTests: XCTestCase {
+
+    func testAIsTheFirstStopOnBothScales() {
+        XCTAssertEqual(AppState.shutterLabels.first, "A")
+        XCTAssertEqual(AppState.isoLabels.first, "A")
+        XCTAssertEqual(AppState.shutterLabels.count, AppState.shutterStops.count + 1)
+        XCTAssertEqual(AppState.isoLabels.count, AppState.isoStops.count + 1)
+    }
+
+    func testTurningToAHandsExposureBack() {
+        let app = AppState()
+        app.shutterIndex = 0
+        XCTAssertTrue(app.autoExposure)
+        XCTAssertTrue(app.cameraManager.currentSettings.autoExposure)
+        XCTAssertEqual(app.shutterLabel, "AUTO")
+    }
+
+    /// AVFoundation's continuous auto governs shutter and ISO together, so both
+    /// dials have to agree — showing one on A and one on a number would be a lie.
+    func testBothDialsShowAWhenAutomatic() {
+        let app = AppState()
+        app.isoIndex = 0
+        XCTAssertEqual(app.shutterIndex, 0)
+        XCTAssertEqual(app.isoIndex, 0)
+    }
+
+    func testTurningOffAReturnsToThatStop() {
+        let app = AppState()
+        app.shutterIndex = 0
+        app.shutterIndex = 3
+        XCTAssertFalse(app.autoExposure)
+        XCTAssertEqual(app.shutterIndex, 3)
+        XCTAssertEqual(app.shutterValue, AppState.shutterStops[2])
+    }
+
+    func testStopsStillRoundTripWithTheAOffset() {
+        let app = AppState()
+        for index in 1...AppState.isoStops.count {
+            app.isoIndex = index
+            XCTAssertEqual(app.isoIndex, index)
+            XCTAssertEqual(app.isoValue, AppState.isoStops[index - 1])
+        }
+    }
+}
+
+// MARK: - Reset, undo, redo
+
+@MainActor
+final class ControlHistoryTests: XCTestCase {
+
+    private func persistedKeys() -> [String] {
+        ["LatitudeCam.ISO", "LatitudeCam.Shutter", "LatitudeCam.FilmProfile", "LatitudeCam.Kelvin"]
+    }
+
+    override func setUp() {
+        super.setUp()
+        persistedKeys().forEach { UserDefaults.standard.removeObject(forKey: $0) }
+    }
+
+    func testResetReturnsEveryControlToTheDefault() {
+        let app = AppState()
+        app.intensity = 0.1
+        app.grainOn = false
+        app.isoIndex = 6
+
+        app.resetControls()
+        XCTAssertEqual(app.controls, AppState.defaultControls)
+    }
+
+    /// A reset you cannot take back is a trap — the whole point of putting it one
+    /// tap from the dials is that the tap is cheap to undo.
+    func testResetIsUndoable() {
+        let app = AppState()
+        app.intensity = 0.15
+        app.halationOn = true
+        let before = app.controls
+
+        app.resetControls()
+        XCTAssertTrue(app.canUndo)
+
+        app.undoControls()
+        XCTAssertEqual(app.controls, before)
+    }
+
+    func testUndoneResetCanBeRedone() {
+        let app = AppState()
+        app.intensity = 0.15
+        app.resetControls()
+        app.undoControls()
+        XCTAssertTrue(app.canRedo)
+
+        app.redoControls()
+        XCTAssertEqual(app.controls, AppState.defaultControls)
+    }
+
+    func testNothingToUndoAtTheStart() {
+        let app = AppState()
+        XCTAssertFalse(app.canUndo)
+        XCTAssertFalse(app.canRedo)
+        app.undoControls()
+        app.redoControls()
+        XCTAssertEqual(app.controls, app.controls)
+    }
+
+    func testResettingWhenAlreadyDefaultDoesNotStackHistory() {
+        let app = AppState()
+        app.apply(AppState.defaultControls)
+        app.resetControls()
+        XCTAssertFalse(app.canUndo, "a no-op reset must not fill the undo stack")
+    }
+
+    /// A fresh change after undoing invalidates the redo branch, as everywhere else.
+    func testNewChangeClearsRedo() {
+        let app = AppState()
+        app.intensity = 0.2
+        app.resetControls()
+        app.undoControls()
+        XCTAssertTrue(app.canRedo)
+
+        app.resetControls()
+        XCTAssertFalse(app.canRedo)
+    }
+
+    func testSnapshotRoundTrips() {
+        let app = AppState()
+        app.intensity = 0.33
+        app.vignetteOn = true
+        app.whiteBalanceIndex = 5
+        let snapshot = app.controls
+
+        app.resetControls()
+        app.apply(snapshot)
+        XCTAssertEqual(app.controls, snapshot)
+    }
+}
+
+// MARK: - Film knob geometry
+
+final class FilmKnobGeometryTests: XCTestCase {
+
+    func testWrapTakesTheShortWayRound() {
+        XCTAssertEqual(FilmKnob.wrap(3, count: 4), -1, accuracy: 0.001)
+        XCTAssertEqual(FilmKnob.wrap(-3, count: 4), 1, accuracy: 0.001)
+        XCTAssertEqual(FilmKnob.wrap(1, count: 4), 1, accuracy: 0.001)
+        XCTAssertEqual(FilmKnob.wrap(0, count: 4), 0, accuracy: 0.001)
+    }
+
+    func testWrapStaysInsideHalfATurn() {
+        for delta in stride(from: -12.0, through: 12.0, by: 0.5) {
+            let wrapped = FilmKnob.wrap(delta, count: 4)
+            XCTAssertGreaterThanOrEqual(wrapped, -2)
+            XCTAssertLessThanOrEqual(wrapped, 2)
+        }
+    }
+
+    /// The loaded stock is the one you read, so it is never tilted.
+    func testLoadedFrameIsUpright() {
+        XCTAssertEqual(FilmKnob.tilt(for: 0), 0, accuracy: 0.001)
+    }
+
+    func testTiltIsCappedSoTheRebateStaysReadable() {
+        XCTAssertEqual(FilmKnob.tilt(for: 180), 28, accuracy: 0.001)
+        XCTAssertEqual(FilmKnob.tilt(for: -180), -28, accuracy: 0.001)
+    }
+
+    func testFramesShrinkAndFadeAwayFromTheApex() {
+        XCTAssertGreaterThan(FilmKnob.scale(for: 0), FilmKnob.scale(for: 46))
+        XCTAssertGreaterThan(FilmKnob.opacity(for: 0), FilmKnob.opacity(for: 46))
+        XCTAssertGreaterThanOrEqual(FilmKnob.scale(for: 92), 0.6)
+        XCTAssertGreaterThanOrEqual(FilmKnob.opacity(for: 92), 0.28)
+    }
+
+    func testApexSitsDirectlyAboveTheHub() {
+        let hub = CGPoint(x: 100, y: 300)
+        let apex = FilmKnob.point(hub: hub, angle: 0, radius: 116)
+        XCTAssertEqual(apex.x, hub.x, accuracy: 0.001)
+        XCTAssertEqual(apex.y, hub.y - 116, accuracy: 0.001)
     }
 }

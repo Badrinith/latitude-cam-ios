@@ -130,6 +130,7 @@ enum Pref {
     static let histogramStyle = "settings.histogramStyle"
     static let haptics = "settings.haptics"
     static let hapticStrength = "settings.hapticStrength"
+    static let mirrorToPhotos = "settings.mirrorToPhotos"
     /// Set once the entry flow has been completed, so later cold launches go
     /// straight from the splash to the viewfinder.
     static let onboarded = "app.onboarded"
@@ -198,6 +199,8 @@ final class AppState: ObservableObject {
     @Published var capturedImage: UIImage?
     /// The library photo the Edit screen is working on.
     @Published var editingPhoto: PhotoGallery.Photo?
+    /// The roll entry the shutter just wrote, so Review can take it back.
+    private var savedPhotoID: String?
     /// Briefly set after a save so the viewfinder can confirm the shot landed.
     @Published var lastSaveMessage: String?
 
@@ -216,6 +219,9 @@ final class AppState: ObservableObject {
     @Published var exposureComp: Double = 0.5 { didSet { syncCamera() } }
     @Published var focusPeaking = true { didSet { syncCamera() } }
     @Published var proRAW = false
+    /// Either dial on A. Kept as one flag because AVFoundation's continuous auto
+    /// mode governs shutter and ISO together — there is no half-auto.
+    @Published var autoExposure = false { didSet { syncCamera() } }
 
     static let shutterStops = [15, 30, 60, 125, 240, 500, 1000]
     static let isoStops = [50, 100, 200, 400, 800, 1600, 3200]
@@ -225,8 +231,10 @@ final class AppState: ObservableObject {
     /// 11 half-stop positions across ±2.5 EV.
     static let evDetents = 11
 
-    static var shutterLabels: [String] { shutterStops.map { "1/\($0)" } }
-    static var isoLabels: [String] { isoStops.map(String.init) }
+    /// A leads both scales, as it does on an X-series or an M body: turn past the
+    /// slowest speed and the camera takes the exposure back.
+    static var shutterLabels: [String] { ["A"] + shutterStops.map { "1/\($0)" } }
+    static var isoLabels: [String] { ["A"] + isoStops.map(String.init) }
     static var whiteBalanceLabels: [String] { whiteBalanceStops.map { "\($0)K" } }
     static var exposureLabels: [String] {
         (0..<evDetents).map { String(format: "%+.1f", -2.5 + Double($0) * 0.5) }
@@ -247,8 +255,8 @@ final class AppState: ObservableObject {
         return -2.5 + Double(index) * 0.5
     }
 
-    var shutterLabel: String { "1/\(shutterValue)" }
-    var isoLabel: String { "ISO \(isoValue)" }
+    var shutterLabel: String { autoExposure ? "AUTO" : "1/\(shutterValue)" }
+    var isoLabel: String { autoExposure ? "ISO A" : "ISO \(isoValue)" }
     var kelvinLabel: String { "\(Int(kelvinValue))K" }
     var exposureLabel: String { String(format: "%+.1f EV", evValue) }
 
@@ -262,13 +270,26 @@ final class AppState: ObservableObject {
         (Double(min(max(index, 0), count - 1)) + 0.5) / Double(count)
     }
 
+    // Dial index 0 is A; stops start at 1.
     var shutterIndex: Int {
-        get { stopIndex(Self.shutterStops.count, at: shutter) }
-        set { shutter = position(forIndex: newValue, of: Self.shutterStops.count) }
+        get { autoExposure ? 0 : stopIndex(Self.shutterStops.count, at: shutter) + 1 }
+        set {
+            if newValue <= 0 { autoExposure = true }
+            else {
+                autoExposure = false
+                shutter = position(forIndex: newValue - 1, of: Self.shutterStops.count)
+            }
+        }
     }
     var isoIndex: Int {
-        get { stopIndex(Self.isoStops.count, at: iso) }
-        set { iso = position(forIndex: newValue, of: Self.isoStops.count) }
+        get { autoExposure ? 0 : stopIndex(Self.isoStops.count, at: iso) + 1 }
+        set {
+            if newValue <= 0 { autoExposure = true }
+            else {
+                autoExposure = false
+                iso = position(forIndex: newValue - 1, of: Self.isoStops.count)
+            }
+        }
     }
     var whiteBalanceIndex: Int {
         get { stopIndex(Self.whiteBalanceStops.count, at: whiteBalance) }
@@ -279,7 +300,11 @@ final class AppState: ObservableObject {
         set { exposureComp = position(forIndex: newValue, of: Self.evDetents) }
     }
 
+    /// Haptics live here rather than at each call site, so a new navigation
+    /// cannot ship without feedback.
     func go(_ next: Screen) {
+        guard next != screen else { return }
+        Haptics.tap()
         withAnimation(.easeInOut(duration: 0.28)) { screen = next }
     }
 
@@ -311,6 +336,7 @@ final class AppState: ObservableObject {
         s.vignette = vignetteOn
         s.focusPeaking = focusPeaking
         s.peakingColorName = Pref.string(Pref.peakingColor, default: "Amber")
+        s.autoExposure = autoExposure
         cameraManager.apply(s)
     }
 
@@ -326,9 +352,151 @@ final class AppState: ObservableObject {
         // The sensor frame is 16:9; the chosen aspect is a crop of it, so the
         // saved photo matches what the viewfinder's aspect badge promised.
         let aspect = Pref.string(Pref.aspect, default: "3:2")
-        capturedImage = image.centerCropped(toHeightOverWidth: Pref.aspectRatio(aspect))
+        let frame = image.centerCropped(toHeightOverWidth: Pref.aspectRatio(aspect))
+        capturedImage = frame
+
+        // The shutter keeps the shot. Review used to be the only path to the
+        // roll, so backing out of it threw the frame away — a camera that
+        // sometimes does not keep your photo.
+        keep(frame)
         go(.review)
         return true
+    }
+
+    /// Writes to the roll, and mirrors to Apple Photos when that is switched on.
+    private func keep(_ image: UIImage) {
+        savedPhotoID = gallery.addPhoto(
+            image,
+            filmID: selectedFilm.id,
+            iso: isoValue,
+            shutterDenominator: shutterValue
+        )
+
+        guard UserDefaults.standard.bool(forKey: Pref.mirrorToPhotos) else { return }
+        PhotoExporter.saveToPhotos(image) { [weak self] ok, problem in
+            Task { @MainActor in
+                guard let self else { return }
+                if !ok, let problem {
+                    self.lastSaveMessage = problem
+                    self.clearMessageSoon()
+                }
+            }
+        }
+    }
+
+    /// One-off mirror for a frame taken while the setting was off.
+    func mirrorCaptureToPhotos() {
+        guard let image = capturedImage else { return }
+        PhotoExporter.saveToPhotos(image) { [weak self] ok, problem in
+            Task { @MainActor in
+                guard let self else { return }
+                self.lastSaveMessage = ok ? "Saved to Apple Photos" : (problem ?? "Could not save")
+                self.clearMessageSoon()
+            }
+        }
+    }
+
+    /// Undoes the automatic save when the user rejects the frame in Review.
+    func deleteCapture() {
+        if let id = savedPhotoID { gallery.deletePhoto(id) }
+        savedPhotoID = nil
+        capturedImage = nil
+        go(.viewfinder)
+    }
+
+    // MARK: - Reset, undo, redo
+
+    /// Everything a reset touches, so it can be put back exactly.
+    struct ControlSnapshot: Equatable {
+        var filmID: String
+        var intensity: Double
+        var grain: Bool
+        var halation: Bool
+        var vignette: Bool
+        var shutter: Double
+        var iso: Double
+        var whiteBalance: Double
+        var exposureComp: Double
+        var focusPeaking: Bool
+        var autoExposure: Bool
+    }
+
+    static let defaultControls = ControlSnapshot(
+        filmID: "amber", intensity: 0.8,
+        grain: true, halation: false, vignette: false,
+        shutter: 0.36, iso: 0.21, whiteBalance: 0.64, exposureComp: 0.5,
+        focusPeaking: true, autoExposure: false
+    )
+
+    private var undoStack: [ControlSnapshot] = []
+    private var redoStack: [ControlSnapshot] = []
+    @Published private(set) var canUndo = false
+    @Published private(set) var canRedo = false
+
+    /// Frames already shot on each stock, printed in the film knob's rebate.
+    var frameCounts: [String: Int] {
+        Dictionary(grouping: gallery.photos, by: \.filmID).mapValues(\.count)
+    }
+
+    var controls: ControlSnapshot {
+        ControlSnapshot(
+            filmID: selectedFilm.id, intensity: intensity,
+            grain: grainOn, halation: halationOn, vignette: vignetteOn,
+            shutter: shutter, iso: iso, whiteBalance: whiteBalance,
+            exposureComp: exposureComp, focusPeaking: focusPeaking,
+            autoExposure: autoExposure
+        )
+    }
+
+    func apply(_ snapshot: ControlSnapshot) {
+        if let film = FilmPreset.all.first(where: { $0.id == snapshot.filmID }) {
+            selectedFilm = film
+        }
+        intensity = snapshot.intensity
+        grainOn = snapshot.grain
+        halationOn = snapshot.halation
+        vignetteOn = snapshot.vignette
+        shutter = snapshot.shutter
+        iso = snapshot.iso
+        whiteBalance = snapshot.whiteBalance
+        exposureComp = snapshot.exposureComp
+        focusPeaking = snapshot.focusPeaking
+        autoExposure = snapshot.autoExposure
+    }
+
+    /// Back to the shipped settings. Recoverable — the previous state goes on the
+    /// undo stack, so a mistaken reset costs one tap.
+    func resetControls() {
+        guard controls != Self.defaultControls else {
+            lastSaveMessage = "Already at the default"
+            clearMessageSoon()
+            return
+        }
+        undoStack.append(controls)
+        redoStack.removeAll()
+        apply(Self.defaultControls)
+        refreshHistory()
+        lastSaveMessage = "Controls reset"
+        clearMessageSoon()
+    }
+
+    func undoControls() {
+        guard let previous = undoStack.popLast() else { return }
+        redoStack.append(controls)
+        apply(previous)
+        refreshHistory()
+    }
+
+    func redoControls() {
+        guard let next = redoStack.popLast() else { return }
+        undoStack.append(controls)
+        apply(next)
+        refreshHistory()
+    }
+
+    private func refreshHistory() {
+        canUndo = !undoStack.isEmpty
+        canRedo = !redoStack.isEmpty
     }
 
     /// Put the look back to the shipped default without touching exposure.
@@ -342,24 +510,22 @@ final class AppState: ObservableObject {
         clearMessageSoon()
     }
 
-    func discardCapture() {
+    /// Keeps what the shutter already saved and returns to shooting.
+    func keepCapture() {
+        savedPhotoID = nil
         capturedImage = nil
         go(.viewfinder)
     }
 
+    /// Used by the Edit screen, which writes a new frame rather than replacing one.
     func saveCapturedPhoto() {
         guard let image = capturedImage else { return }
-        gallery.addPhoto(
-            image,
-            filmID: selectedFilm.id,
-            iso: isoValue,
-            shutterDenominator: shutterValue
-        )
+        keep(image)
         lastSaveMessage = "Saved to Library"
         clearMessageSoon()
     }
 
-    private func clearMessageSoon() {
+    func clearMessageSoon() {
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 2_000_000_000)
             lastSaveMessage = nil

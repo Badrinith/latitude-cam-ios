@@ -40,7 +40,7 @@ struct ReviewScreen: View {
                         .glass(radius: 16)
 
                     HStack {
-                        Button { app.discardCapture() } label: {
+                        Button { app.deleteCapture() } label: {
                             Text("✕")
                                 .font(.ui(12, .semibold))
                                 .foregroundStyle(Tone.primary)
@@ -59,10 +59,10 @@ struct ReviewScreen: View {
 
                 HStack(spacing: 56) {
                     Button {
-                        Haptics.tap()
-                        app.discardCapture()
+                        Haptics.toggle()
+                        app.deleteCapture()
                     } label: {
-                        Text("Discard")
+                        Text("Delete")
                             .font(.ui(13, .medium))
                             .foregroundStyle(Color.white.opacity(0.5))
                     }
@@ -86,10 +86,9 @@ struct ReviewScreen: View {
 
                     Button {
                         Haptics.success()
-                        app.saveCapturedPhoto()
-                        app.go(.viewfinder)
+                        app.keepCapture()
                     } label: {
-                        Text("Save")
+                        Text("Keep")
                             .font(.ui(13, .semibold))
                             .foregroundStyle(Accent.amber)
                     }
@@ -134,7 +133,7 @@ struct ExportSheet: View {
     @EnvironmentObject var app: AppState
     @State private var shareOpen = false
 
-    private let options = ["Save to Library", "Save & Keep Shooting", "Share…"]
+    private let options = ["Save to Apple Photos", "Show in Library", "Share…"]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -179,14 +178,13 @@ struct ExportSheet: View {
     private func select(_ option: String) {
         Haptics.tap()
         switch option {
-        case "Save to Library":
+        case "Save to Apple Photos":
             app.exportSheetOpen = false
-            app.saveCapturedPhoto()
+            app.mirrorCaptureToPhotos()
+        case "Show in Library":
+            app.exportSheetOpen = false
+            app.keepCapture()
             app.go(.library)
-        case "Save & Keep Shooting":
-            app.exportSheetOpen = false
-            app.saveCapturedPhoto()
-            app.go(.viewfinder)
         default:
             // Keep the export sheet mounted — it owns the share presentation.
             shareOpen = true
@@ -208,6 +206,7 @@ struct SettingsScreen: View {
     @AppStorage(Pref.histogramStyle) private var histogramStyle = "Luma"
     @AppStorage(Pref.haptics) private var haptics = true
     @AppStorage(Pref.hapticStrength) private var hapticStrength = "Strong"
+    @AppStorage(Pref.mirrorToPhotos) private var mirrorToPhotos = false
 
     var body: some View {
         ZStack {
@@ -229,8 +228,9 @@ struct SettingsScreen: View {
                         OptionRow(title: "Aspect Ratio",
                                   options: Pref.aspectOptions, selection: $aspect)
                         OptionRow(title: "JPEG Quality",
-                                  options: Pref.jpegQualityOptions, selection: $jpegQuality,
-                                  isLast: true)
+                                  options: Pref.jpegQualityOptions, selection: $jpegQuality)
+                        ToggleSettingsRow(title: "Save to Apple Photos", isOn: $mirrorToPhotos,
+                                          isLast: true)
                     }
 
                     SettingsGroup(header: "Manual Controls") {

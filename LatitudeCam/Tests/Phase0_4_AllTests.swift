@@ -73,6 +73,41 @@ final class PhotoGalleryTests: XCTestCase {
                        when.timeIntervalSince1970, accuracy: 0.01)
     }
 
+    /// A burst of saves inside one millisecond used to produce identical ids.
+    /// deletePhoto matches on id, so removing one frame removed the other too.
+    func testIDsAreUniqueUnderABurst() {
+        let now = Date()
+        var seen = Set<String>()
+        for _ in 0..<200 {
+            let id = PhotoGallery.makeID(timestamp: now, filmID: "amber", iso: 100, shutter: 60)
+            XCTAssertFalse(seen.contains(id), "duplicate id: \(id)")
+            seen.insert(id)
+        }
+    }
+
+    /// Uniqueness must not come at the cost of the timestamp — the roll sorts on
+    /// it, and an id that rewrites the clock would reorder the whole gallery.
+    func testBurstIDsKeepTheirTimestamp() {
+        let now = Date(timeIntervalSince1970: 1_700_000_000.25)
+        for _ in 0..<20 {
+            let parsed = PhotoGallery.parseID(
+                PhotoGallery.makeID(timestamp: now, filmID: "amber", iso: 100, shutter: 60)
+            )
+            XCTAssertEqual(parsed.timestamp.timeIntervalSince1970,
+                           now.timeIntervalSince1970, accuracy: 0.01)
+        }
+    }
+
+    /// Photos already on disk predate the sequence component and must keep their
+    /// metadata rather than silently reverting to Amber at ISO 100.
+    func testLegacyIDsStillParse() {
+        let parsed = PhotoGallery.parseID("photo_1700000000500_rust_800_240")
+        XCTAssertEqual(parsed.filmID, "rust")
+        XCTAssertEqual(parsed.iso, 800)
+        XCTAssertEqual(parsed.shutter, 240)
+        XCTAssertEqual(parsed.timestamp.timeIntervalSince1970, 1_700_000_000.5, accuracy: 0.01)
+    }
+
     func testMalformedIDFallsBackToDefaults() {
         let parsed = PhotoGallery.parseID("not-a-latitude-photo")
         XCTAssertEqual(parsed.filmID, "amber")

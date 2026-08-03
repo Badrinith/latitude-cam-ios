@@ -34,7 +34,12 @@ public final class PhotoGallery: ObservableObject {
 
     // MARK: - Mutation
 
-    public func addPhoto(_ image: UIImage, filmID: String, iso: Int, shutterDenominator: Int) {
+    /// Returns the new entry's id. The insert itself hops to the main queue, so a
+    /// caller that read `photos.first` instead would get the *previous* photo.
+    @discardableResult
+    public func addPhoto(
+        _ image: UIImage, filmID: String, iso: Int, shutterDenominator: Int
+    ) -> String {
         let timestamp = Date()
         let id = Self.makeID(timestamp: timestamp, filmID: filmID, iso: iso, shutter: shutterDenominator)
         let photo = Photo(
@@ -57,6 +62,7 @@ public final class PhotoGallery: ObservableObject {
             guard let self, let data = image.jpegData(compressionQuality: quality) else { return }
             try? data.write(to: self.galleryDirectory().appendingPathComponent("\(id).jpg"))
         }
+        return id
     }
 
     public func deletePhoto(_ id: String) {
@@ -120,21 +126,39 @@ public final class PhotoGallery: ObservableObject {
     // The shoot settings ride in the filename. A sidecar file would be a second
     // thing to keep in sync, and the fields are all short and delimiter-free.
 
+    private static let idLock = NSLock()
+    private static var sequence = 0
+
+    /// Ids must be unique: `deletePhoto` matches on id, so two frames sharing one
+    /// are deleted together, and the second also overwrites the first on disk.
+    /// Millisecond resolution alone is not enough — a capture and an edit-save
+    /// land in the same millisecond easily — so a per-run sequence carries the
+    /// uniqueness instead, leaving the timestamp exactly as supplied.
     static func makeID(timestamp: Date, filmID: String, iso: Int, shutter: Int) -> String {
+        idLock.lock()
+        sequence += 1
+        let seq = sequence
+        idLock.unlock()
+
         let millis = Int(timestamp.timeIntervalSince1970 * 1000)
-        return "photo_\(millis)_\(filmID)_\(iso)_\(shutter)"
+        return "photo_\(millis)_\(seq)_\(filmID)_\(iso)_\(shutter)"
     }
 
     static func parseID(_ id: String) -> (timestamp: Date, filmID: String, iso: Int, shutter: Int) {
+        let fallback = (Date(timeIntervalSince1970: 0), "amber", 100, 60)
         let parts = id.split(separator: "_").map(String.init)
-        guard parts.count == 5, parts[0] == "photo", let millis = Int(parts[1]) else {
-            return (Date(timeIntervalSince1970: 0), "amber", 100, 60)
+        guard parts.first == "photo", parts.count > 1, let millis = Int(parts[1]) else {
+            return fallback
         }
-        return (
-            Date(timeIntervalSince1970: Double(millis) / 1000),
-            parts[2],
-            Int(parts[3]) ?? 100,
-            Int(parts[4]) ?? 60
-        )
+        let when = Date(timeIntervalSince1970: Double(millis) / 1000)
+
+        switch parts.count {
+        case 6:   // photo_<millis>_<seq>_<film>_<iso>_<shutter>
+            return (when, parts[3], Int(parts[4]) ?? 100, Int(parts[5]) ?? 60)
+        case 5:   // rolls written before ids carried a sequence
+            return (when, parts[2], Int(parts[3]) ?? 100, Int(parts[4]) ?? 60)
+        default:
+            return fallback
+        }
     }
 }

@@ -280,6 +280,38 @@ final class RenderPipelineTests: XCTestCase {
         XCTAssertLessThan(Int(dark), Int(plain), "vignette should darken the corners")
     }
 
+    /// Samples the far corner, not the centre. The original grain bug produced a
+    /// 512pt patch at the origin — a centre sample of a 64pt test image sat
+    /// inside it, so the bug passed this suite for weeks.
+    func testGrainCoversTheWholeFrame() {
+        let manager = CameraManager()
+        var s = neutralSettings()
+        s.intensity = 0
+
+        var grainy = s
+        grainy.grain = true
+
+        let big = CGRect(x: 0, y: 0, width: 900, height: 900)
+        let wide = CIImage(color: CIColor(red: 0.5, green: 0.5, blue: 0.5)).cropped(to: big)
+
+        func farCorner(_ image: CIImage) -> (UInt8, UInt8, UInt8) {
+            var pixel = [UInt8](repeating: 0, count: 4)
+            context.render(
+                image, toBitmap: &pixel, rowBytes: 4,
+                bounds: CGRect(x: 860, y: 860, width: 1, height: 1),
+                format: .RGBA8, colorSpace: CGColorSpaceCreateDeviceRGB()
+            )
+            return (pixel[0], pixel[1], pixel[2])
+        }
+
+        let plain = farCorner(manager.render(wide, with: s))
+        let noisy = farCorner(manager.render(wide, with: grainy))
+        let delta = abs(Int(noisy.0) - Int(plain.0))
+            + abs(Int(noisy.1) - Int(plain.1))
+            + abs(Int(noisy.2) - Int(plain.2))
+        XCTAssertGreaterThan(delta, 0, "grain must reach beyond the first 512pt of the frame")
+    }
+
     func testGrainPerturbsTheFrame() {
         let manager = CameraManager()
         var s = neutralSettings()

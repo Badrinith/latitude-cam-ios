@@ -174,15 +174,60 @@ final class AppStateWiringTests: XCTestCase {
         XCTAssertEqual(photo?.shutterDenominator, AppState.shutterStops.last)
     }
 
-    func testDiscardClearsTheFrameAndReturnsToTheViewfinder() {
+    func testDeleteClearsTheFrameAndReturnsToTheViewfinder() {
         let app = AppState()
         app.capturedImage = UIImage(systemName: "camera") ?? UIImage()
         app.go(.review)
 
-        app.discardCapture()
+        app.deleteCapture()
 
         XCTAssertNil(app.capturedImage)
         XCTAssertEqual(app.screen, .viewfinder)
+    }
+
+    func testKeepingLeavesTheFrameOnTheRoll() {
+        let app = AppState()
+        app.capturedImage = UIImage(systemName: "camera") ?? UIImage()
+        app.saveCapturedPhoto()
+        drain()
+
+        let before = app.gallery.photos.count
+        app.keepCapture()
+        drain()
+
+        XCTAssertEqual(app.gallery.photos.count, before, "keeping must not remove anything")
+        XCTAssertNil(app.capturedImage)
+        XCTAssertEqual(app.screen, .viewfinder)
+    }
+
+    /// The shutter writes to the roll, and Review's delete has to take back
+    /// *that* frame. Reading `photos.first` right after `addPhoto` returned the
+    /// previous photo, because the insert hops to the main queue first — so
+    /// deleting a rejected shot removed the one before it.
+    func testDeletingACaptureRemovesThatFrameAndNotTheOneBefore() {
+        let app = AppState()
+
+        app.capturedImage = UIImage(systemName: "camera") ?? UIImage()
+        app.saveCapturedPhoto()
+        drain()
+        guard let earlier = app.gallery.photos.first?.id else { return XCTFail("no first frame") }
+
+        app.capturedImage = UIImage(systemName: "camera.fill") ?? UIImage()
+        app.saveCapturedPhoto()
+        drain()
+        XCTAssertEqual(app.gallery.photos.count, 2)
+
+        app.deleteCapture()
+        drain()
+
+        XCTAssertEqual(app.gallery.photos.count, 1)
+        XCTAssertEqual(app.gallery.photos.first?.id, earlier, "deleted the wrong frame")
+    }
+
+    private func drain() {
+        let settled = expectation(description: "main queue drained")
+        DispatchQueue.main.async { settled.fulfill() }
+        wait(for: [settled], timeout: 2)
     }
 
     func testSavingNothingIsANoOp() {
