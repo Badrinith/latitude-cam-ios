@@ -138,27 +138,42 @@ extension View {
     }
 }
 
-// MARK: - Rule-of-thirds grid
+// MARK: - Composition grid
 
-struct ThirdsGrid: View {
+/// Draws whichever guide the Grid & Composition setting names. Both styles are
+/// the same two-lines-per-axis shape, so they differ only in where the lines sit.
+struct CompositionGrid: View {
+    var style: String
+
+    private var fractions: [CGFloat]? {
+        switch style {
+        case "Rule of Thirds": return [1.0 / 3.0, 2.0 / 3.0]
+        case "Golden Ratio":   return [0.382, 0.618]
+        default:               return nil   // Off
+        }
+    }
+
     var body: some View {
         GeometryReader { geo in
-            Path { path in
-                for i in 1...2 {
-                    let x = geo.size.width / 3 * CGFloat(i)
-                    path.move(to: CGPoint(x: x, y: 0))
-                    path.addLine(to: CGPoint(x: x, y: geo.size.height))
+            if let fractions {
+                Path { path in
+                    for f in fractions {
+                        let x = geo.size.width * f
+                        path.move(to: CGPoint(x: x, y: 0))
+                        path.addLine(to: CGPoint(x: x, y: geo.size.height))
 
-                    let y = geo.size.height / 3 * CGFloat(i)
-                    path.move(to: CGPoint(x: 0, y: y))
-                    path.addLine(to: CGPoint(x: geo.size.width, y: y))
+                        let y = geo.size.height * f
+                        path.move(to: CGPoint(x: 0, y: y))
+                        path.addLine(to: CGPoint(x: geo.size.width, y: y))
+                    }
                 }
+                .stroke(Color.white.opacity(0.3), lineWidth: 0.5)
             }
-            .stroke(Color.white.opacity(0.3), lineWidth: 0.5)
         }
         .allowsHitTesting(false)
     }
 }
+
 
 // MARK: - Slider row
 
@@ -170,17 +185,44 @@ struct SliderRow: View {
     var temperatureTrack = false
     /// Exposure compensation: centre tick, and fill runs out from zero.
     var bipolar = false
+    /// Number of click-stops engraved on the track. 0 leaves it smooth.
+    var detents: Int = 0
+    /// Parks the thumb on the stop rather than between stops. True wherever the
+    /// underlying value is quantised, so the thumb never claims a precision the
+    /// reading does not have.
+    var snaps = false
+    /// Draws attention to the control the user tapped in the viewfinder HUD.
+    var highlighted = false
+
+    @State private var lastDetent: Int?
+    @State private var crossedCentre: Bool?
+
+    /// The stop a position falls in. Matches AppState.stop(), so a click can
+    /// never fire without the underlying value also changing.
+    static func detentIndex(position: Double, detents: Int) -> Int {
+        guard detents > 0 else { return 0 }
+        return min(detents - 1, max(0, Int(position * Double(detents))))
+    }
+
+    /// The centre of a stop's band — where a detented thumb rests.
+    static func detentCentre(index: Int, detents: Int) -> Double {
+        guard detents > 0 else { return 0 }
+        return (Double(index) + 0.5) / Double(detents)
+    }
+
+    private var trackHeight: CGFloat { detents > 0 ? 22 : 16 }
 
     var body: some View {
         VStack(spacing: 6) {
             HStack {
                 Text(label)
                     .font(.ui(12, .medium))
-                    .foregroundStyle(Tone.secondary)
+                    .foregroundStyle(highlighted ? Accent.amber : Tone.secondary)
                 Spacer()
                 Text(value)
                     .font(.mono(12, .semibold))
                     .foregroundStyle(Accent.amber)
+                    .contentTransition(.numericText())
             }
 
             GeometryReader { geo in
@@ -207,21 +249,70 @@ struct SliderRow: View {
                             .frame(width: max(0, w * position), height: 4)
                     }
 
+                    // Stops engraved below the track, the way they are on a ring.
+                    if detents > 0 {
+                        ForEach(0..<detents, id: \.self) { i in
+                            let active = i == Self.detentIndex(position: position, detents: detents)
+                            Rectangle()
+                                .fill(active ? Accent.amber : Color.white.opacity(0.22))
+                                .frame(width: 1, height: active ? 7 : 4)
+                                .offset(
+                                    x: (CGFloat(i) + 0.5) / CGFloat(detents) * w,
+                                    y: 11
+                                )
+                        }
+                    }
+
                     Circle()
                         .fill(.white)
                         .frame(width: 16, height: 16)
                         .shadow(color: .black.opacity(0.4), radius: 2, y: 1)
                         .offset(x: (w * position) - 8)
                 }
-                .frame(height: 16)
+                .frame(height: trackHeight, alignment: .top)
                 .contentShape(Rectangle())
                 .gesture(
                     DragGesture(minimumDistance: 0)
-                        .onChanged { position = min(max(0, $0.location.x / w), 1) }
+                        .onChanged { drag in
+                            let raw = min(max(0, drag.location.x / w), 1)
+                            if lastDetent == nil { Haptics.prepare() }
+                            report(raw)
+                            position = resolve(raw)
+                        }
+                        .onEnded { _ in
+                            lastDetent = nil
+                            crossedCentre = nil
+                        }
                 )
             }
-            .frame(height: 16)
+            .frame(height: trackHeight)
         }
+    }
+
+    /// Clicks once per stop crossed. A bipolar slider with no stops still marks
+    /// the neutral point, which is the one place on that track worth finding
+    /// without looking.
+    private func report(_ next: Double) {
+        if detents > 0 {
+            let index = Self.detentIndex(position: next, detents: detents)
+            if index != lastDetent {
+                if lastDetent != nil { Haptics.detent() }
+                lastDetent = index
+            }
+        } else if bipolar {
+            let past = next >= 0.5
+            if past != crossedCentre {
+                if crossedCentre != nil { Haptics.detent() }
+                crossedCentre = past
+            }
+        }
+    }
+
+    private func resolve(_ raw: Double) -> Double {
+        guard snaps, detents > 0 else { return raw }
+        return Self.detentCentre(
+            index: Self.detentIndex(position: raw, detents: detents), detents: detents
+        )
     }
 
     private var trackFill: AnyShapeStyle {
@@ -235,6 +326,168 @@ struct SliderRow: View {
             )
         }
         return AnyShapeStyle(Color.white.opacity(0.15))
+    }
+}
+
+// MARK: - Command dial
+//
+// A milled barrel with the values engraved on it, turning under a fixed index —
+// the way an X-series command dial reads. A slider can sit anywhere along its
+// track, which is the wrong promise for a control whose value only ever lands on
+// a stop. Here the value under the index *is* the setting, and every stop costs
+// one click of the finger.
+
+struct DialRow: View {
+    var label: String
+    var values: [String]
+    @Binding var index: Int
+    /// Draws attention to the control the user tapped in the viewfinder HUD.
+    var highlighted = false
+    /// The stop that means "no adjustment" — marked so it can be found by feel.
+    var neutralIndex: Int?
+
+    @State private var dragOffset: CGFloat = 0
+    @State private var dragStart: Int?
+
+    private let pitch: CGFloat = 68
+    private let barrel: CGFloat = 54
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Text(label)
+                .font(.ui(12, .medium))
+                .foregroundStyle(highlighted ? Accent.amber : Tone.secondary)
+
+            ZStack {
+                barrelFace
+
+                GeometryReader { geo in
+                    HStack(spacing: 0) {
+                        ForEach(values.indices, id: \.self) { position in
+                            stop(position)
+                                .frame(width: pitch)
+                                .contentShape(Rectangle())
+                                .onTapGesture { select(position) }
+                        }
+                    }
+                    .offset(x: geo.size.width / 2 - (CGFloat(clamped) + 0.5) * pitch + dragOffset)
+                    .frame(height: geo.size.height, alignment: .center)
+                }
+                .frame(height: barrel)
+                .clipped()
+                .mask(edgeFade)
+
+                indexMark
+            }
+            .frame(height: barrel)
+            .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    .strokeBorder(highlighted ? Accent.amber.opacity(0.5) : Tone.hairline, lineWidth: 0.5)
+            }
+            .contentShape(Rectangle())
+            .gesture(turn)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(label)
+        .accessibilityValue(values.indices.contains(clamped) ? values[clamped] : "")
+        .accessibilityAdjustableAction { direction in
+            select(clamped + (direction == .increment ? 1 : -1))
+        }
+    }
+
+    private var clamped: Int { min(max(index, 0), max(0, values.count - 1)) }
+
+    /// Vertical shading plus fine knurling — the barrel has to read as a turned
+    /// cylinder, or the values look like they are printed on a flat card.
+    private var barrelFace: some View {
+        ZStack {
+            LinearGradient(
+                colors: [Color.black.opacity(0.62), Color.white.opacity(0.05), Color.black.opacity(0.62)],
+                startPoint: .top, endPoint: .bottom
+            )
+            Canvas { context, size in
+                var x: CGFloat = 0
+                while x < size.width {
+                    context.fill(
+                        Path(CGRect(x: x, y: 0, width: 0.5, height: size.height)),
+                        with: .color(.white.opacity(0.05))
+                    )
+                    x += 4
+                }
+            }
+        }
+        .background(Ink.card)
+    }
+
+    private func stop(_ position: Int) -> some View {
+        let current = position == clamped
+        let neutral = position == neutralIndex
+        return VStack(spacing: 4) {
+            Text(values[position])
+                .font(.mono(current ? 15 : 12, current ? .bold : .medium))
+                .foregroundStyle(current ? Accent.amber : Tone.quaternary)
+                .lineLimit(1)
+                .fixedSize()
+
+            Rectangle()
+                .fill(current ? Accent.amber : (neutral ? Tone.secondary : Color.white.opacity(0.22)))
+                .frame(width: current || neutral ? 1.5 : 1, height: current ? 9 : neutral ? 7 : 5)
+        }
+        .animation(.snappy(duration: 0.16), value: current)
+    }
+
+    private var indexMark: some View {
+        VStack(spacing: 0) {
+            Triangle()
+                .fill(Accent.amber)
+                .frame(width: 9, height: 5)
+            Spacer(minLength: 0)
+        }
+        .frame(height: barrel)
+    }
+
+    private var edgeFade: LinearGradient {
+        LinearGradient(
+            stops: [
+                .init(color: .clear, location: 0),
+                .init(color: .black, location: 0.16),
+                .init(color: .black, location: 0.84),
+                .init(color: .clear, location: 1)
+            ],
+            startPoint: .leading, endPoint: .trailing
+        )
+    }
+
+    private var turn: some Gesture {
+        DragGesture(minimumDistance: 1)
+            .onChanged { value in
+                if dragStart == nil {
+                    dragStart = clamped
+                    Haptics.prepare()
+                }
+                let start = dragStart ?? clamped
+                let raw = CGFloat(start) - value.translation.width / pitch
+                let target = min(max(Int(raw.rounded()), 0), values.count - 1)
+
+                if target != clamped {
+                    Haptics.detent()
+                    index = target
+                }
+                // Track the finger between stops so the barrel feels held.
+                dragOffset = value.translation.width + CGFloat(target - start) * pitch
+            }
+            .onEnded { _ in
+                dragStart = nil
+                withAnimation(.spring(response: 0.26, dampingFraction: 0.82)) { dragOffset = 0 }
+            }
+    }
+
+    private func select(_ position: Int) {
+        let target = min(max(position, 0), values.count - 1)
+        guard target != clamped else { return }
+        Haptics.detent()
+        withAnimation(.spring(response: 0.26, dampingFraction: 0.82)) { index = target }
     }
 }
 
@@ -266,8 +519,196 @@ struct ToggleRow: View {
         }
         .contentShape(Rectangle())
         .onTapGesture {
+            Haptics.toggle()
             withAnimation(.snappy(duration: 0.2)) { isOn.toggle() }
         }
+    }
+}
+
+// MARK: - Shutter release
+//
+// The disc sinks under the finger the way a real release travels before it
+// trips. Paired with the heaviest haptic in the app, the press is legible
+// without looking away from the frame.
+
+struct ShutterButton: View {
+    var action: () -> Void
+
+    var body: some View {
+        Button(action: action) { Color.clear.frame(width: 74, height: 74) }
+            .buttonStyle(ShutterStyle())
+            .accessibilityLabel("Take photo")
+    }
+}
+
+private struct ShutterStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        let pressed = configuration.isPressed
+        return configuration.label
+            .overlay {
+                Circle().strokeBorder(.white, lineWidth: 3)
+            }
+            .overlay {
+                Circle()
+                    .fill(.white)
+                    .frame(width: pressed ? 48 : 60, height: pressed ? 48 : 60)
+                    .opacity(pressed ? 0.7 : 1)
+            }
+            .animation(.spring(response: 0.16, dampingFraction: 0.55), value: pressed)
+    }
+}
+
+// MARK: - Film ring
+//
+// The signature control: film names engraved on a barrel that turns under a
+// fixed index mark, one detent per stock. A row of swatches would have been the
+// obvious answer, but this is a camera — the thing you reach for without looking
+// is a ring, and a ring tells you where you are by clicking.
+
+struct FilmRing: View {
+    var presets: [FilmPreset]
+    @Binding var selection: FilmPreset
+    var onOpenDetail: () -> Void
+
+    @State private var dragOffset: CGFloat = 0
+    @State private var dragStart: Int?
+
+    private let pitch: CGFloat = 116
+
+    private var index: Int {
+        presets.firstIndex(where: { $0.id == selection.id }) ?? 0
+    }
+
+    var body: some View {
+        VStack(spacing: 5) {
+            indexMark
+
+            // GeometryReader takes the width it is given instead of the width of
+            // the strip inside it. Without that the four stops measure ~464pt and
+            // push the entire viewfinder chrome off both edges of the screen.
+            GeometryReader { geo in
+                HStack(spacing: 0) {
+                    ForEach(Array(presets.enumerated()), id: \.element.id) { position, preset in
+                        stop(preset, isCurrent: position == index)
+                            .frame(width: pitch)
+                            .contentShape(Rectangle())
+                            .onTapGesture { select(position) }
+                    }
+                }
+                .offset(x: geo.size.width / 2 - (CGFloat(index) + 0.5) * pitch + dragOffset)
+                .frame(height: geo.size.height, alignment: .center)
+            }
+            .frame(height: 34)
+            .clipped()
+            .mask(barrelFade)
+            .contentShape(Rectangle())
+            .gesture(turn)
+
+            Rectangle()
+                .fill(Tone.hairline)
+                .frame(height: 0.5)
+                .padding(.horizontal, 40)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Film simulation")
+        .accessibilityValue(selection.name)
+        .accessibilityAdjustableAction { direction in
+            select(index + (direction == .increment ? 1 : -1))
+        }
+    }
+
+    private var indexMark: some View {
+        ZStack {
+            Triangle()
+                .fill(Accent.amber)
+                .frame(width: 7, height: 5)
+        }
+        .frame(height: 6)
+    }
+
+    private func stop(_ preset: FilmPreset, isCurrent: Bool) -> some View {
+        VStack(spacing: 5) {
+            Text(preset.name.uppercased())
+                .font(.mono(isCurrent ? 11 : 10, isCurrent ? .bold : .medium))
+                .kerning(isCurrent ? 1.1 : 0.6)
+                .foregroundStyle(isCurrent ? Accent.amber : Tone.quaternary)
+                .lineLimit(1)
+                .fixedSize()
+
+            Circle()
+                .fill(preset.swatch)
+                .frame(width: isCurrent ? 7 : 5, height: isCurrent ? 7 : 5)
+                .overlay {
+                    Circle().strokeBorder(
+                        isCurrent ? Color.white.opacity(0.35) : .clear, lineWidth: 0.5
+                    )
+                }
+        }
+        .opacity(isCurrent ? 1 : 0.45)
+        .animation(.snappy(duration: 0.18), value: isCurrent)
+        .contentShape(Rectangle())
+    }
+
+    /// Names dissolve into the curve of the barrel rather than being cut off.
+    private var barrelFade: LinearGradient {
+        LinearGradient(
+            stops: [
+                .init(color: .clear, location: 0),
+                .init(color: .black, location: 0.22),
+                .init(color: .black, location: 0.78),
+                .init(color: .clear, location: 1)
+            ],
+            startPoint: .leading, endPoint: .trailing
+        )
+    }
+
+    private var turn: some Gesture {
+        DragGesture(minimumDistance: 1)
+            .onChanged { value in
+                if dragStart == nil {
+                    dragStart = index
+                    Haptics.prepare()
+                }
+                let start = dragStart ?? index
+                let raw = CGFloat(start) - value.translation.width / pitch
+                let target = min(max(Int(raw.rounded()), 0), presets.count - 1)
+
+                if target != index {
+                    Haptics.detent()
+                    selection = presets[target]
+                }
+                // Track the finger between detents so the barrel feels held.
+                dragOffset = value.translation.width + CGFloat(target - start) * pitch
+            }
+            .onEnded { _ in
+                dragStart = nil
+                withAnimation(.spring(response: 0.28, dampingFraction: 0.8)) { dragOffset = 0 }
+            }
+    }
+
+    private func select(_ position: Int) {
+        let clamped = min(max(position, 0), presets.count - 1)
+        guard clamped != index else {
+            // Tapping the stock already under the index opens its full controls.
+            Haptics.tap()
+            onOpenDetail()
+            return
+        }
+        Haptics.detent()
+        withAnimation(.spring(response: 0.28, dampingFraction: 0.8)) {
+            selection = presets[clamped]
+        }
+    }
+}
+
+struct Triangle: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.midX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+        path.closeSubpath()
+        return path
     }
 }
 
@@ -318,7 +759,10 @@ struct BackLink: View {
     var action: () -> Void
 
     var body: some View {
-        Button(action: action) {
+        Button {
+            Haptics.tap()
+            action()
+        } label: {
             Text("‹ \(title)")
                 .font(.ui(13, .semibold))
                 .foregroundStyle(Accent.amber)

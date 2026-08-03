@@ -2,225 +2,467 @@
 //  CameraManager.swift
 //  LatitudeCam
 //
-//  Camera Integration: Capture, Preview, and Image Processing
-//  Combines Film Profiles + Exposure Control for real-time editing
+//  Capture session, GPU render pipeline, and still capture.
 //
 
 import Foundation
 import UIKit
 import AVFoundation
+import CoreImage
+import Metal
 
-// MARK: - Camera Manager
+// MARK: - Frame buffer
+//
+// Frames land here and nowhere else. Splitting the 30fps stream out of
+// CameraManager means chrome that observes the manager (status, controls)
+// does not rebuild on every frame — only the preview view does.
 
-/// Central controller for camera capture and real-time image processing
-/// Integrates:
-/// - Film profiles (Phase 0.1)
-/// - Exposure control (Phase 0.2)
-/// - Camera capture (Phase 0.3)
-public class CameraManager: NSObject, ObservableObject {
-    
-    // MARK: - Properties
-    
-    @Published var currentISO: Int = 100
-    @Published var currentShutterTime: Double = 1.0
-    
-    private var currentFilmProfileValue: FilmProfile = AmberFilm()
-    var currentFilmProfile: FilmProfile {
-        get { currentFilmProfileValue }
+public final class FrameBuffer: ObservableObject {
+    @Published public internal(set) var image: UIImage?
+}
+
+// MARK: - Render settings
+
+/// Everything the render pipeline needs for one frame. A value type so it can be
+/// copied out from under the lock and used without further synchronisation.
+public struct RenderSettings: Equatable {
+    public var filmID: String = "amber"
+    /// 0…1 blend between the untouched frame and the full film look.
+    public var intensity: Double = 0.8
+    /// Exposure compensation in stops.
+    public var ev: Double = 0
+    public var iso: Int = 100
+    /// Shutter speed as its denominator: 60 means 1/60s.
+    public var shutterDenominator: Int = 60
+    /// White balance in kelvin, 2000…8200.
+    public var kelvin: Double = 5600
+    public var grain = true
+    public var halation = false
+    public var vignette = false
+    public var focusPeaking = false
+    /// Named rather than a colour triple so RenderSettings stays Equatable and
+    /// the value survives a round trip through UserDefaults.
+    public var peakingColorName = "Amber"
+
+    public init() {}
+}
+
+// MARK: - Camera manager
+
+public final class CameraManager: NSObject, ObservableObject {
+
+    public enum Status: Equatable {
+        case idle
+        case requestingPermission
+        case denied
+        case noDevice
+        case running
+        case failed(String)
+
+        public var isLive: Bool { self == .running }
     }
-    
-    private var exposureMeter: ExposureMeter
+
+    /// Live frames. Observe this (not the manager) to redraw the preview.
+    public let frames = FrameBuffer()
+
+    @Published public private(set) var status: Status = .idle
+
+    // Session
     private var captureSession: AVCaptureSession?
+    private var videoDevice: AVCaptureDevice?
     private var videoOutput: AVCaptureVideoDataOutput?
-    
-    // Callbacks
-    var onPreviewUpdate: (() -> Void)?
-    
-    // MARK: - Initialization
-    
-    override public init() {
-        self.exposureMeter = ExposureMeter(baseISO: 100, baseShutter: 1.0)
-        super.init()
-        
-        // Load persisted settings if available
-        loadSettings()
-    }
-    
-    // MARK: - Film Profile Control
-    
-    public func setFilmProfile(_ profile: FilmProfile) {
-        currentFilmProfileValue = profile
-        saveSettings()
-        onPreviewUpdate?()
-    }
-    
-    // MARK: - Exposure Control
-    
-    public func setISO(_ iso: Int) {
-        currentISO = iso
-        saveSettings()
-        onPreviewUpdate?()
+    private let cameraQueue = DispatchQueue(label: "com.latitude.camera", qos: .userInitiated)
+
+    // Render pipeline — built once, reused for every frame. Rebuilding the
+    // CIContext per frame was costing more than the filters themselves.
+    private let ciContext: CIContext
+    private let noiseTile: CIImage?
+
+    // Settings shared across the main thread (writer) and camera queue (reader).
+    private let settingsLock = NSLock()
+    private var _settings = RenderSettings()
+    private var settings: RenderSettings {
+        settingsLock.lock(); defer { settingsLock.unlock() }
+        return _settings
     }
 
-    public func setShutterTime(_ time: Double) {
-        currentShutterTime = time
-        saveSettings()
-        onPreviewUpdate?()
-    }
-    
-    // MARK: - Image Processing Pipeline
-    
-    /// Process a single pixel through the complete pipeline
-    /// Order: Film → Exposure
-    public func processPixel(_ pixel: Pixel) -> Pixel {
-        // Step 1: Apply film profile
-        let afterFilm = currentFilmProfile.apply(to: pixel)
-        
-        // Step 2: Apply exposure adjustments (ISO + Shutter)
-        let afterExposure = exposureMeter.adjust(
-            afterFilm,
-            toISO: currentISO,
-            exposureTime: currentShutterTime
-        )
-        
-        return afterExposure
-    }
-    
-    /// Process entire image array through pipeline
-    public func processImage(_ pixels: [Pixel]) -> [Pixel] {
-        return pixels.map { processPixel($0) }
-    }
-    
-    // MARK: - Photo Capture
-    
-    /// Capture photo from camera with current settings applied
-    public func capturePhoto(completion: @escaping (UIImage?) -> Void) {
-        // Initialize camera session if needed
-        if captureSession == nil {
-            setupCameraSession()
+    /// True once the device accepted custom exposure, so the render pipeline
+    /// stops simulating ISO/shutter and only applies EV compensation.
+    private var usingDeviceExposure = false
+
+    private var lastFrameTime: CFTimeInterval = 0
+    private let minFrameInterval: CFTimeInterval = 1.0 / 30.0
+
+    override public init() {
+        if let device = MTLCreateSystemDefaultDevice() {
+            ciContext = CIContext(mtlDevice: device, options: [.cacheIntermediates: false])
+        } else {
+            ciContext = CIContext(options: [.cacheIntermediates: false])
         }
-        
-        // Start capture session
-        guard let session = captureSession else {
-            completion(nil)
-            return
+        noiseTile = CameraManager.makeNoiseTile()
+        super.init()
+
+        loadSettings()
+
+        cameraQueue.async { [weak self] in
+            self?.initializeCamera()
         }
-        
-        if !session.isRunning {
-            DispatchQueue.global(qos: .default).async {
-                session.startRunning()
+    }
+
+    deinit {
+        if let session = captureSession, session.isRunning {
+            session.stopRunning()
+        }
+    }
+
+    // MARK: - Settings
+
+    /// Push new render settings in from the UI. Cheap and safe to call on every
+    /// slider tick — the pipeline picks them up on the next frame.
+    public func apply(_ new: RenderSettings) {
+        settingsLock.lock()
+        let exposureChanged = new.iso != _settings.iso
+            || new.shutterDenominator != _settings.shutterDenominator
+        _settings = new
+        settingsLock.unlock()
+
+        if exposureChanged {
+            cameraQueue.async { [weak self] in
+                self?.applyDeviceExposure(new)
             }
         }
-        
-        // Schedule capture on background thread
-        DispatchQueue.global(qos: .default).asyncAfter(deadline: .now() + 0.5) {
-            self.capturePhotoInternal(completion: completion)
+        persist(new)
+    }
+
+    public var currentSettings: RenderSettings { settings }
+
+    // MARK: - Session setup
+
+    private func initializeCamera() {
+        switch AVCaptureDevice.authorizationStatus(for: .video) {
+        case .authorized:
+            configureAndStart()
+
+        case .notDetermined:
+            setStatus(.requestingPermission)
+            AVCaptureDevice.requestAccess(for: .video) { [weak self] granted in
+                guard let self else { return }
+                self.cameraQueue.async {
+                    if granted {
+                        self.configureAndStart()
+                    } else {
+                        self.setStatus(.denied)
+                    }
+                }
+            }
+
+        case .denied, .restricted:
+            setStatus(.denied)
+
+        @unknown default:
+            setStatus(.denied)
         }
     }
-    
-    private func capturePhotoInternal(completion: @escaping (UIImage?) -> Void) {
-        // In a real implementation, this would:
-        // 1. Capture from AVCaptureDevice
-        // 2. Convert to CGImage
-        // 3. Extract pixel data
-        // 4. Apply processImage() to each pixel
-        // 5. Return processed UIImage
-        
-        // For Phase 0.3, we create a test image
-        let testImage = createTestImage()
-        completion(testImage)
-    }
-    
-    private func createTestImage() -> UIImage {
-        // Create a simple test image for development
-        let size = CGSize(width: 100, height: 100)
-        UIGraphicsBeginImageContextWithOptions(size, false, 0)
-        
-        // Fill with gradient
-        let context = UIGraphicsGetCurrentContext()!
-        let colors = [UIColor.red.cgColor, UIColor.blue.cgColor]
-        let colorspace = CGColorSpaceCreateDeviceRGB()
-        let gradient = CGGradient(colorsSpace: colorspace, colors: colors as CFArray, locations: nil)!
-        context.drawLinearGradient(gradient, start: CGPoint(x: 0, y: 0), end: CGPoint(x: size.width, y: size.height), options: [])
-        
-        let image = UIGraphicsGetImageFromCurrentImageContext()!
-        UIGraphicsEndImageContext()
-        
-        return image
-    }
-    
-    // MARK: - Camera Setup
-    
-    private func setupCameraSession() {
-        let session = AVCaptureSession()
-        session.sessionPreset = .photo
-        
-        guard let camera = AVCaptureDevice.default(for: .video) else {
+
+    private func configureAndStart() {
+        guard let camera = AVCaptureDevice.default(
+            .builtInWideAngleCamera, for: .video, position: .back
+        ) ?? AVCaptureDevice.default(for: .video) else {
+            setStatus(.noDevice)
             return
         }
-        
+
+        let session = AVCaptureSession()
+        session.beginConfiguration()
+        session.sessionPreset = .hd1920x1080
+
         do {
             let input = try AVCaptureDeviceInput(device: camera)
+            guard session.canAddInput(input) else {
+                session.commitConfiguration()
+                setStatus(.failed("Cannot add camera input"))
+                return
+            }
             session.addInput(input)
-            
-            let output = AVCaptureVideoDataOutput()
-            output.setSampleBufferDelegate(self, queue: DispatchQueue(label: "CameraQueue"))
-            session.addOutput(output)
-            
-            self.captureSession = session
-            self.videoOutput = output
         } catch {
-            print("Error setting up camera: \(error)")
+            session.commitConfiguration()
+            setStatus(.failed(error.localizedDescription))
+            return
+        }
+
+        let output = AVCaptureVideoDataOutput()
+        output.alwaysDiscardsLateVideoFrames = true
+        output.videoSettings = [
+            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
+        ]
+        output.setSampleBufferDelegate(self, queue: cameraQueue)
+
+        guard session.canAddOutput(output) else {
+            session.commitConfiguration()
+            setStatus(.failed("Cannot add video output"))
+            return
+        }
+        session.addOutput(output)
+
+        // Portrait. videoOrientation is deprecated on iOS 17; the rotation angle
+        // is the supported spelling.
+        if let connection = output.connection(with: .video),
+           connection.isVideoRotationAngleSupported(90) {
+            connection.videoRotationAngle = 90
+        }
+
+        session.commitConfiguration()
+
+        self.captureSession = session
+        self.videoDevice = camera
+        self.videoOutput = output
+
+        applyDeviceExposure(settings)
+
+        session.startRunning()
+        setStatus(.running)
+    }
+
+    /// Drive the real sensor where the hardware allows it, so ISO and shutter are
+    /// genuine exposure changes rather than a brightness curve.
+    private func applyDeviceExposure(_ s: RenderSettings) {
+        guard let device = videoDevice else { return }
+        guard device.isExposureModeSupported(.custom) else {
+            usingDeviceExposure = false
+            return
+        }
+
+        do {
+            try device.lockForConfiguration()
+            defer { device.unlockForConfiguration() }
+
+            let format = device.activeFormat
+            let iso = min(max(Float(s.iso), format.minISO), format.maxISO)
+
+            let wanted = CMTime(value: 1, timescale: CMTimeScale(max(1, s.shutterDenominator)))
+            var duration = wanted
+            if CMTimeCompare(duration, format.minExposureDuration) < 0 {
+                duration = format.minExposureDuration
+            }
+            if CMTimeCompare(duration, format.maxExposureDuration) > 0 {
+                duration = format.maxExposureDuration
+            }
+
+            device.setExposureModeCustom(duration: duration, iso: iso, completionHandler: nil)
+            usingDeviceExposure = true
+        } catch {
+            usingDeviceExposure = false
         }
     }
-    
-    // MARK: - Settings Persistence
-    
+
+    private func setStatus(_ new: Status) {
+        DispatchQueue.main.async { [weak self] in
+            self?.status = new
+        }
+    }
+
+    // MARK: - Still capture
+
+    /// The current frame, already carrying the selected look.
+    public func capturePhoto() -> UIImage? {
+        frames.image
+    }
+
+    // MARK: - Persistence
+
+    private func persist(_ s: RenderSettings) {
+        let defaults = UserDefaults.standard
+        defaults.set(s.iso, forKey: "LatitudeCam.ISO")
+        defaults.set(s.shutterDenominator, forKey: "LatitudeCam.Shutter")
+        defaults.set(s.filmID, forKey: "LatitudeCam.FilmProfile")
+        defaults.set(s.kelvin, forKey: "LatitudeCam.Kelvin")
+    }
+
     private func loadSettings() {
         let defaults = UserDefaults.standard
-        currentISO = defaults.integer(forKey: "LatitudeCam.ISO")
-        if currentISO == 0 { currentISO = 100 }
-        
-        let shutterTime = defaults.double(forKey: "LatitudeCam.ShutterTime")
-        if shutterTime > 0 { currentShutterTime = shutterTime }
-        
-        // Load film profile type
-        if let filmType = defaults.string(forKey: "LatitudeCam.FilmProfile") {
-            switch filmType {
-            case "amber": currentFilmProfileValue = AmberFilm()
-            case "slate": currentFilmProfileValue = SlateFilm()
-            case "rust": currentFilmProfileValue = RustFilm()
-            case "mono": currentFilmProfileValue = MonoFilm()
-            default: currentFilmProfileValue = AmberFilm()
-            }
-        }
-    }
-    
-    public func saveSettings() {
-        let defaults = UserDefaults.standard
-        defaults.set(currentISO, forKey: "LatitudeCam.ISO")
-        defaults.set(currentShutterTime, forKey: "LatitudeCam.ShutterTime")
-        
-        // Save film profile type
-        let filmType: String
-        if currentFilmProfile is AmberFilm { filmType = "amber" }
-        else if currentFilmProfile is SlateFilm { filmType = "slate" }
-        else if currentFilmProfile is RustFilm { filmType = "rust" }
-        else if currentFilmProfile is MonoFilm { filmType = "mono" }
-        else { filmType = "amber" }
-        
-        defaults.set(filmType, forKey: "LatitudeCam.FilmProfile")
+        var s = RenderSettings()
+        let iso = defaults.integer(forKey: "LatitudeCam.ISO")
+        if iso > 0 { s.iso = iso }
+        let shutter = defaults.integer(forKey: "LatitudeCam.Shutter")
+        if shutter > 0 { s.shutterDenominator = shutter }
+        if let film = defaults.string(forKey: "LatitudeCam.FilmProfile") { s.filmID = film }
+        let kelvin = defaults.double(forKey: "LatitudeCam.Kelvin")
+        if kelvin > 0 { s.kelvin = kelvin }
+
+        settingsLock.lock()
+        _settings = s
+        settingsLock.unlock()
     }
 }
 
-// MARK: - AVCaptureVideoDataOutputSampleBufferDelegate
+// MARK: - Frame delivery
 
 extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate {
+
+    public func captureOutput(
+        _ output: AVCaptureOutput,
+        didOutput sampleBuffer: CMSampleBuffer,
+        from connection: AVCaptureConnection
+    ) {
+        let now = CACurrentMediaTime()
+        guard now - lastFrameTime >= minFrameInterval else { return }
+        lastFrameTime = now
+
+        guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
+
+        let source = CIImage(cvImageBuffer: pixelBuffer)
+        let rendered = render(source, with: settings)
+
+        guard let cgImage = ciContext.createCGImage(rendered, from: source.extent) else { return }
+        let uiImage = UIImage(cgImage: cgImage)
+
+        DispatchQueue.main.async { [weak self] in
+            self?.frames.image = uiImage
+        }
+    }
+
     public func captureOutput(
         _ output: AVCaptureOutput,
         didDrop sampleBuffer: CMSampleBuffer,
         from connection: AVCaptureConnection
-    ) {
-        // Handle dropped frames
+    ) {}
+}
+
+// MARK: - Render pipeline
+//
+// Every stage is a GPU CIFilter. The per-pixel Swift transforms in FilmProfiles
+// stay as the reference implementation the unit tests assert against; these
+// matrices reproduce exactly the same maths at video rate.
+
+extension CameraManager {
+
+    func render(_ input: CIImage, with s: RenderSettings) -> CIImage {
+        var image = input
+        let extent = input.extent
+
+        // 1. White balance. Claiming a source white of `kelvin` and mapping it to
+        //    daylight reproduces how a camera's WB dial behaves: setting a low
+        //    kelvin under daylight cools the frame.
+        image = image.applyingFilter("CITemperatureAndTint", parameters: [
+            "inputNeutral": CIVector(x: CGFloat(s.kelvin), y: 0),
+            "inputTargetNeutral": CIVector(x: 6500, y: 0)
+        ])
+
+        // 2. Exposure. If the sensor took the ISO/shutter directly we only add the
+        //    user's compensation; otherwise fold them in so the dials still read.
+        var stops = s.ev
+        if !usingDeviceExposure {
+            stops += log2(Double(max(1, s.iso)) / 100.0)
+            stops += log2(60.0 / Double(max(1, s.shutterDenominator)))
+        }
+        stops = min(max(stops, -4), 4)
+        if abs(stops) > 0.001 {
+            image = image.applyingFilter("CIExposureAdjust", parameters: [
+                kCIInputEVKey: stops
+            ])
+        }
+
+        // 3. Film look.
+        let t = CGFloat(min(max(s.intensity, 0), 1))
+        let (fr, fg, fb) = CameraManager.filmVectors(s.filmID)
+        image = image.applyingFilter("CIColorMatrix", parameters: [
+            "inputRVector": CameraManager.lerp(CIVector(x: 1, y: 0, z: 0, w: 0), fr, t),
+            "inputGVector": CameraManager.lerp(CIVector(x: 0, y: 1, z: 0, w: 0), fg, t),
+            "inputBVector": CameraManager.lerp(CIVector(x: 0, y: 0, z: 1, w: 0), fb, t)
+        ])
+
+        // 4. Halation — highlight bleed.
+        if s.halation {
+            image = image
+                .applyingFilter("CIBloom", parameters: [
+                    kCIInputRadiusKey: 12.0,
+                    kCIInputIntensityKey: 0.7
+                ])
+                .cropped(to: extent)
+        }
+
+        // 5. Vignette.
+        if s.vignette {
+            image = image.applyingFilter("CIVignette", parameters: [
+                kCIInputRadiusKey: 1.4,
+                kCIInputIntensityKey: 1.2
+            ])
+        }
+
+        // 6. Grain. The noise tile is generated once at init — CIRandomGenerator
+        //    per frame is far too expensive.
+        if s.grain, let noise = noiseTile {
+            image = noise
+                .cropped(to: extent)
+                .applyingFilter("CIOverlayBlendMode", parameters: [
+                    kCIInputBackgroundImageKey: image
+                ])
+        }
+
+        // 7. Focus peaking, drawn last since it is a shooting aid, not a look.
+        if s.focusPeaking {
+            let tint = Pref.peakingTint(s.peakingColorName)
+            let edges = image
+                .applyingFilter("CIEdges", parameters: [kCIInputIntensityKey: 6.0])
+                .applyingFilter("CIColorMatrix", parameters: [
+                    "inputRVector": CIVector(x: CGFloat(tint.r), y: 0, z: 0, w: 0),
+                    "inputGVector": CIVector(x: CGFloat(tint.g), y: 0, z: 0, w: 0),
+                    "inputBVector": CIVector(x: CGFloat(tint.b), y: 0, z: 0, w: 0)
+                ])
+            image = edges.applyingFilter("CIScreenBlendMode", parameters: [
+                kCIInputBackgroundImageKey: image
+            ])
+        }
+
+        return image.cropped(to: extent)
+    }
+
+    /// Matches the multipliers in FilmProfiles.swift exactly.
+    static func filmVectors(_ id: String) -> (CIVector, CIVector, CIVector) {
+        switch id {
+        case "slate":
+            return (CIVector(x: 0.8, y: 0, z: 0, w: 0),
+                    CIVector(x: 0, y: 0.8, z: 0, w: 0),
+                    CIVector(x: 0, y: 0, z: 1.2, w: 0))
+        case "rust":
+            return (CIVector(x: 1.3, y: 0, z: 0, w: 0),
+                    CIVector(x: 0, y: 1.1, z: 0, w: 0),
+                    CIVector(x: 0, y: 0, z: 0.6, w: 0))
+        case "mono":
+            let luma = CIVector(x: 0.299, y: 0.587, z: 0.114, w: 0)
+            return (luma, luma, luma)
+        default: // amber
+            return (CIVector(x: 1.2, y: 0, z: 0, w: 0),
+                    CIVector(x: 0, y: 0.9, z: 0, w: 0),
+                    CIVector(x: 0, y: 0, z: 0.8, w: 0))
+        }
+    }
+
+    static func lerp(_ a: CIVector, _ b: CIVector, _ t: CGFloat) -> CIVector {
+        CIVector(
+            x: a.x + (b.x - a.x) * t,
+            y: a.y + (b.y - a.y) * t,
+            z: a.z + (b.z - a.z) * t,
+            w: a.w + (b.w - a.w) * t
+        )
+    }
+
+    /// A tileable grey-noise field centred on 0.5 so an overlay blend leaves
+    /// mid-tones alone and only perturbs the frame slightly.
+    static func makeNoiseTile() -> CIImage? {
+        guard let random = CIFilter(name: "CIRandomGenerator")?.outputImage else { return nil }
+        let amplitude: CGFloat = 0.09
+        let bias = (1 - amplitude) / 2
+        return random
+            .cropped(to: CGRect(x: 0, y: 0, width: 512, height: 512))
+            .applyingFilter("CIColorMatrix", parameters: [
+                "inputRVector": CIVector(x: 0.2126 * amplitude, y: 0.7152 * amplitude, z: 0.0722 * amplitude, w: 0),
+                "inputGVector": CIVector(x: 0.2126 * amplitude, y: 0.7152 * amplitude, z: 0.0722 * amplitude, w: 0),
+                "inputBVector": CIVector(x: 0.2126 * amplitude, y: 0.7152 * amplitude, z: 0.0722 * amplitude, w: 0),
+                "inputBiasVector": CIVector(x: bias, y: bias, z: bias, w: 1)
+            ])
+            .applyingFilter("CIAffineTile", parameters: [
+                kCIInputTransformKey: CGAffineTransform.identity
+            ])
     }
 }

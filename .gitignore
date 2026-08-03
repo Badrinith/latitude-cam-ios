@@ -1,9 +1,17 @@
 .DS_Store
-.xcodeproj/xcuserdata/
-.xcodeproj/project.xcworkspace/xcuserdata/
+
+# Xcode user state — per-developer, never shared.
+# Unanchored so it matches at any depth; the project lives one level down.
+xcuserdata/
+*.xcuserdatad/
+*.xcuserstate
+
+# Build products
+build/
 Build/
 DerivedData/
 .build/
 *.xcarchive
 *.app
+
 .swiftpm/

@@ -7,27 +7,6 @@
 
 import SwiftUI
 
-// MARK: - Launch
-
-struct LaunchScreen: View {
-    @EnvironmentObject var app: AppState
-
-    var body: some View {
-        ZStack {
-            Ink.raised.ignoresSafeArea()
-            VStack(spacing: 18) {
-                LatitudeMark(size: 96)
-                Text("Latitude")
-                    .font(.ui(22, .semibold))
-                    .kerning(-0.2)
-                    .foregroundStyle(Tone.primary)
-            }
-        }
-        .contentShape(Rectangle())
-        .onTapGesture { app.go(.onboarding) }
-    }
-}
-
 // MARK: - Onboarding
 
 struct OnboardingScreen: View {
@@ -85,7 +64,10 @@ struct OnboardingScreen: View {
 
                 Spacer(minLength: 24)
 
-                PrimaryButton("Get Started") { app.go(.login) }
+                PrimaryButton("Get Started") {
+                    Haptics.tap()
+                    app.go(.login)
+                }
             }
             .padding(.horizontal, 28)
             .padding(.top, 60)
@@ -140,7 +122,10 @@ struct LoginScreen: View {
                     .padding(.bottom, 36)
 
                 VStack(spacing: 12) {
-                    Button { app.go(.viewfinder) } label: {
+                    Button {
+                        Haptics.tap()
+                        app.completeOnboarding()
+                    } label: {
                         HStack(spacing: 8) {
                             Image(systemName: "apple.logo").font(.system(size: 15))
                             Text("Continue with Apple")
@@ -153,7 +138,10 @@ struct LoginScreen: View {
                     }
                     .buttonStyle(.plain)
 
-                    Button { app.go(.viewfinder) } label: {
+                    Button {
+                        Haptics.tap()
+                        app.completeOnboarding()
+                    } label: {
                         Text("Continue with Email")
                             .font(.ui(15, .semibold))
                             .foregroundStyle(Tone.primary)
@@ -170,7 +158,10 @@ struct LoginScreen: View {
 
                 Spacer(minLength: 24)
 
-                Button { app.go(.viewfinder) } label: {
+                Button {
+                    Haptics.tap()
+                    app.completeOnboarding()
+                } label: {
                     Text("Skip for now")
                         .font(.ui(13, .medium))
                         .foregroundStyle(Tone.quaternary)

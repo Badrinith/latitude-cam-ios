@@ -2,28 +2,22 @@
 //  CameraIntegrationTests.swift
 //  LatitudeCam
 //
-//  Test-Driven Development: Camera Integration
-//  RED: Tests for camera capture, processing, and preview
+//  Covers the settings surface and the GPU render pipeline. The pipeline is the
+//  risky part: CoreImage silently passes the image through when a filter name is
+//  wrong, so a typo would show up as "the toggle does nothing" rather than a
+//  build failure. These tests fail loudly instead.
 //
 
 import XCTest
+import CoreImage
 import AVFoundation
 @testable import LatitudeCam
 
-/// True only where a real capture device exists — the Simulator has none, so
-/// capture-path tests are skipped there rather than reported as failures.
-private var hasCaptureDevice: Bool {
-    AVCaptureDevice.default(for: .video) != nil
-}
+final class CameraSettingsTests: XCTestCase {
 
-final class CameraIntegrationTests: XCTestCase {
-    
-    var cameraManager: CameraManager!
-    
-    /// CameraManager persists to the shared UserDefaults, so settings written
-    /// by one test would otherwise leak into the next one's defaults.
     private static let persistedKeys = [
-        "LatitudeCam.ISO", "LatitudeCam.ShutterTime", "LatitudeCam.FilmProfile"
+        "LatitudeCam.ISO", "LatitudeCam.Shutter",
+        "LatitudeCam.FilmProfile", "LatitudeCam.Kelvin"
     ]
 
     private func clearPersistedSettings() {
@@ -33,215 +27,307 @@ final class CameraIntegrationTests: XCTestCase {
     override func setUp() {
         super.setUp()
         clearPersistedSettings()
-        cameraManager = CameraManager()
     }
 
     override func tearDown() {
-        cameraManager = nil
         clearPersistedSettings()
         super.tearDown()
     }
-    
-    // MARK: - Camera Manager Tests
-    
-    func testCameraManagerInitializes() {
-        XCTAssertNotNil(cameraManager)
+
+    func testDefaultSettings() {
+        let manager = CameraManager()
+        let s = manager.currentSettings
+        XCTAssertEqual(s.filmID, "amber")
+        XCTAssertEqual(s.iso, 100)
+        XCTAssertEqual(s.shutterDenominator, 60)
     }
-    
-    func testCameraHasDefaultFilmProfile() {
-        // By default, should start with AmberFilm
-        XCTAssertNotNil(cameraManager.currentFilmProfile)
+
+    func testApplyUpdatesCurrentSettings() {
+        let manager = CameraManager()
+        var s = manager.currentSettings
+        s.filmID = "rust"
+        s.iso = 800
+        s.shutterDenominator = 500
+        s.ev = 1.5
+        manager.apply(s)
+
+        let read = manager.currentSettings
+        XCTAssertEqual(read.filmID, "rust")
+        XCTAssertEqual(read.iso, 800)
+        XCTAssertEqual(read.shutterDenominator, 500)
+        XCTAssertEqual(read.ev, 1.5, accuracy: 0.001)
     }
-    
-    func testCameraHasDefaultExposure() {
-        // Should have default ISO and shutter
-        XCTAssertEqual(cameraManager.currentISO, 100)
-        XCTAssertEqual(cameraManager.currentShutterTime, 1.0)
+
+    func testSettingsPersistAcrossInstances() {
+        let manager = CameraManager()
+        var s = manager.currentSettings
+        s.filmID = "slate"
+        s.iso = 800
+        s.shutterDenominator = 240
+        manager.apply(s)
+
+        // Simulate a relaunch.
+        let reopened = CameraManager()
+        XCTAssertEqual(reopened.currentSettings.filmID, "slate")
+        XCTAssertEqual(reopened.currentSettings.iso, 800)
+        XCTAssertEqual(reopened.currentSettings.shutterDenominator, 240)
     }
-    
-    func testCanSetFilmProfile() {
-        // Should be able to switch film profiles
-        let slate = SlateFilm()
-        cameraManager.setFilmProfile(slate)
-        
-        XCTAssertNotNil(cameraManager.currentFilmProfile)
+}
+
+// MARK: - Film matrices
+
+final class FilmMatrixTests: XCTestCase {
+
+    /// The GPU matrices in CameraManager duplicate the multipliers in
+    /// FilmProfiles.swift. If either side is edited alone the live preview stops
+    /// matching the reference implementation, so pin them together.
+    private func assertMatrixMatchesProfile(
+        _ filmID: String,
+        _ profile: FilmProfile,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let (r, g, b) = CameraManager.filmVectors(filmID)
+
+        // 100 is low enough that no channel clamps at 255 after the multiply.
+        let probe = Pixel(r: 100, g: 100, b: 100)
+        let expected = profile.apply(to: probe)
+
+        let matrixR = (r.x + r.y + r.z) * 100
+        let matrixG = (g.x + g.y + g.z) * 100
+        let matrixB = (b.x + b.y + b.z) * 100
+
+        XCTAssertEqual(Double(matrixR), Double(expected.r), accuracy: 0.5, file: file, line: line)
+        XCTAssertEqual(Double(matrixG), Double(expected.g), accuracy: 0.5, file: file, line: line)
+        XCTAssertEqual(Double(matrixB), Double(expected.b), accuracy: 0.5, file: file, line: line)
     }
-    
-    func testCanAdjustISO() {
-        // Should allow ISO adjustment
-        cameraManager.setISO(400)
-        XCTAssertEqual(cameraManager.currentISO, 400)
+
+    func testAmberMatrixMatchesProfile() {
+        assertMatrixMatchesProfile("amber", AmberFilm())
     }
-    
-    func testCanAdjustShutterTime() {
-        // Should allow shutter time adjustment
-        cameraManager.setShutterTime(2.0)
-        XCTAssertEqual(cameraManager.currentShutterTime, 2.0)
+
+    func testSlateMatrixMatchesProfile() {
+        assertMatrixMatchesProfile("slate", SlateFilm())
     }
-    
-    // MARK: - Image Processing Pipeline Tests
-    
-    func testPixelProcessingPipeline() {
-        // Pipeline: Capture → Film → Exposure → Result
-        let inputPixel = Pixel(r: 100, g: 100, b: 100)
-        
-        // Set: Amber film + ISO 200
-        let amber = AmberFilm()
-        cameraManager.setFilmProfile(amber)
-        cameraManager.setISO(200)
-        cameraManager.setShutterTime(1.0)
-        
-        // Process pixel through full pipeline
-        let result = cameraManager.processPixel(inputPixel)
-        
-        // Expected: Amber (R+20%, G-10%, B-20%) then ISO 2x
-        // Amber: R=120, G=90, B=80
-        // ISO 2x: R=240, G=180, B=160
-        XCTAssertEqual(result.r, 240)
-        XCTAssertEqual(result.g, 180)
-        XCTAssertEqual(result.b, 160)
+
+    func testRustMatrixMatchesProfile() {
+        assertMatrixMatchesProfile("rust", RustFilm())
     }
-    
-    func testMonoFilmWithExposure() {
-        let inputPixel = Pixel(r: 255, g: 128, b: 64)
-        
-        // Set: Mono film + ISO 100 (no change) + Shutter 2.0
-        let mono = MonoFilm()
-        cameraManager.setFilmProfile(mono)
-        cameraManager.setISO(100)
-        cameraManager.setShutterTime(2.0)
-        
-        let result = cameraManager.processPixel(inputPixel)
-        
-        // Mono with standard luminosity: 0.299*255 + 0.587*128 + 0.114*64 ≈ 149
-        // Then shutter 2.0x: 149 * 2 = 298 (clamped to 255)
-        XCTAssertEqual(result.r, 255)
-        XCTAssertEqual(result.g, 255)
-        XCTAssertEqual(result.b, 255)
+
+    func testMonoMatrixMatchesProfile() {
+        assertMatrixMatchesProfile("mono", MonoFilm())
     }
-    
-    func testRustFilmWithISO() {
-        let inputPixel = Pixel(r: 80, g: 80, b: 80)
-        
-        // Set: Rust film + ISO 200 + Shutter 0.5
-        let rust = RustFilm()
-        cameraManager.setFilmProfile(rust)
-        cameraManager.setISO(200)
-        cameraManager.setShutterTime(0.5)
-        
-        let result = cameraManager.processPixel(inputPixel)
-        
-        // Rust: R+30%, G+10%, B-40%
-        // R: 80*1.3=104, G: 80*1.1=88, B: 80*0.6=48
-        // ISO 2x: R=208, G=176, B=96
-        // Shutter 0.5x: R=104, G=88, B=48
-        XCTAssertEqual(result.r, 104)
-        XCTAssertEqual(result.g, 88)
-        XCTAssertEqual(result.b, 48)
+
+    func testUnknownFilmIDFallsBackToAmber() {
+        let (r, _, b) = CameraManager.filmVectors("does-not-exist")
+        let (ar, _, ab) = CameraManager.filmVectors("amber")
+        XCTAssertEqual(r.x, ar.x, accuracy: 0.001)
+        XCTAssertEqual(b.z, ab.z, accuracy: 0.001)
     }
-    
-    // MARK: - Preview Tests
-    
-    func testPreviewUpdatesWhenFilmChanges() {
-        let updateExpectation = expectation(description: "Preview should update when film changes")
-        
-        var previewUpdated = false
-        cameraManager.onPreviewUpdate = {
-            previewUpdated = true
-            updateExpectation.fulfill()
+
+    func testLerpAtZeroIsIdentityAndAtOneIsFilm() {
+        let identity = CIVector(x: 1, y: 0, z: 0, w: 0)
+        let film = CIVector(x: 1.3, y: 0, z: 0, w: 0)
+        XCTAssertEqual(CameraManager.lerp(identity, film, 0).x, 1.0, accuracy: 0.001)
+        XCTAssertEqual(CameraManager.lerp(identity, film, 1).x, 1.3, accuracy: 0.001)
+        XCTAssertEqual(CameraManager.lerp(identity, film, 0.5).x, 1.15, accuracy: 0.001)
+    }
+}
+
+// MARK: - Render pipeline
+
+final class RenderPipelineTests: XCTestCase {
+
+    private let context = CIContext(options: [.cacheIntermediates: false])
+    private let extent = CGRect(x: 0, y: 0, width: 64, height: 64)
+
+    private func source(
+        red: CGFloat = 0.6, green: CGFloat = 0.4, blue: CGFloat = 0.2
+    ) -> CIImage {
+        CIImage(color: CIColor(red: red, green: green, blue: blue)).cropped(to: extent)
+    }
+
+    /// Reads one pixel back so assertions are about actual output, not about the
+    /// filter graph we think we built.
+    private func sample(_ image: CIImage) -> (r: UInt8, g: UInt8, b: UInt8) {
+        var pixel = [UInt8](repeating: 0, count: 4)
+        context.render(
+            image,
+            toBitmap: &pixel,
+            rowBytes: 4,
+            bounds: CGRect(x: 32, y: 32, width: 1, height: 1),
+            format: .RGBA8,
+            colorSpace: CGColorSpaceCreateDeviceRGB()
+        )
+        return (pixel[0], pixel[1], pixel[2])
+    }
+
+    private func neutralSettings() -> RenderSettings {
+        var s = RenderSettings()
+        s.kelvin = 6500      // matches the pipeline's target neutral, so WB is a no-op
+        s.ev = 0
+        s.iso = 100
+        s.shutterDenominator = 60
+        s.grain = false
+        s.halation = false
+        s.vignette = false
+        s.focusPeaking = false
+        return s
+    }
+
+    func testRenderPreservesExtent() {
+        let manager = CameraManager()
+        let out = manager.render(source(), with: neutralSettings())
+        XCTAssertEqual(out.extent, extent)
+    }
+
+    func testMonoRenderProducesGrey() {
+        let manager = CameraManager()
+        var s = neutralSettings()
+        s.filmID = "mono"
+        s.intensity = 1.0
+
+        let out = sample(manager.render(source(), with: s))
+        XCTAssertLessThanOrEqual(abs(Int(out.r) - Int(out.g)), 2, "mono should equalise channels")
+        XCTAssertLessThanOrEqual(abs(Int(out.g) - Int(out.b)), 2, "mono should equalise channels")
+    }
+
+    func testAmberRenderWarmsTheFrame() {
+        let manager = CameraManager()
+        var s = neutralSettings()
+        s.filmID = "amber"
+        s.intensity = 1.0
+
+        let plain = sample(manager.render(source(), with: { var n = s; n.intensity = 0; return n }()))
+        let amber = sample(manager.render(source(), with: s))
+
+        XCTAssertGreaterThan(Int(amber.r), Int(plain.r), "amber lifts red")
+        XCTAssertLessThan(Int(amber.b), Int(plain.b), "amber pulls blue down")
+    }
+
+    func testSlateRenderCoolsTheFrame() {
+        let manager = CameraManager()
+        var s = neutralSettings()
+        s.filmID = "slate"
+        s.intensity = 1.0
+
+        let plain = sample(manager.render(source(), with: { var n = s; n.intensity = 0; return n }()))
+        let slate = sample(manager.render(source(), with: s))
+
+        XCTAssertLessThan(Int(slate.r), Int(plain.r), "slate pulls red down")
+        XCTAssertGreaterThan(Int(slate.b), Int(plain.b), "slate lifts blue")
+    }
+
+    func testIntensityZeroLeavesFrameUnchanged() {
+        let manager = CameraManager()
+        var s = neutralSettings()
+        s.filmID = "rust"
+        s.intensity = 0
+
+        let plain = sample(source())
+        let rendered = sample(manager.render(source(), with: s))
+        XCTAssertLessThanOrEqual(abs(Int(rendered.r) - Int(plain.r)), 2)
+        XCTAssertLessThanOrEqual(abs(Int(rendered.g) - Int(plain.g)), 2)
+        XCTAssertLessThanOrEqual(abs(Int(rendered.b) - Int(plain.b)), 2)
+    }
+
+    func testPositiveExposureCompensationBrightens() {
+        let manager = CameraManager()
+        var s = neutralSettings()
+        s.intensity = 0
+
+        var brighter = s
+        brighter.ev = 1.0
+
+        let base = sample(manager.render(source(), with: s))
+        let lifted = sample(manager.render(source(), with: brighter))
+        XCTAssertGreaterThan(Int(lifted.r), Int(base.r))
+    }
+
+    func testWarmWhiteBalanceShiftsAwayFromNeutral() {
+        let manager = CameraManager()
+        var s = neutralSettings()
+        s.intensity = 0
+
+        var warm = s
+        warm.kelvin = 8200
+
+        let neutral = sample(manager.render(source(), with: s))
+        let shifted = sample(manager.render(source(), with: warm))
+        XCTAssertNotEqual(Int(neutral.r), Int(shifted.r), "white balance must change the frame")
+    }
+
+    func testVignetteDarkensTheCorner() {
+        let manager = CameraManager()
+        var s = neutralSettings()
+        s.intensity = 0
+
+        var vignetted = s
+        vignetted.vignette = true
+
+        func corner(_ image: CIImage) -> UInt8 {
+            var pixel = [UInt8](repeating: 0, count: 4)
+            context.render(
+                image, toBitmap: &pixel, rowBytes: 4,
+                bounds: CGRect(x: 0, y: 0, width: 1, height: 1),
+                format: .RGBA8, colorSpace: CGColorSpaceCreateDeviceRGB()
+            )
+            return pixel[0]
         }
-        
-        // Change film profile
-        let slate = SlateFilm()
-        cameraManager.setFilmProfile(slate)
-        
-        waitForExpectations(timeout: 1.0)
-        XCTAssertTrue(previewUpdated)
+
+        let plain = corner(manager.render(source(), with: s))
+        let dark = corner(manager.render(source(), with: vignetted))
+        XCTAssertLessThan(Int(dark), Int(plain), "vignette should darken the corners")
     }
-    
-    func testPreviewUpdatesWhenISOChanges() {
-        let updateExpectation = expectation(description: "Preview should update when ISO changes")
-        
-        var updateCount = 0
-        cameraManager.onPreviewUpdate = {
-            updateCount += 1
-            if updateCount == 1 {
-                updateExpectation.fulfill()
-            }
+
+    func testGrainPerturbsTheFrame() {
+        let manager = CameraManager()
+        var s = neutralSettings()
+        s.intensity = 0
+
+        var grainy = s
+        grainy.grain = true
+
+        let plain = sample(manager.render(source(), with: s))
+        let noisy = sample(manager.render(source(), with: grainy))
+        let delta = abs(Int(noisy.r) - Int(plain.r))
+            + abs(Int(noisy.g) - Int(plain.g))
+            + abs(Int(noisy.b) - Int(plain.b))
+        XCTAssertGreaterThan(delta, 0, "grain should change pixel values")
+    }
+
+    /// CoreImage returns the input untouched for an unknown filter name, so a
+    /// typo would look like a dead toggle. Check the names resolve.
+    func testEveryFilterNameResolves() {
+        let names = [
+            "CITemperatureAndTint", "CIExposureAdjust", "CIColorMatrix",
+            "CIBloom", "CIVignette", "CIOverlayBlendMode",
+            "CIEdges", "CIScreenBlendMode", "CIRandomGenerator", "CIAffineTile"
+        ]
+        for name in names {
+            XCTAssertNotNil(CIFilter(name: name), "missing CIFilter: \(name)")
         }
-        
-        // Change ISO
-        cameraManager.setISO(400)
-        
-        waitForExpectations(timeout: 1.0)
-        XCTAssertGreaterThan(updateCount, 0)
     }
-    
-    func testPreviewUpdatesWhenShutterChanges() {
-        let updateExpectation = expectation(description: "Preview should update when shutter changes")
-        
-        var updateCount = 0
-        cameraManager.onPreviewUpdate = {
-            updateCount += 1
-            if updateCount == 1 {
-                updateExpectation.fulfill()
-            }
-        }
-        
-        // Change shutter time
-        cameraManager.setShutterTime(2.0)
-        
-        waitForExpectations(timeout: 1.0)
-        XCTAssertGreaterThan(updateCount, 0)
+}
+
+// MARK: - Capture
+
+final class CameraCaptureTests: XCTestCase {
+
+    /// The Simulator has no capture device, so the session never delivers a
+    /// frame — capturePhoto has to return nil rather than trap.
+    func testCapturePhotoWithoutFrameReturnsNil() {
+        let manager = CameraManager()
+        XCTAssertNil(manager.capturePhoto())
     }
-    
-    // MARK: - Photo Capture Tests
-    
-    func testCapturePhotoReturnsImage() throws {
-        try XCTSkipUnless(hasCaptureDevice, "Requires camera hardware")
-        let captureExpectation = expectation(description: "Should capture a photo")
-        
-        cameraManager.capturePhoto { image in
-            XCTAssertNotNil(image)
-            captureExpectation.fulfill()
-        }
-        
-        waitForExpectations(timeout: 5.0)
+
+    func testFrameBufferStartsEmpty() {
+        let manager = CameraManager()
+        XCTAssertNil(manager.frames.image)
     }
-    
-    func testCapturedPhotoHasFilmApplied() throws {
-        try XCTSkipUnless(hasCaptureDevice, "Requires camera hardware")
-        let captureExpectation = expectation(description: "Captured photo should have film applied")
-        
-        // Set Mono film (should convert to B&W)
-        let mono = MonoFilm()
-        cameraManager.setFilmProfile(mono)
-        cameraManager.setISO(100)
-        cameraManager.setShutterTime(1.0)
-        
-        cameraManager.capturePhoto { image in
-            XCTAssertNotNil(image)
-            // In real test, would verify image is grayscale
-            captureExpectation.fulfill()
-        }
-        
-        waitForExpectations(timeout: 5.0)
-    }
-    
-    // MARK: - Settings Persistence Tests
-    
-    func testSettingsPersist() {
-        // Set specific values
-        cameraManager.setISO(800)
-        cameraManager.setShutterTime(1.5)
-        let rust = RustFilm()
-        cameraManager.setFilmProfile(rust)
-        
-        // Create new manager (simulate app restart)
-        let newManager = CameraManager()
-        
-        // Settings should persist
-        XCTAssertEqual(newManager.currentISO, 800)
-        XCTAssertEqual(newManager.currentShutterTime, 1.5)
+
+    func testStatusStartsIdle() {
+        let manager = CameraManager()
+        XCTAssertEqual(manager.status, .idle)
     }
 }

@@ -19,6 +19,8 @@
 		A010 /* ProductionFeatures.swift in Sources */ = {isa = PBXBuildFile; fileRef = B010 /* ProductionFeatures.swift */; };
 		A011 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = B011 /* Theme.swift */; };
 		A012 /* Components.swift in Sources */ = {isa = PBXBuildFile; fileRef = B012 /* Components.swift */; };
+		A017 /* Haptics.swift in Sources */ = {isa = PBXBuildFile; fileRef = B017 /* Haptics.swift */; };
+		A018 /* SplashScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = B018 /* SplashScreen.swift */; };
 		A013 /* EntryScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = B013 /* EntryScreens.swift */; };
 		A014 /* ViewfinderScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = B014 /* ViewfinderScreen.swift */; };
 		A015 /* LibraryScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = B015 /* LibraryScreens.swift */; };
@@ -28,6 +30,12 @@
 		A201 /* ExposureControlTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B201 /* ExposureControlTests.swift */; };
 		A202 /* CameraIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B202 /* CameraIntegrationTests.swift */; };
 		A203 /* PreviewEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B203 /* PreviewEngineTests.swift */; };
+		A205 /* AppStateWiringTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B205 /* AppStateWiringTests.swift */; };
+		A206 /* EditScreenTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B206 /* EditScreenTests.swift */; };
+		A207 /* SettingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B207 /* SettingsTests.swift */; };
+		A208 /* LiveHistogramTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B208 /* LiveHistogramTests.swift */; };
+		A209 /* HapticsAndDetentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B209 /* HapticsAndDetentTests.swift */; };
+		A210 /* SplashTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B210 /* SplashTests.swift */; };
 		A204 /* Phase0_4_AllTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B204 /* Phase0_4_AllTests.swift */; };
 /* End PBXBuildFile section */
 
@@ -44,6 +52,8 @@
 		B010 /* ProductionFeatures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProductionFeatures.swift; sourceTree = "<group>"; };
 		B011 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		B012 /* Components.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Components.swift; sourceTree = "<group>"; };
+		B017 /* Haptics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Haptics.swift; sourceTree = "<group>"; };
+		B018 /* SplashScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplashScreen.swift; sourceTree = "<group>"; };
 		B013 /* EntryScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EntryScreens.swift; sourceTree = "<group>"; };
 		B014 /* ViewfinderScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewfinderScreen.swift; sourceTree = "<group>"; };
 		B015 /* LibraryScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryScreens.swift; sourceTree = "<group>"; };
@@ -55,13 +65,19 @@
 		B201 /* ExposureControlTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExposureControlTests.swift; sourceTree = "<group>"; };
 		B202 /* CameraIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraIntegrationTests.swift; sourceTree = "<group>"; };
 		B203 /* PreviewEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewEngineTests.swift; sourceTree = "<group>"; };
+		B205 /* AppStateWiringTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateWiringTests.swift; sourceTree = "<group>"; };
+		B206 /* EditScreenTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditScreenTests.swift; sourceTree = "<group>"; };
+		B207 /* SettingsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsTests.swift; sourceTree = "<group>"; };
+		B208 /* LiveHistogramTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveHistogramTests.swift; sourceTree = "<group>"; };
+		B209 /* HapticsAndDetentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HapticsAndDetentTests.swift; sourceTree = "<group>"; };
+		B210 /* SplashTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplashTests.swift; sourceTree = "<group>"; };
 		B204 /* Phase0_4_AllTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Phase0_4_AllTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
 		D000 /* UI */ = {
 			isa = PBXGroup;
-			children = (B011, B012, B013, B014, B015, B016);
+			children = (B011, B012, B013, B014, B015, B016, B017, B018);
 			path = UI;
 			sourceTree = "<group>";
 		};
@@ -79,7 +95,7 @@
 		};
 		D004 /* Tests */ = {
 			isa = PBXGroup;
-			children = (B200, B201, B202, B203, B204);
+			children = (B200, B201, B202, B203, B204, B205, B206, B207, B208, B209, B210);
 			path = Tests;
 			sourceTree = "<group>";
 		};
@@ -167,13 +183,13 @@
 		F001 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
-			files = (A001, A002, A003, A004, A005, A006, A007, A008, A009, A010, A011, A012, A013, A014, A015, A016);
+			files = (A001, A002, A003, A004, A005, A006, A007, A008, A009, A010, A011, A012, A013, A014, A015, A016, A017, A018);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		F003 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
-			files = (A200, A201, A202, A203, A204);
+			files = (A200, A201, A202, A203, A204, A205, A206, A207, A208, A209, A210);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */

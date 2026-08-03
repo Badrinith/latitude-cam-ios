@@ -9,19 +9,75 @@ import XCTest
 @testable import LatitudeCam
 
 final class PhotoGalleryTests: XCTestCase {
-    // The gallery persists to disk, so state survives between runs. Start from
-    // a known-empty gallery rather than asserting an absolute count.
+
+    /// The gallery persists to disk, so state survives between runs. Wipe the
+    /// directory itself — going through the gallery would race its own async
+    /// load and leave the count unpredictable.
     override func setUp() {
         super.setUp()
-        let gallery = PhotoGallery()
-        gallery.getPhotos().forEach { gallery.deletePhoto($0.id) }
+        let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        try? FileManager.default.removeItem(at: documents.appendingPathComponent("Gallery"))
     }
 
-    func testGalleryCanStorePhotos() {
+    /// Lets the gallery's own main-queue hop land before we assert. Main queue is
+    /// FIFO, so a block enqueued after addPhoto runs after addPhoto's insert.
+    private func drainMainQueue() {
+        let settled = expectation(description: "main queue drained")
+        DispatchQueue.main.async { settled.fulfill() }
+        wait(for: [settled], timeout: 2)
+    }
+
+    func testGalleryStoresPhoto() {
         let gallery = PhotoGallery()
-        let testImage = UIImage(systemName: "camera") ?? UIImage()
-        gallery.addPhoto(testImage, filmProfile: "Amber", iso: 400, shutter: 1.0)
-        XCTAssertEqual(gallery.getPhotos().count, 1)
+        gallery.addPhoto(UIImage(systemName: "camera") ?? UIImage(),
+                         filmID: "amber", iso: 400, shutterDenominator: 60)
+        drainMainQueue()
+        XCTAssertEqual(gallery.photos.count, 1)
+    }
+
+    func testGalleryKeepsShootMetadata() {
+        let gallery = PhotoGallery()
+        gallery.addPhoto(UIImage(systemName: "camera") ?? UIImage(),
+                         filmID: "rust", iso: 800, shutterDenominator: 240)
+        drainMainQueue()
+
+        let photo = gallery.photos.first
+        XCTAssertEqual(photo?.filmID, "rust")
+        XCTAssertEqual(photo?.iso, 800)
+        XCTAssertEqual(photo?.shutterDenominator, 240)
+    }
+
+    func testDeleteRemovesPhoto() {
+        let gallery = PhotoGallery()
+        gallery.addPhoto(UIImage(systemName: "camera") ?? UIImage(),
+                         filmID: "amber", iso: 100, shutterDenominator: 60)
+        drainMainQueue()
+        guard let id = gallery.photos.first?.id else { return XCTFail("no photo to delete") }
+
+        gallery.deletePhoto(id)
+        drainMainQueue()
+        XCTAssertTrue(gallery.photos.isEmpty)
+    }
+
+    /// Metadata rides in the filename, so a round-trip failure would silently
+    /// relabel every photo on the next launch.
+    func testIDRoundTripsMetadata() {
+        let when = Date(timeIntervalSince1970: 1_700_000_000.5)
+        let id = PhotoGallery.makeID(timestamp: when, filmID: "slate", iso: 1600, shutter: 500)
+        let parsed = PhotoGallery.parseID(id)
+
+        XCTAssertEqual(parsed.filmID, "slate")
+        XCTAssertEqual(parsed.iso, 1600)
+        XCTAssertEqual(parsed.shutter, 500)
+        XCTAssertEqual(parsed.timestamp.timeIntervalSince1970,
+                       when.timeIntervalSince1970, accuracy: 0.01)
+    }
+
+    func testMalformedIDFallsBackToDefaults() {
+        let parsed = PhotoGallery.parseID("not-a-latitude-photo")
+        XCTAssertEqual(parsed.filmID, "amber")
+        XCTAssertEqual(parsed.iso, 100)
+        XCTAssertEqual(parsed.shutter, 60)
     }
 }
 

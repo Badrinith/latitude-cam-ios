@@ -1,119 +1,140 @@
 //
 //  PhotoGallery.swift
-//  LatitudeCam - Phase 0.4.2
+//  LatitudeCam
 //
-//  Photo Gallery: Store and display captured photos with film info
+//  On-disk store for captured frames, plus the shoot metadata for each one.
 //
 
 import Foundation
 import UIKit
 
-public class PhotoGallery {
-    public struct Photo {
+public final class PhotoGallery: ObservableObject {
+
+    public struct Photo: Identifiable, Equatable {
         public let id: String
         public let image: UIImage
-        public let filmProfile: String
+        public let filmID: String
         public let iso: Int
-        public let shutter: Double
+        public let shutterDenominator: Int
         public let timestamp: Date
+
+        public static func == (a: Photo, b: Photo) -> Bool { a.id == b.id }
     }
-    
-    private var photos: [Photo] = []
+
+    /// Newest first.
+    @Published public private(set) var photos: [Photo] = []
+
     private let fileManager = FileManager.default
-    
+    private let ioQueue = DispatchQueue(label: "com.latitude.gallery", qos: .utility)
+
     public init() {
-        loadPhotos()
+        // Disk I/O never blocks launch — the grid fills in when it is ready.
+        ioQueue.async { [weak self] in self?.loadPhotos() }
     }
-    
-    public func addPhoto(_ image: UIImage, filmProfile: String, iso: Int, shutter: Double) {
+
+    // MARK: - Mutation
+
+    public func addPhoto(_ image: UIImage, filmID: String, iso: Int, shutterDenominator: Int) {
+        let timestamp = Date()
+        let id = Self.makeID(timestamp: timestamp, filmID: filmID, iso: iso, shutter: shutterDenominator)
         let photo = Photo(
-            id: UUID().uuidString,
+            id: id,
             image: image,
-            filmProfile: filmProfile,
+            filmID: filmID,
             iso: iso,
-            shutter: shutter,
-            timestamp: Date()
+            shutterDenominator: shutterDenominator,
+            timestamp: timestamp
         )
-        photos.insert(photo, at: 0)
-        savePhoto(photo)
+
+        DispatchQueue.main.async { [weak self] in
+            self?.photos.insert(photo, at: 0)
+        }
+
+        let quality = Pref.compressionQuality(
+            Pref.string(Pref.jpegQuality, default: "High")
+        )
+        ioQueue.async { [weak self] in
+            guard let self, let data = image.jpegData(compressionQuality: quality) else { return }
+            try? data.write(to: self.galleryDirectory().appendingPathComponent("\(id).jpg"))
+        }
     }
-    
-    public func getPhotos() -> [Photo] {
-        return photos
-    }
-    
+
     public func deletePhoto(_ id: String) {
-        photos.removeAll { $0.id == id }
-
-        // The file must go too — dropping only the in-memory entry meant
-        // loadPhotos() resurrected deleted photos on the next launch.
-        let photoFile = getGalleryDirectory().appendingPathComponent("\(id).jpg")
-        try? fileManager.removeItem(at: photoFile)
-    }
-    
-    private func savePhoto(_ photo: Photo) {
-        let galleryDir = getGalleryDirectory()
-        let photoFile = galleryDir.appendingPathComponent("\(photo.id).jpg")
-        
-        if let jpegData = photo.image.jpegData(compressionQuality: 0.95) {
-            try? jpegData.write(to: photoFile)
+        DispatchQueue.main.async { [weak self] in
+            self?.photos.removeAll { $0.id == id }
+        }
+        ioQueue.async { [weak self] in
+            guard let self else { return }
+            // The file has to go too — dropping only the in-memory entry meant
+            // loadPhotos() resurrected deleted photos on the next launch.
+            try? self.fileManager.removeItem(
+                at: self.galleryDirectory().appendingPathComponent("\(id).jpg")
+            )
         }
     }
-    
+
+    // MARK: - Disk
+
     private func loadPhotos() {
-        let galleryDir = getGalleryDirectory()
-        let fileURLs = (try? fileManager.contentsOfDirectory(at: galleryDir, includingPropertiesForKeys: nil)) ?? []
-        
-        for url in fileURLs {
-            if let image = UIImage(contentsOfFile: url.path) {
-                let photo = Photo(
-                    id: url.deletingPathExtension().lastPathComponent,
-                    image: image,
-                    filmProfile: "Unknown",
-                    iso: 100,
-                    shutter: 1.0,
-                    timestamp: Date()
-                )
-                photos.append(photo)
-            }
-        }
-    }
-    
-    private func getGalleryDirectory() -> URL {
-        let paths = fileManager.urls(for: .documentDirectory, in: .userDomainMask)
-        let documentsDir = paths[0]
-        let galleryDir = documentsDir.appendingPathComponent("Gallery", isDirectory: true)
-        try? fileManager.createDirectory(at: galleryDir, withIntermediateDirectories: true)
-        return galleryDir
-    }
-}
+        let urls = (try? fileManager.contentsOfDirectory(
+            at: galleryDirectory(), includingPropertiesForKeys: nil
+        )) ?? []
 
-public class FilmPreviewGenerator {
-    public static func generatePreview(for film: String, size: CGSize) -> UIImage? {
-        UIGraphicsBeginImageContextWithOptions(size, false, 0)
-        defer { UIGraphicsEndImageContext() }
-        
-        let context = UIGraphicsGetCurrentContext()!
-        
-        // Create gradient based on film type
-        let colors: [CGColor]
-        switch film {
-        case "Amber": colors = [CGColor(red: 0.8, green: 0.6, blue: 0.2, alpha: 1.0), 
-                               CGColor(red: 0.9, green: 0.7, blue: 0.3, alpha: 1.0)]
-        case "Slate": colors = [CGColor(red: 0.3, green: 0.4, blue: 0.6, alpha: 1.0),
-                               CGColor(red: 0.4, green: 0.5, blue: 0.7, alpha: 1.0)]
-        case "Rust": colors = [CGColor(red: 0.9, green: 0.4, blue: 0.2, alpha: 1.0),
-                              CGColor(red: 1.0, green: 0.5, blue: 0.3, alpha: 1.0)]
-        case "Mono": colors = [CGColor(red: 0.3, green: 0.3, blue: 0.3, alpha: 1.0),
-                              CGColor(red: 0.7, green: 0.7, blue: 0.7, alpha: 1.0)]
-        default: colors = [CGColor(red: 0.5, green: 0.5, blue: 0.5, alpha: 1.0),
-                          CGColor(red: 0.6, green: 0.6, blue: 0.6, alpha: 1.0)]
+        let loaded: [Photo] = urls
+            .filter { $0.pathExtension.lowercased() == "jpg" }
+            .compactMap { url in
+                guard let image = UIImage(contentsOfFile: url.path) else { return nil }
+                let id = url.deletingPathExtension().lastPathComponent
+                let meta = Self.parseID(id)
+                return Photo(
+                    id: id,
+                    image: image,
+                    filmID: meta.filmID,
+                    iso: meta.iso,
+                    shutterDenominator: meta.shutter,
+                    timestamp: meta.timestamp
+                )
+            }
+            .sorted { $0.timestamp > $1.timestamp }
+
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            // A capture can land before this first disk read returns. Replacing
+            // the array wholesale silently dropped that photo from the grid, so
+            // merge on id and keep whatever is already in memory.
+            let known = Set(self.photos.map(\.id))
+            self.photos = (self.photos + loaded.filter { !known.contains($0.id) })
+                .sorted { $0.timestamp > $1.timestamp }
         }
-        
-        let colorspace = CGColorSpaceCreateDeviceRGB()
-        let gradient = CGGradient(colorsSpace: colorspace, colors: colors as CFArray, locations: nil)!
-        context.drawLinearGradient(gradient, start: CGPoint(x: 0, y: 0), end: CGPoint(x: size.width, y: size.height), options: [])
-        
-        return UIGraphicsGetImageFromCurrentImageContext()
+    }
+
+    private func galleryDirectory() -> URL {
+        let documents = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let gallery = documents.appendingPathComponent("Gallery", isDirectory: true)
+        try? fileManager.createDirectory(at: gallery, withIntermediateDirectories: true)
+        return gallery
+    }
+
+    // MARK: - Filename metadata
+    //
+    // The shoot settings ride in the filename. A sidecar file would be a second
+    // thing to keep in sync, and the fields are all short and delimiter-free.
+
+    static func makeID(timestamp: Date, filmID: String, iso: Int, shutter: Int) -> String {
+        let millis = Int(timestamp.timeIntervalSince1970 * 1000)
+        return "photo_\(millis)_\(filmID)_\(iso)_\(shutter)"
+    }
+
+    static func parseID(_ id: String) -> (timestamp: Date, filmID: String, iso: Int, shutter: Int) {
+        let parts = id.split(separator: "_").map(String.init)
+        guard parts.count == 5, parts[0] == "photo", let millis = Int(parts[1]) else {
+            return (Date(timeIntervalSince1970: 0), "amber", 100, 60)
+        }
+        return (
+            Date(timeIntervalSince1970: Double(millis) / 1000),
+            parts[2],
+            Int(parts[3]) ?? 100,
+            Int(parts[4]) ?? 60
+        )
     }
 }

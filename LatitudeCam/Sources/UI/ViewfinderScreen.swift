@@ -2,27 +2,188 @@
 //  ViewfinderScreen.swift
 //  LatitudeCam
 //
-//  The home/camera screen, plus the Manual Controls sheet it presents.
+//  The camera screen, plus the Manual Controls sheet it presents.
 //
 
 import SwiftUI
 
+// MARK: - Live preview
+//
+// Frames arrive 30 times a second. This view observes the frame buffer alone, so
+// SwiftUI reinvalidates a single Image and leaves the chrome — sliders, film
+// strip, sheets — untouched. Observing the whole camera (or forcing a new .id on
+// the screen) rebuilt every control mid-gesture, which is what made the buttons
+// feel dead.
+
+struct CameraPreview: View {
+    @ObservedObject var frames: FrameBuffer
+
+    var body: some View {
+        GeometryReader { geo in
+            if let image = frames.image {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: geo.size.width, height: geo.size.height)
+                    .clipped()
+            } else {
+                StripePattern.viewfinder
+                    .frame(width: geo.size.width, height: geo.size.height)
+            }
+        }
+        .ignoresSafeArea()
+    }
+}
+
+/// Dims what the chosen aspect ratio will crop away, so the badge is a promise
+/// the user can see rather than a label.
+struct AspectMask: View {
+    var aspect: String
+
+    var body: some View {
+        GeometryReader { geo in
+            if let ratio = Pref.aspectRatio(aspect) {
+                let keepHeight = min(geo.size.height, geo.size.width * ratio)
+                let bar = max(0, (geo.size.height - keepHeight) / 2)
+                VStack(spacing: 0) {
+                    Color.black.opacity(0.55).frame(height: bar)
+                    Spacer(minLength: 0)
+                    Color.black.opacity(0.55).frame(height: bar)
+                }
+            }
+        }
+        .allowsHitTesting(false)
+        .ignoresSafeArea()
+    }
+}
+
+/// Reports session state. Separate from the preview because status changes a
+/// handful of times per launch, not 30 times a second.
+struct CameraStatusPill: View {
+    @ObservedObject var camera: CameraManager
+
+    var body: some View {
+        if let text = message {
+            Text(text)
+                .font(.mono(10, .medium))
+                .foregroundStyle(Tone.primary)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .glass(radius: 8)
+        }
+    }
+
+    private var message: String? {
+        switch camera.status {
+        case .running:              return nil
+        case .idle:                 return "STARTING CAMERA…"
+        case .requestingPermission: return "AWAITING CAMERA ACCESS"
+        case .denied:               return "CAMERA ACCESS DENIED — SETTINGS › LATITUDE"
+        case .noDevice:             return "NO CAMERA ON THIS DEVICE"
+        case .failed(let reason):   return "CAMERA ERROR — \(reason.uppercased())"
+        }
+    }
+}
+
+// MARK: - Live histogram
+//
+// Owns its sampler so the 5Hz republish stays inside this leaf. Hanging the
+// sampler off ViewfinderScreen would drag the whole screen along with it.
+
+struct LiveHistogramView: View {
+    let frames: FrameBuffer
+    var style: String
+
+    @StateObject private var sampler = HistogramSampler()
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Canvas { context, size in
+                if style == "RGB" {
+                    draw(sampler.data.red, in: &context, size: size, color: .red)
+                    draw(sampler.data.green, in: &context, size: size, color: .green)
+                    draw(sampler.data.blue, in: &context, size: size, color: .blue)
+                } else {
+                    draw(sampler.data.luma, in: &context, size: size, color: Accent.amber, opacity: 0.95)
+                }
+            }
+            .frame(width: 84, height: 30)
+
+            Text(sampler.data.hasData ? sampler.data.exposure.uppercased() : "—")
+                .font(.mono(8, .semibold))
+                .foregroundStyle(verdictColor)
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 5)
+        .frame(width: 96, alignment: .leading)
+        .glass(radius: 8)
+        .onAppear { sampler.follow(frames) }
+    }
+
+    private var verdictColor: Color {
+        guard sampler.data.hasData else { return Tone.quaternary }
+        switch sampler.data.exposure {
+        case "Under", "Over": return Accent.amber
+        default:              return Tone.secondary
+        }
+    }
+
+    private func draw(
+        _ buckets: [Double],
+        in context: inout GraphicsContext,
+        size: CGSize,
+        color: Color,
+        opacity: Double = 0.55
+    ) {
+        guard buckets.count > 1 else { return }
+        let step = size.width / CGFloat(buckets.count - 1)
+
+        var path = Path()
+        path.move(to: CGPoint(x: 0, y: size.height))
+        for (i, value) in buckets.enumerated() {
+            path.addLine(to: CGPoint(
+                x: CGFloat(i) * step,
+                y: size.height - CGFloat(value) * size.height
+            ))
+        }
+        path.addLine(to: CGPoint(x: size.width, y: size.height))
+        path.closeSubpath()
+
+        context.fill(path, with: .color(color.opacity(opacity)))
+    }
+}
+
+// MARK: - Viewfinder
+
 struct ViewfinderScreen: View {
     @EnvironmentObject var app: AppState
 
+    @AppStorage(Pref.grid) private var gridStyle = "Rule of Thirds"
+    @AppStorage(Pref.aspect) private var aspect = "3:2"
+    @AppStorage(Pref.histogramStyle) private var histogramStyle = "Luma"
+
     var body: some View {
         ZStack {
-            StripePattern.viewfinder
-                .ignoresSafeArea()
-                .overlay {
-                    Text("LIVE VIEWFINDER")
-                        .font(.mono(12, .medium))
-                        .foregroundStyle(Color.white.opacity(0.22))
-                }
+            Ink.base.ignoresSafeArea()
 
-            ThirdsGrid().ignoresSafeArea()
+            CameraPreview(frames: app.cameraManager.frames)
+
+            AspectMask(aspect: aspect)
+
+            CompositionGrid(style: gridStyle).ignoresSafeArea()
 
             chrome
+
+            if let message = app.lastSaveMessage {
+                Text(message)
+                    .font(.ui(13, .semibold))
+                    .foregroundStyle(Tone.primary)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .glass(radius: 12)
+                    .transition(.opacity)
+                    .zIndex(2)
+            }
 
             if app.proSheetOpen {
                 BottomSheet(onDismiss: { app.proSheetOpen = false }) {
@@ -31,21 +192,23 @@ struct ViewfinderScreen: View {
                 .zIndex(1)
             }
         }
+        // Scoped to the sheet only. Animating the whole ZStack meant every frame
+        // arriving from the camera kicked off an implicit animation.
         .animation(.spring(response: 0.35, dampingFraction: 0.85), value: app.proSheetOpen)
+        .animation(.easeInOut(duration: 0.2), value: app.lastSaveMessage)
     }
 
     private var chrome: some View {
         VStack(spacing: 0) {
-            // Top row — settings pill on the left, HUD readouts centred.
+            // Settings pill on the left, exposure readouts centred.
             ZStack {
-                HStack(spacing: 8) {
-                    readout(app.shutterLabel)
-                    readout(app.isoLabel)
-                    readout(app.kelvinLabel)
-                }
+                hud
 
                 HStack {
-                    Button { app.go(.settings) } label: {
+                    Button {
+                        Haptics.tap()
+                        app.go(.settings)
+                    } label: {
                         Text("SETTINGS")
                             .font(.mono(10, .semibold))
                             .kerning(0.5)
@@ -61,18 +224,53 @@ struct ViewfinderScreen: View {
             .padding(.horizontal, 16)
             .padding(.top, 8)
 
-            // Histogram (left) and capture-option buttons (right)
             HStack(alignment: .top) {
-                histogram
+                VStack(alignment: .leading, spacing: 8) {
+                    LiveHistogramView(
+                        frames: app.cameraManager.frames,
+                        style: histogramStyle
+                    )
+                    CameraStatusPill(camera: app.cameraManager)
+                }
+
                 Spacer()
+
                 VStack(spacing: 8) {
-                    optionButton { Text("3:2").font(.mono(9, .semibold)).foregroundStyle(Tone.primary) }
-                    optionButton { Text("RAW").font(.mono(8, .semibold)).foregroundStyle(Accent.amber) }
-                    optionButton {
-                        Circle()
-                            .strokeBorder(Tone.primary, lineWidth: 1.5)
-                            .frame(width: 12, height: 12)
+                    Button { cycleAspect() } label: {
+                        optionLabel {
+                            Text(aspect)
+                                .font(.mono(9, .semibold))
+                                .foregroundStyle(Tone.primary)
+                        }
                     }
+                    .buttonStyle(.plain)
+
+                    Button {
+                        Haptics.toggle()
+                        app.proRAW.toggle()
+                    } label: {
+                        optionLabel {
+                            Text("RAW")
+                                .font(.mono(8, .semibold))
+                                .foregroundStyle(app.proRAW ? Accent.amber : Tone.quaternary)
+                        }
+                    }
+                    .buttonStyle(.plain)
+
+                    Button {
+                        Haptics.toggle()
+                        app.focusPeaking.toggle()
+                    } label: {
+                        optionLabel {
+                            Circle()
+                                .strokeBorder(
+                                    app.focusPeaking ? Accent.amber : Tone.quaternary,
+                                    lineWidth: 1.5
+                                )
+                                .frame(width: 12, height: 12)
+                        }
+                    }
+                    .buttonStyle(.plain)
                 }
             }
             .padding(.horizontal, 16)
@@ -80,109 +278,124 @@ struct ViewfinderScreen: View {
 
             Spacer()
 
-            filmstrip
-                .padding(.bottom, 24)
-
             bottomBar
-                .padding(.bottom, 8)
+                .padding(.bottom, 18)
+
+            FilmRing(
+                presets: FilmPreset.all,
+                selection: $app.selectedFilm,
+                onOpenDetail: { app.go(.filmSim) }
+            )
+            .padding(.bottom, 14)
         }
     }
 
-    private func readout(_ text: String) -> some View {
-        Text(text)
-            .font(.mono(12, .medium))
-            .foregroundStyle(Tone.primary)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .glass(radius: 8)
+    private func cycleAspect() {
+        Haptics.detent()
+        let options = Pref.aspectOptions
+        let next = (options.firstIndex(of: aspect).map { $0 + 1 } ?? 0) % options.count
+        withAnimation(.snappy(duration: 0.2)) { aspect = options[next] }
     }
 
-    private var histogram: some View {
-        HStack(alignment: .bottom, spacing: 1.5) {
-            ForEach([0.35, 0.60, 0.85, 1.0, 0.65, 0.45, 0.25], id: \.self) { h in
-                RoundedRectangle(cornerRadius: 1, style: .continuous)
-                    .fill(Accent.amber)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 34 * h)
-            }
+    /// One capsule instead of three floating pills, and each segment opens the
+    /// control it displays — the value you can see is the value you can change.
+    private var hud: some View {
+        HStack(spacing: 0) {
+            hudSegment(app.shutterLabel, focus: "shutter")
+            hudDivider
+            hudSegment(app.isoLabel, focus: "iso")
+            hudDivider
+            hudSegment(app.kelvinLabel, focus: "wb")
         }
-        .padding(.horizontal, 6)
-        .padding(.vertical, 5)
-        .frame(width: 96, height: 44, alignment: .bottom)
-        .glass(radius: 8)
+        .glass(radius: 10)
     }
 
-    private func optionButton<C: View>(@ViewBuilder content: () -> C) -> some View {
+    private func hudSegment(_ text: String, focus: String) -> some View {
+        Button {
+            Haptics.tap()
+            app.proFocus = focus
+            app.proSheetOpen = true
+        } label: {
+            Text(text)
+                .font(.mono(12, .medium))
+                .foregroundStyle(Tone.primary)
+                .padding(.horizontal, 11)
+                .padding(.vertical, 6)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var hudDivider: some View {
+        Rectangle().fill(Tone.hairline).frame(width: 0.5, height: 14)
+    }
+
+    private func optionLabel<C: View>(@ViewBuilder content: () -> C) -> some View {
         content()
             .frame(width: 32, height: 32)
             .glass(radius: 16)
+            .contentShape(Rectangle())
     }
 
-    private var filmstrip: some View {
-        HStack(spacing: 10) {
-            ForEach(FilmPreset.all) { preset in
-                let selected = preset.id == app.selectedFilm.id
-                Button {
-                    app.selectedFilm = preset
-                    app.go(.filmSim)
-                } label: {
-                    VStack(spacing: 5) {
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .fill(preset.swatch)
-                            .frame(width: 44, height: 44)
-                            .overlay {
-                                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                    .strokeBorder(
-                                        selected ? Accent.amber : Color.white.opacity(0.2),
-                                        lineWidth: 1.5
-                                    )
-                            }
-                        Text(preset.shortName)
-                            .font(.mono(9, .medium))
-                            .foregroundStyle(selected ? Accent.amber : Color.white.opacity(0.5))
-                    }
-                }
-                .buttonStyle(.plain)
-            }
-            Spacer(minLength: 0)
+    /// A heavy thump when a frame is taken, a warning when there was nothing to
+    /// take. The two must not feel the same.
+    private func fire() {
+        if app.capture() {
+            Haptics.shutter()
+        } else {
+            Haptics.blocked()
         }
-        .padding(.horizontal, 16)
     }
 
     private var bottomBar: some View {
         HStack(spacing: 56) {
-            Button { app.proSheetOpen = true } label: {
+            Button {
+                Haptics.tap()
+                app.proSheetOpen = true
+            } label: {
                 Text("PRO")
                     .font(.ui(13, .semibold))
                     .foregroundStyle(Accent.amber)
             }
             .buttonStyle(.plain)
 
-            Button { app.go(.review) } label: {
-                Circle()
-                    .strokeBorder(.white, lineWidth: 3)
-                    .frame(width: 70, height: 70)
-                    .overlay {
-                        Circle().fill(.white).frame(width: 58, height: 58)
-                    }
-            }
-            .buttonStyle(.plain)
+            ShutterButton { fire() }
 
-            Button { app.go(.library) } label: {
-                StripePattern.thumbnail
-                    .frame(width: 34, height: 34)
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .strokeBorder(Color.white.opacity(0.5), lineWidth: 1.5)
-                    }
+            Button {
+                Haptics.tap()
+                app.go(.library)
+            } label: {
+                LibraryThumbnail(gallery: app.gallery)
             }
             .buttonStyle(.plain)
         }
     }
 }
 
-// MARK: - Manual Controls sheet
+/// The most recent shot, so the corner button reflects the roll.
+struct LibraryThumbnail: View {
+    @ObservedObject var gallery: PhotoGallery
+
+    var body: some View {
+        Group {
+            if let latest = gallery.photos.first {
+                Image(uiImage: latest.image)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                StripePattern.thumbnail
+            }
+        }
+        .frame(width: 34, height: 34)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.5), lineWidth: 1.5)
+        }
+    }
+}
+
+// MARK: - Manual controls sheet
 
 struct ManualControlsSheet: View {
     @EnvironmentObject var app: AppState
@@ -194,7 +407,10 @@ struct ManualControlsSheet: View {
                     .font(.ui(15, .semibold))
                     .foregroundStyle(Tone.primary)
                 Spacer()
-                Button { app.proSheetOpen = false } label: {
+                Button {
+                    Haptics.tap()
+                    app.proSheetOpen = false
+                } label: {
                     Text("Done")
                         .font(.ui(13, .semibold))
                         .foregroundStyle(Accent.amber)
@@ -203,34 +419,43 @@ struct ManualControlsSheet: View {
             }
             .padding(.bottom, 16)
 
-            SliderRow(label: "Shutter Speed", value: "\(app.shutterLabel)s", position: $app.shutter)
-                .padding(.bottom, 16)
+            DialRow(
+                label: "Shutter Speed",
+                values: AppState.shutterLabels,
+                index: Binding(get: { app.shutterIndex }, set: { app.shutterIndex = $0 }),
+                highlighted: app.proFocus == "shutter"
+            )
+            .padding(.bottom, 14)
 
-            SliderRow(
+            DialRow(
                 label: "ISO",
-                value: app.isoLabel.replacingOccurrences(of: "ISO ", with: ""),
-                position: $app.iso
+                values: AppState.isoLabels,
+                index: Binding(get: { app.isoIndex }, set: { app.isoIndex = $0 }),
+                highlighted: app.proFocus == "iso"
             )
-            .padding(.bottom, 16)
+            .padding(.bottom, 14)
 
-            SliderRow(
+            DialRow(
                 label: "White Balance",
-                value: app.kelvinLabel,
-                position: $app.whiteBalance,
-                temperatureTrack: true
+                values: AppState.whiteBalanceLabels,
+                index: Binding(get: { app.whiteBalanceIndex }, set: { app.whiteBalanceIndex = $0 }),
+                highlighted: app.proFocus == "wb"
             )
-            .padding(.bottom, 16)
+            .padding(.bottom, 14)
 
-            SliderRow(
+            DialRow(
                 label: "Exposure Comp.",
-                value: app.exposureLabel,
-                position: $app.exposureComp,
-                bipolar: true
+                values: AppState.exposureLabels,
+                index: Binding(get: { app.exposureIndex }, set: { app.exposureIndex = $0 }),
+                neutralIndex: AppState.evDetents / 2
             )
-            .padding(.bottom, 20)
+            .padding(.bottom, 18)
 
             ToggleRow(label: "Focus Peaking", isOn: $app.focusPeaking)
             ToggleRow(label: "ProRAW", isOn: $app.proRAW)
         }
+        // The highlight is a pointer, not a mode — it clears once the sheet has
+        // done its job of showing you where the control lives.
+        .onDisappear { app.proFocus = nil }
     }
 }

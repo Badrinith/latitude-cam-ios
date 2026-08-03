@@ -2,8 +2,6 @@
 //  LatitudeCamApp.swift
 //  LatitudeCam
 //
-//  Pro camera app with original film-look color grading.
-//
 
 import SwiftUI
 
@@ -28,7 +26,7 @@ struct RootView: View {
             Ink.base.ignoresSafeArea()
 
             switch app.screen {
-            case .launch:     LaunchScreen()
+            case .splash:     SplashScreen { app.finishSplash() }
             case .onboarding: OnboardingScreen()
             case .login:      LoginScreen()
             case .viewfinder: ViewfinderScreen()

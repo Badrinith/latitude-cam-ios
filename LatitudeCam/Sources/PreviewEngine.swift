@@ -31,34 +31,57 @@ public class PreviewEngine {
     public init() {}
     
     // MARK: - Frame Processing
-    
+
+    /// Downsample CGImage for faster processing
+    public func downsampleImage(_ cgImage: CGImage, scale: Int = 4) -> CGImage? {
+        let width = cgImage.width / scale
+        let height = cgImage.height / scale
+
+        let context = CGContext(
+            data: nil,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: width * 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        )
+
+        guard let context = context else { return nil }
+
+        context.interpolationQuality = .medium
+        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+
+        return context.makeImage()
+    }
+
     /// Process a camera frame and trigger preview update
     public func processFrame(_ frame: CGImage) {
         // Frame rate throttling (target ~30fps)
         let now = Date()
         let timeSinceLastPreview = now.timeIntervalSince(lastPreviewTime)
         let minFrameInterval = 1.0 / Double(targetFPS)
-        
+
         guard timeSinceLastPreview >= minFrameInterval else {
             return  // Skip this frame to maintain target FPS
         }
-        
+
         lastPreviewTime = now
-        
+
         // Convert frame to pixels
         let pixels = convertToPixels(frame)
-        
+
         // Process pixels (apply film + exposure)
         // Note: Camera manager will provide film/exposure settings
         let processedPixels = pixels  // Will be enhanced in UI
-        
+
         // Convert back to image
         let processedImage = convertToImage(
             processedPixels,
             width: frame.width,
             height: frame.height
         )
-        
+
         // Trigger update on main thread
         DispatchQueue.main.async {
             self.onPreviewUpdate?(processedImage)
@@ -73,27 +96,27 @@ public class PreviewEngine {
         let height = cgImage.height
         let bytesPerPixel = 4
         let bytesPerRow = cgImage.bytesPerRow
-        
+
         guard let data = cgImage.dataProvider?.data as Data? else {
             return []
         }
-        
+
         var pixels: [Pixel] = []
         let pixelData = [UInt8](data)
-        
+
         for y in 0..<height {
             for x in 0..<width {
                 let pixelIndex = (y * bytesPerRow) + (x * bytesPerPixel)
-                
+
                 let r = Int(pixelData[pixelIndex])
                 let g = Int(pixelData[pixelIndex + 1])
                 let b = Int(pixelData[pixelIndex + 2])
                 // alpha = pixelData[pixelIndex + 3]
-                
+
                 pixels.append(Pixel(r: r, g: g, b: b))
             }
         }
-        
+
         return pixels
     }
     
