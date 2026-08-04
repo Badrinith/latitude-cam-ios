@@ -56,7 +56,7 @@ public final class PhotoGallery: ObservableObject {
         }
 
         let quality = Pref.compressionQuality(
-            Pref.string(Pref.jpegQuality, default: "High")
+            Pref.string(Pref.jpegQuality, default: "Maximum")
         )
         ioQueue.async { [weak self] in
             guard let self, let data = image.jpegData(compressionQuality: quality) else { return }

@@ -447,53 +447,6 @@ struct ManualControlsSheet: View {
 
             ToggleRow(label: "Focus Peaking", isOn: $app.focusPeaking)
             ToggleRow(label: "ProRAW", isOn: $app.proRAW)
-
-            Divider().padding(.vertical, 12)
-
-            HStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Capture Format")
-                        .font(.ui(13))
-                        .foregroundStyle(Tone.secondary)
-                    Menu {
-                        Picker("Format", selection: Binding(
-                            get: { UserDefaults.standard.string(forKey: Pref.captureFormat) ?? "RAW + JPEG" },
-                            set: { UserDefaults.standard.set($0, forKey: Pref.captureFormat); Haptics.detent() }
-                        )) {
-                            ForEach(Pref.captureFormatOptions, id: \.self) { option in
-                                Text(option).tag(option)
-                            }
-                        }
-                    } label: {
-                        Text(UserDefaults.standard.string(forKey: Pref.captureFormat) ?? "RAW + JPEG")
-                            .font(.ui(14, .medium))
-                            .foregroundStyle(Tone.primary)
-                    }
-                    .buttonStyle(.plain)
-                }
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Resolution")
-                        .font(.ui(13))
-                        .foregroundStyle(Tone.secondary)
-                    Menu {
-                        Picker("Resolution", selection: Binding(
-                            get: { UserDefaults.standard.string(forKey: Pref.captureResolution) ?? "Full" },
-                            set: { UserDefaults.standard.set($0, forKey: Pref.captureResolution); Haptics.detent() }
-                        )) {
-                            ForEach(Pref.captureResolutionOptions, id: \.self) { option in
-                                Text(option).tag(option)
-                            }
-                        }
-                    } label: {
-                        Text(UserDefaults.standard.string(forKey: Pref.captureResolution) ?? "Full")
-                            .font(.ui(14, .medium))
-                            .foregroundStyle(Tone.primary)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(.horizontal, 14)
         }
         // The highlight is a pointer, not a mode — it clears once the sheet has
         // done its job of showing you where the control lives.
