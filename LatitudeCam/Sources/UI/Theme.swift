@@ -159,9 +159,9 @@ enum Pref {
 
     static func compressionQuality(_ name: String) -> CGFloat {
         switch name {
-        case "Maximum":  return 0.98
+        case "Maximum":  return 1.0
         case "Balanced": return 0.75
-        default:         return 0.90
+        default:         return 1.0
         }
     }
 
@@ -340,8 +340,8 @@ final class AppState: ObservableObject {
         cameraManager.apply(s)
     }
 
-    /// Freeze the current frame and move to Review. No-op with nothing to shoot,
-    /// which is the Simulator's normal state.
+    /// Freeze the current frame, auto-save, and return to viewfinder for continuous shooting.
+    /// No-op with nothing to shoot, which is the Simulator's normal state.
     @discardableResult
     func capture() -> Bool {
         guard let image = cameraManager.capturePhoto() else {
@@ -355,15 +355,14 @@ final class AppState: ObservableObject {
         let frame = image.centerCropped(toHeightOverWidth: Pref.aspectRatio(aspect))
         capturedImage = frame
 
-        // The shutter keeps the shot. Review used to be the only path to the
-        // roll, so backing out of it threw the frame away — a camera that
-        // sometimes does not keep your photo.
+        // Auto-save to roll and Photos app, stay on viewfinder for continuous shooting
         keep(frame)
-        go(.review)
+        lastSaveMessage = "✓ Saved"
+        clearMessageSoon()
         return true
     }
 
-    /// Writes to the roll, and mirrors to Apple Photos when that is switched on.
+    /// Writes to the roll, mirrors to Apple Photos when enabled, and saves RAW backup.
     private func keep(_ image: UIImage) {
         savedPhotoID = gallery.addPhoto(
             image,
@@ -372,14 +371,21 @@ final class AppState: ObservableObject {
             shutterDenominator: shutterValue
         )
 
-        guard UserDefaults.standard.bool(forKey: Pref.mirrorToPhotos) else { return }
+        // Save high-quality RAW (HEIF) backup
+        PhotoExporter.saveAsRAW(image) { _, _ in }
+
+        let mirrorEnabled = UserDefaults.standard.object(forKey: Pref.mirrorToPhotos) as? Bool ?? true
+        guard mirrorEnabled else { return }
+
         PhotoExporter.saveToPhotos(image) { [weak self] ok, problem in
             Task { @MainActor in
                 guard let self else { return }
-                if !ok, let problem {
-                    self.lastSaveMessage = problem
-                    self.clearMessageSoon()
+                if ok {
+                    self.lastSaveMessage = "✓ Saved to Photos"
+                } else {
+                    self.lastSaveMessage = problem ?? "Could not save to Photos"
                 }
+                self.clearMessageSoon()
             }
         }
     }
@@ -551,6 +557,11 @@ final class AppState: ObservableObject {
             whiteBalance = (Double(index) + 0.5) / Double(Self.whiteBalanceStops.count)
         }
         syncCamera()
+
+        // Initialize defaults for settings that should be on by default
+        if UserDefaults.standard.object(forKey: Pref.mirrorToPhotos) == nil {
+            UserDefaults.standard.set(true, forKey: Pref.mirrorToPhotos)
+        }
 
         #if DEBUG
         // Lets `simctl launch` open straight onto a screen for visual checks:

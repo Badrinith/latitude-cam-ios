@@ -201,7 +201,7 @@ struct SettingsScreen: View {
     // and gallery read, so a change here takes effect without any plumbing.
     @AppStorage(Pref.grid) private var grid = "Rule of Thirds"
     @AppStorage(Pref.aspect) private var aspect = "3:2"
-    @AppStorage(Pref.jpegQuality) private var jpegQuality = "High"
+    @AppStorage(Pref.jpegQuality) private var jpegQuality = "Maximum"
     @AppStorage(Pref.peakingColor) private var peakingColor = "Amber"
     @AppStorage(Pref.histogramStyle) private var histogramStyle = "Luma"
     @AppStorage(Pref.haptics) private var haptics = true
