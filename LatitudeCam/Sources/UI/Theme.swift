@@ -340,7 +340,7 @@ final class AppState: ObservableObject {
         cameraManager.apply(s)
     }
 
-    /// Freeze the current frame, auto-save, and return to viewfinder for continuous shooting.
+    /// Freeze the current frame, auto-save RAW DNG, and return to viewfinder for continuous shooting.
     /// No-op with nothing to shoot, which is the Simulator's normal state.
     @discardableResult
     func capture() -> Bool {
@@ -355,9 +355,17 @@ final class AppState: ObservableObject {
         let frame = image.centerCropped(toHeightOverWidth: Pref.aspectRatio(aspect))
         capturedImage = frame
 
+        // Capture RAW DNG from camera sensor (uncompressed)
+        cameraManager.captureRaw { [weak self] rawData, error in
+            guard let self else { return }
+            if let rawData = rawData {
+                PhotoExporter.saveRawDNG(rawData, iso: self.isoValue) { _, _ in }
+            }
+        }
+
         // Auto-save to roll and Photos app, stay on viewfinder for continuous shooting
         keep(frame)
-        lastSaveMessage = "✓ Saved"
+        lastSaveMessage = "✓ Saved RAW"
         clearMessageSoon()
         return true
     }

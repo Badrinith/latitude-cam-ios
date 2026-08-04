@@ -99,6 +99,40 @@ public class PhotoExporter {
         }
     }
 
+    /// Save RAW DNG data (uncompressed sensor data)
+    public static func saveRawDNG(
+        _ dngData: Data,
+        iso: Int,
+        completion: @escaping (Bool, String?) -> Void
+    ) {
+        let fileManager = FileManager.default
+
+        guard let documentsDir = fileManager.urls(
+            for: .documentDirectory,
+            in: .userDomainMask
+        ).first else {
+            completion(false, "Documents directory not found")
+            return
+        }
+
+        let latitudeDir = documentsDir.appendingPathComponent("LatitudeCam", isDirectory: true)
+        try? fileManager.createDirectory(at: latitudeDir, withIntermediateDirectories: true)
+
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd_HH-mm-ss"
+        let timestamp = formatter.string(from: Date())
+
+        let filename = "Latitude_\(timestamp)_ISO\(iso)_RAW.dng"
+        let fileURL = latitudeDir.appendingPathComponent(filename)
+
+        do {
+            try dngData.write(to: fileURL)
+            completion(true, nil)
+        } catch {
+            completion(false, error.localizedDescription)
+        }
+    }
+
     /// Save image in HEIF format with maximum quality (RAW-capable format)
     public static func saveAsRAW(
         _ image: UIImage,

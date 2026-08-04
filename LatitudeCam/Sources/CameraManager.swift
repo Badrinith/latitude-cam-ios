@@ -84,7 +84,12 @@ public final class CameraManager: NSObject, ObservableObject {
     private var captureSession: AVCaptureSession?
     private var videoDevice: AVCaptureDevice?
     private var videoOutput: AVCaptureVideoDataOutput?
+    private var photoOutput: AVCapturePhotoOutput?
     private let cameraQueue = DispatchQueue(label: "com.latitude.camera", qos: .userInitiated)
+
+    // RAW capture
+    private var rawPhotoCaptured: ((Data?, String?) -> Void)?
+    private let photoDelegate = RawPhotoCaptureDelegate()
 
     // Render pipeline — built once, reused for every frame. Rebuilding the
     // CIContext per frame was costing more than the filters themselves.
@@ -230,11 +235,23 @@ public final class CameraManager: NSObject, ObservableObject {
             connection.videoRotationAngle = 90
         }
 
+        // Add photo output for RAW capture
+        let photoOutput = AVCapturePhotoOutput()
+        photoOutput.isHighResolutionCaptureEnabled = true
+
+        guard session.canAddOutput(photoOutput) else {
+            session.commitConfiguration()
+            setStatus(.failed("Cannot add photo output"))
+            return
+        }
+        session.addOutput(photoOutput)
+
         session.commitConfiguration()
 
         self.captureSession = session
         self.videoDevice = camera
         self.videoOutput = output
+        self.photoOutput = photoOutput
 
         applyDeviceExposure(settings)
 
@@ -301,6 +318,34 @@ public final class CameraManager: NSObject, ObservableObject {
         frames.image
     }
 
+    /// Capture RAW DNG image from the camera sensor without compression
+    public func captureRaw(completion: @escaping (Data?, String?) -> Void) {
+        guard let photoOutput = photoOutput else {
+            completion(nil, "Photo output not available")
+            return
+        }
+
+        // Create photo settings with maximum quality
+        var settings = AVCapturePhotoSettings()
+        settings.photoQualityPrioritization = .quality
+
+        // Enable RAW DNG capture if available (14-bit Bayer)
+        let availableRawFormats = photoOutput.availableRawPhotoPixelFormatTypes
+        if !availableRawFormats.isEmpty {
+            let rawFormat = availableRawFormats[0] // Use first available RAW format
+            settings = AVCapturePhotoSettings(rawPixelFormatType: rawFormat)
+            settings.photoQualityPrioritization = .quality
+        }
+
+        // Enable maximum quality processing
+        settings.isAutoStillImageStabilizationEnabled = true
+
+        photoDelegate.captureCompletion = completion
+        cameraQueue.async { [weak self] in
+            self?.photoOutput?.capturePhoto(with: settings, delegate: self?.photoDelegate ?? RawPhotoCaptureDelegate())
+        }
+    }
+
     // MARK: - Persistence
 
     private func persist(_ s: RenderSettings) {
@@ -325,6 +370,43 @@ public final class CameraManager: NSObject, ObservableObject {
         settingsLock.lock()
         _settings = s
         settingsLock.unlock()
+    }
+}
+
+// MARK: - RAW Photo Capture Delegate
+
+class RawPhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegate {
+    var captureCompletion: ((Data?, String?) -> Void)?
+
+    func photoOutput(
+        _ output: AVCapturePhotoOutput,
+        didFinishProcessingPhoto photo: AVCapturePhoto,
+        error: Error?
+    ) {
+        if let error = error {
+            DispatchQueue.main.async {
+                self.captureCompletion?(nil, error.localizedDescription)
+            }
+            return
+        }
+
+        var imageData: Data?
+        var errorMsg: String?
+
+        // Try RAW DNG capture first (uncompressed sensor data)
+        if photo.isRawPhoto, let dngData = photo.fileDataRepresentation() {
+            imageData = dngData
+        }
+        // Fallback to HEIF with maximum quality
+        else if let heifData = photo.fileDataRepresentation() {
+            imageData = heifData
+        } else {
+            errorMsg = "Could not capture photo data"
+        }
+
+        DispatchQueue.main.async {
+            self.captureCompletion?(imageData, errorMsg)
+        }
     }
 }
 
