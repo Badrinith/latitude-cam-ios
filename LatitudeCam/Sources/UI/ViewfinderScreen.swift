@@ -233,6 +233,15 @@ struct ViewfinderScreen: View {
                 Spacer()
 
                 VStack(spacing: 8) {
+                    Button { app.flipCamera() } label: {
+                        optionLabel {
+                            Image(systemName: "arrow.triangle.2.circlepath.camera")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(app.usingFrontCamera ? Accent.amber : Tone.primary)
+                        }
+                    }
+                    .buttonStyle(.plain)
+
                     Button { cycleAspect() } label: {
                         optionLabel {
                             Text(aspect)

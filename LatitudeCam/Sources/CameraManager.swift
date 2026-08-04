@@ -192,10 +192,97 @@ public final class CameraManager: NSObject, ObservableObject {
         }
     }
 
+    static func camera(at position: AVCaptureDevice.Position) -> AVCaptureDevice? {
+        AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: position)
+    }
+
+    /// Everything about the photo output that depends on which camera is attached.
+    /// Re-run after a switch: the two sensors advertise different photo sizes and
+    /// different raw support, and a `maxPhotoDimensions` left over from the other
+    /// one is rejected outright.
+    private func configurePhotoOutput(_ output: AVCapturePhotoOutput, for device: AVCaptureDevice) {
+        // Must be raised before any capture asks for .quality. A per-capture
+        // photoQualityPrioritization above this ceiling is not clamped —
+        // AVFoundation raises NSInvalidArgumentException, which crashed the shutter.
+        output.maxPhotoQualityPrioritization = .quality
+
+        // Assigned from the support flag rather than guarded by it, so switching to
+        // a camera without the feature turns it back off instead of leaving the
+        // previous camera's answer in place.
+        output.isAppleProRAWEnabled = output.isAppleProRAWSupported
+        output.isZeroShutterLagEnabled = output.isZeroShutterLagSupported
+        // Responsive capture builds on zero shutter lag, and fast capture
+        // prioritization on responsive capture, so the order here matters.
+        output.isResponsiveCaptureEnabled = output.isResponsiveCaptureSupported
+        output.isFastCapturePrioritizationEnabled = output.isFastCapturePrioritizationSupported
+
+        if #available(iOS 16.0, *),
+           let largest = device.activeFormat.supportedMaxPhotoDimensions.last {
+            output.maxPhotoDimensions = largest
+        }
+    }
+
+    /// Portrait, and mirrored for the front camera. A selfie preview that is not
+    /// mirrored reads as someone else's face — every phone camera mirrors it.
+    private func orient(_ connection: AVCaptureConnection?, mirrored: Bool) {
+        guard let connection else { return }
+        if connection.isVideoRotationAngleSupported(90) {
+            connection.videoRotationAngle = 90
+        }
+        if connection.isVideoMirroringSupported {
+            connection.automaticallyAdjustsVideoMirroring = false
+            connection.isVideoMirrored = mirrored
+        }
+    }
+
+    /// Swap between the front and back cameras, reporting the position actually in
+    /// use — the caller's UI must not claim a switch that did not happen.
+    public func flipCamera(completion: @escaping (AVCaptureDevice.Position) -> Void) {
+        cameraQueue.async { [weak self] in
+            guard let self,
+                  let session = self.captureSession,
+                  let current = self.videoDevice else { return }
+
+            let target: AVCaptureDevice.Position = current.position == .front ? .back : .front
+            guard let next = Self.camera(at: target),
+                  let newInput = try? AVCaptureDeviceInput(device: next) else {
+                DispatchQueue.main.async { completion(current.position) }
+                return
+            }
+
+            session.beginConfiguration()
+            let previous = session.inputs
+            previous.forEach(session.removeInput)
+
+            guard session.canAddInput(newInput) else {
+                // Put the old camera back. A session left with no input is a dead
+                // viewfinder, which is worse than a flip that refused.
+                previous.forEach { if session.canAddInput($0) { session.addInput($0) } }
+                session.commitConfiguration()
+                DispatchQueue.main.async { completion(current.position) }
+                return
+            }
+            session.addInput(newInput)
+
+            if let photoOutput = self.photoOutput {
+                self.configurePhotoOutput(photoOutput, for: next)
+            }
+            // Connections are rebuilt with the input, so rotation and mirroring
+            // have to be set again on both outputs.
+            let mirrored = target == .front
+            self.orient(self.videoOutput?.connection(with: .video), mirrored: mirrored)
+            self.orient(self.photoOutput?.connection(with: .video), mirrored: mirrored)
+
+            session.commitConfiguration()
+
+            self.videoDevice = next
+            self.applyDeviceExposure(self.settings)
+            DispatchQueue.main.async { completion(target) }
+        }
+    }
+
     private func configureAndStart() {
-        guard let camera = AVCaptureDevice.default(
-            .builtInWideAngleCamera, for: .video, position: .back
-        ) ?? AVCaptureDevice.default(for: .video) else {
+        guard let camera = Self.camera(at: .back) ?? AVCaptureDevice.default(for: .video) else {
             setStatus(.noDevice)
             return
         }
@@ -251,46 +338,10 @@ public final class CameraManager: NSObject, ObservableObject {
             return
         }
         session.addOutput(photoOutput)
+        configurePhotoOutput(photoOutput, for: camera)
 
-        // Must be raised here, while configuring. A per-capture
-        // photoQualityPrioritization above this ceiling is not clamped — AVFoundation
-        // raises NSInvalidArgumentException, which is what crashed the shutter.
-        photoOutput.maxPhotoQualityPrioritization = .quality
-
-        // ProRAW where the hardware has it; plain Bayer RAW elsewhere. Both arrive
-        // as DNG from fileDataRepresentation().
-        if photoOutput.isAppleProRAWSupported {
-            photoOutput.isAppleProRAWEnabled = true
-        }
-
-        // Zero shutter lag serves the frame from the moment the button went down,
-        // out of a ring buffer the camera is already keeping, rather than starting
-        // an exposure once the tap has been handled.
-        if photoOutput.isZeroShutterLagSupported {
-            photoOutput.isZeroShutterLagEnabled = true
-        }
-        // Lets the next shot begin while the previous one is still being processed
-        // — the difference between a camera that keeps up with the shutter and one
-        // that makes you wait for it. Requires zero shutter lag, so it follows it.
-        if photoOutput.isResponsiveCaptureSupported {
-            photoOutput.isResponsiveCaptureEnabled = true
-        }
-        // Under rapid fire the system may trade a little processing for keeping
-        // pace. It only engages when shots are coming faster than they can be
-        // finished, so a single considered frame is unaffected.
-        if photoOutput.isFastCapturePrioritizationSupported {
-            photoOutput.isFastCapturePrioritizationEnabled = true
-        }
-
-        if #available(iOS 16.0, *),
-           let largest = camera.activeFormat.supportedMaxPhotoDimensions.last {
-            photoOutput.maxPhotoDimensions = largest
-        }
-
-        if let photoConnection = photoOutput.connection(with: .video),
-           photoConnection.isVideoRotationAngleSupported(90) {
-            photoConnection.videoRotationAngle = 90
-        }
+        orient(output.connection(with: .video), mirrored: false)
+        orient(photoOutput.connection(with: .video), mirrored: false)
 
         session.commitConfiguration()
 

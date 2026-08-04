@@ -357,6 +357,28 @@ final class AppState: ObservableObject {
         cameraManager.apply(s)
     }
 
+    /// Reflects the camera actually in use, set from what the switch reported
+    /// rather than assumed — a flip the hardware refused must not leave the button
+    /// claiming otherwise.
+    @Published private(set) var usingFrontCamera = false
+
+    func flipCamera() {
+        Haptics.toggle()
+        cameraManager.flipCamera { [weak self] position in
+            guard let self else { return }
+            let front = position == .front
+            if front == self.usingFrontCamera {
+                self.lastSaveMessage = "No second camera"
+                self.clearMessageSoon()
+                return
+            }
+            self.usingFrontCamera = front
+            // The front camera has no RAW and a narrower exposure range, so the
+            // pipeline needs the settings pushed at it again.
+            self.syncCamera()
+        }
+    }
+
     /// Take a full-resolution frame off the sensor, save it, and stay on the
     /// viewfinder so the next shot needs only the shutter.
     ///
