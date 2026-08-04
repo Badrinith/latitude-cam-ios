@@ -99,9 +99,9 @@ public class PhotoExporter {
         }
     }
 
-    /// Save RAW DNG data (uncompressed sensor data)
+    /// Save RAW/HEIF data from camera sensor (high-quality lossless)
     public static func saveRawDNG(
-        _ dngData: Data,
+        _ rawData: Data,
         iso: Int,
         completion: @escaping (Bool, String?) -> Void
     ) {
@@ -122,11 +122,12 @@ public class PhotoExporter {
         formatter.dateFormat = "yyyy-MM-dd_HH-mm-ss"
         let timestamp = formatter.string(from: Date())
 
-        let filename = "Latitude_\(timestamp)_ISO\(iso)_RAW.dng"
+        // Use .heif extension since most modern iPhones use HEIF for RAW capture
+        let filename = "Latitude_\(timestamp)_ISO\(iso)_RAW.heif"
         let fileURL = latitudeDir.appendingPathComponent(filename)
 
         do {
-            try dngData.write(to: fileURL)
+            try rawData.write(to: fileURL)
             completion(true, nil)
         } catch {
             completion(false, error.localizedDescription)

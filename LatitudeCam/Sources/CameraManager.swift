@@ -324,33 +324,33 @@ public final class CameraManager: NSObject, ObservableObject {
         frames.image
     }
 
-    /// Capture RAW DNG image from the camera sensor without compression
+    /// Capture high-quality image (RAW DNG if available, HEIF otherwise)
     public func captureRaw(completion: @escaping (Data?, String?) -> Void) {
         guard let photoOutput = photoOutput else {
             completion(nil, "Photo output not available")
             return
         }
 
-        do {
-            // Create photo settings with maximum quality
-            let settings = AVCapturePhotoSettings()
-
-            // Enable RAW DNG capture if available (14-bit Bayer)
-            let availableRawFormats = photoOutput.availableRawPhotoPixelFormatTypes
-            if !availableRawFormats.isEmpty {
-                let rawFormat = availableRawFormats[0]
-                let rawSettings = AVCapturePhotoSettings(rawPixelFormatType: rawFormat)
-                photoDelegate.captureCompletion = completion
-                cameraQueue.async { [weak self] in
-                    self?.photoOutput?.capturePhoto(with: rawSettings, delegate: self?.photoDelegate ?? RawPhotoCaptureDelegate())
-                }
-            } else {
-                // Fallback to HEIF if RAW not available
-                photoDelegate.captureCompletion = completion
-                cameraQueue.async { [weak self] in
-                    self?.photoOutput?.capturePhoto(with: settings, delegate: self?.photoDelegate ?? RawPhotoCaptureDelegate())
-                }
+        // First try RAW DNG if available
+        let availableRawFormats = photoOutput.availableRawPhotoPixelFormatTypes
+        if !availableRawFormats.isEmpty {
+            let rawFormat = availableRawFormats[0]
+            let rawSettings = AVCapturePhotoSettings(rawPixelFormatType: rawFormat)
+            rawSettings.photoQualityPrioritization = .quality
+            photoDelegate.captureCompletion = completion
+            cameraQueue.async { [weak self] in
+                self?.photoOutput?.capturePhoto(with: rawSettings, delegate: self?.photoDelegate ?? RawPhotoCaptureDelegate())
             }
+            return
+        }
+
+        // Fallback to high-quality HEIF with maximum quality
+        let heifSettings = AVCapturePhotoSettings()
+        heifSettings.photoQualityPrioritization = .quality
+
+        photoDelegate.captureCompletion = completion
+        cameraQueue.async { [weak self] in
+            self?.photoOutput?.capturePhoto(with: heifSettings, delegate: self?.photoDelegate ?? RawPhotoCaptureDelegate())
         }
     }
 
