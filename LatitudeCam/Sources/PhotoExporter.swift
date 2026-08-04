@@ -12,7 +12,7 @@ import Photos
 // MARK: - Photo Exporter
 
 public class PhotoExporter {
-    
+
     /// Export a processed image to Camera Roll
     public static func saveToPhotos(
         _ image: UIImage,
@@ -21,15 +21,25 @@ public class PhotoExporter {
         // .addOnly is all this app needs, and it is the prompt users are far more
         // willing to accept than full library access.
         PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in
-            guard status == .authorized || status == .limited else {
-                completion(false, "Latitude needs permission to add photos. Settings › Latitude › Photos.")
-                return
-            }
-            
-            PHPhotoLibrary.shared().performChanges({
-                PHAssetChangeRequest.creationRequestForAsset(from: image)
-            }) { success, error in
-                completion(success, error?.localizedDescription)
+            switch status {
+            case .authorized, .limited:
+                PHPhotoLibrary.shared().performChanges({
+                    PHAssetChangeRequest.creationRequestForAsset(from: image)
+                }) { success, error in
+                    if success {
+                        completion(true, nil)
+                    } else {
+                        completion(false, error?.localizedDescription ?? "Could not save to Photos")
+                    }
+                }
+            case .denied:
+                completion(false, "Photos permission denied. Enable in Settings › Latitude › Photos.")
+            case .restricted:
+                completion(false, "Photos access is restricted on this device.")
+            case .notDetermined:
+                completion(false, "Photos permission not determined.")
+            @unknown default:
+                completion(false, "Unable to access Photos library.")
             }
         }
     }

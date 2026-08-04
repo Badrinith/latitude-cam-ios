@@ -503,7 +503,7 @@ final class AppState: ObservableObject {
     func resetLook() {
         selectedFilm = FilmPreset.all[0]
         intensity = 0.8
-        grainOn = true
+        grainOn = false
         halationOn = false
         vignetteOn = false
         lastSaveMessage = "Look reset"

@@ -206,7 +206,7 @@ struct SettingsScreen: View {
     @AppStorage(Pref.histogramStyle) private var histogramStyle = "Luma"
     @AppStorage(Pref.haptics) private var haptics = true
     @AppStorage(Pref.hapticStrength) private var hapticStrength = "Strong"
-    @AppStorage(Pref.mirrorToPhotos) private var mirrorToPhotos = false
+    @AppStorage(Pref.mirrorToPhotos) private var mirrorToPhotos = true
 
     var body: some View {
         ZStack {
