@@ -8,18 +8,20 @@
 import Foundation
 import UIKit
 import Photos
-import UniformTypeIdentifiers
 
 // MARK: - Photo Exporter
 
 public class PhotoExporter {
 
-    /// UTType.dng is iOS 18; the deployment target is 17, so the identifier is
-    /// spelled out.
-    private static let dngTypeIdentifier = "com.adobe.raw-image"
-
-    /// Save one exposure to Apple Photos: the developed JPEG, and the DNG attached
+    /// Save one exposure to Apple Photos: the developed JPEG, with the DNG attached
     /// to the same asset as its raw alternate rather than as a second photo.
+    ///
+    /// Falls back to two separate assets if the library will not accept the pair.
+    /// Photos rejects a raw alternate whose frame does not match its primary, and
+    /// the developed JPEG is cropped to the chosen aspect while the DNG keeps the
+    /// full sensor frame — so on any aspect but the sensor's own, the pairing is
+    /// expected to be refused. Losing the shot over a filing rule would be worse
+    /// than two entries in the roll.
     public static func saveCapture(
         jpeg: Data?,
         dng: Data?,
@@ -38,26 +40,85 @@ public class PhotoExporter {
                 return
             }
 
-            PHPhotoLibrary.shared().performChanges({
-                let request = PHAssetCreationRequest.forAsset()
-                if let jpeg {
-                    request.addResource(with: .photo, data: jpeg, options: nil)
-                    if let dng {
-                        let options = PHAssetResourceCreationOptions()
-                        options.uniformTypeIdentifier = dngTypeIdentifier
-                        request.addResource(with: .alternatePhoto, data: dng, options: options)
-                    }
-                } else if let dng {
-                    let options = PHAssetResourceCreationOptions()
-                    options.uniformTypeIdentifier = dngTypeIdentifier
-                    request.addResource(with: .photo, data: dng, options: options)
+            // Photos wants raw on disk under a .dng extension. Added as a data
+            // resource tagged with a UTI instead, it refused the whole change
+            // request with changeNotSupported (PHPhotosErrorDomain 3300).
+            let dngURL = dng.flatMap(writeTemporaryDNG)
+
+            addPaired(jpeg: jpeg, dngURL: dngURL) { paired, pairError in
+                if paired {
+                    DispatchQueue.main.async { completion(true, nil) }
+                    return
                 }
-            }) { success, error in
-                DispatchQueue.main.async {
-                    completion(success, success ? nil : (error?.localizedDescription ?? "Could not save to Photos"))
+                addSeparately(jpeg: jpeg, dngURL: dngURL) { ok, splitError in
+                    if !ok, let dngURL { try? FileManager.default.removeItem(at: dngURL) }
+                    DispatchQueue.main.async {
+                        completion(ok, ok ? nil : describe(splitError ?? pairError))
+                    }
                 }
             }
         }
+    }
+
+    /// One asset carrying both resources — what Photos itself produces for ProRAW.
+    private static func addPaired(
+        jpeg: Data?,
+        dngURL: URL?,
+        completion: @escaping (Bool, Error?) -> Void
+    ) {
+        PHPhotoLibrary.shared().performChanges({
+            let request = PHAssetCreationRequest.forAsset()
+            if let jpeg {
+                request.addResource(with: .photo, data: jpeg, options: nil)
+            }
+            if let dngURL {
+                let options = PHAssetResourceCreationOptions()
+                // Left in place: the fallback may still need the file.
+                options.shouldMoveFile = false
+                request.addResource(
+                    with: jpeg == nil ? .photo : .alternatePhoto,
+                    fileURL: dngURL,
+                    options: options
+                )
+            }
+        }, completionHandler: completion)
+    }
+
+    private static func addSeparately(
+        jpeg: Data?,
+        dngURL: URL?,
+        completion: @escaping (Bool, Error?) -> Void
+    ) {
+        PHPhotoLibrary.shared().performChanges({
+            if let jpeg {
+                PHAssetCreationRequest.forAsset()
+                    .addResource(with: .photo, data: jpeg, options: nil)
+            }
+            if let dngURL {
+                let options = PHAssetResourceCreationOptions()
+                options.shouldMoveFile = true
+                PHAssetCreationRequest.forAsset()
+                    .addResource(with: .photo, fileURL: dngURL, options: options)
+            }
+        }, completionHandler: completion)
+    }
+
+    private static func writeTemporaryDNG(_ data: Data) -> URL? {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("latitude-\(UUID().uuidString).dng")
+        do {
+            try data.write(to: url)
+            return url
+        } catch {
+            return nil
+        }
+    }
+
+    /// Carries the domain and code through. "Could not save" alone gave nothing to
+    /// work from when the library refused a change.
+    private static func describe(_ error: Error?) -> String {
+        guard let error = error as NSError? else { return "Could not save to Photos" }
+        return "Photos \(error.domain) \(error.code): \(error.localizedDescription)"
     }
 
     private static func permissionMessage(for status: PHAuthorizationStatus) -> String {
