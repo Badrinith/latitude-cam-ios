@@ -198,9 +198,8 @@ public final class CameraManager: NSObject, ObservableObject {
 
         let session = AVCaptureSession()
         session.beginConfiguration()
-        // Use input priority to allow full resolution photo capture
-        // while maintaining 1080p for preview
-        session.sessionPreset = .inputPriority
+        // Keep 1080p for live preview, but photo output will use full resolution
+        session.sessionPreset = .hd1920x1080
 
         do {
             let input = try AVCaptureDeviceInput(device: camera)
@@ -239,18 +238,19 @@ public final class CameraManager: NSObject, ObservableObject {
 
         // Add photo output for RAW capture with maximum resolution
         let photoOutput = AVCapturePhotoOutput()
-        if #available(iOS 16.0, *) {
-            photoOutput.maxPhotoDimensions = .init(width: 4000, height: 3000)
-        } else {
-            photoOutput.isHighResolutionCaptureEnabled = true
-        }
 
-        guard session.canAddOutput(photoOutput) else {
+        do {
+            guard session.canAddOutput(photoOutput) else {
+                session.commitConfiguration()
+                setStatus(.failed("Cannot add photo output"))
+                return
+            }
+            session.addOutput(photoOutput)
+        } catch {
             session.commitConfiguration()
-            setStatus(.failed("Cannot add photo output"))
+            setStatus(.failed("Photo output error: \(error.localizedDescription)"))
             return
         }
-        session.addOutput(photoOutput)
 
         session.commitConfiguration()
 
@@ -331,26 +331,26 @@ public final class CameraManager: NSObject, ObservableObject {
             return
         }
 
-        // Create photo settings with maximum quality
-        var settings = AVCapturePhotoSettings()
-        settings.photoQualityPrioritization = .quality
+        do {
+            // Create photo settings with maximum quality
+            let settings = AVCapturePhotoSettings()
 
-        // Enable RAW DNG capture if available (14-bit Bayer)
-        let availableRawFormats = photoOutput.availableRawPhotoPixelFormatTypes
-        if !availableRawFormats.isEmpty {
-            let rawFormat = availableRawFormats[0] // Use first available RAW format
-            settings = AVCapturePhotoSettings(rawPixelFormatType: rawFormat)
-            settings.photoQualityPrioritization = .quality
-        }
-
-        // Enable maximum quality processing and stabilization
-        if #available(iOS 13.0, *) {
-            // Automatically handled by photoQualityPrioritization = .quality
-        }
-
-        photoDelegate.captureCompletion = completion
-        cameraQueue.async { [weak self] in
-            self?.photoOutput?.capturePhoto(with: settings, delegate: self?.photoDelegate ?? RawPhotoCaptureDelegate())
+            // Enable RAW DNG capture if available (14-bit Bayer)
+            let availableRawFormats = photoOutput.availableRawPhotoPixelFormatTypes
+            if !availableRawFormats.isEmpty {
+                let rawFormat = availableRawFormats[0]
+                let rawSettings = AVCapturePhotoSettings(rawPixelFormatType: rawFormat)
+                photoDelegate.captureCompletion = completion
+                cameraQueue.async { [weak self] in
+                    self?.photoOutput?.capturePhoto(with: rawSettings, delegate: self?.photoDelegate ?? RawPhotoCaptureDelegate())
+                }
+            } else {
+                // Fallback to HEIF if RAW not available
+                photoDelegate.captureCompletion = completion
+                cameraQueue.async { [weak self] in
+                    self?.photoOutput?.capturePhoto(with: settings, delegate: self?.photoDelegate ?? RawPhotoCaptureDelegate())
+                }
+            }
         }
     }
 
