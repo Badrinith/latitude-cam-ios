@@ -344,7 +344,7 @@ final class AppState: ObservableObject {
         cameraManager.apply(s)
     }
 
-    /// Freeze the current frame, auto-save RAW/JPEG per user settings, and return to viewfinder for continuous shooting.
+    /// Freeze the current frame, auto-save per user settings, and return to viewfinder for continuous shooting.
     /// No-op with nothing to shoot, which is the Simulator's normal state.
     @discardableResult
     func capture() -> Bool {
@@ -362,22 +362,10 @@ final class AppState: ObservableObject {
         let format = UserDefaults.standard.string(forKey: Pref.captureFormat) ?? "RAW + JPEG"
         let resolution = UserDefaults.standard.string(forKey: Pref.captureResolution) ?? "Full"
 
-        // Capture RAW DNG from camera sensor (uncompressed)
-        if format == "RAW Only" || format == "RAW + JPEG" {
-            cameraManager.captureRaw { [weak self] rawData, error in
-                guard let self else { return }
-                if let rawData = rawData {
-                    PhotoExporter.saveRawDNG(rawData, iso: self.isoValue) { _, _ in }
-                }
-            }
-        }
+        // For now, just save JPEG to avoid RAW capture crashes
+        keep(frame)
 
-        // Auto-save to roll and Photos app, stay on viewfinder for continuous shooting
-        if format == "JPEG Only" || format == "RAW + JPEG" {
-            keep(frame)
-        }
-
-        let formatLabel = format == "RAW + JPEG" ? "✓ RAW+JPEG" : format == "RAW Only" ? "✓ RAW" : "✓ JPEG"
+        let formatLabel = "✓ JPEG"
         lastSaveMessage = "\(formatLabel) (\(resolution))"
         clearMessageSoon()
         return true
