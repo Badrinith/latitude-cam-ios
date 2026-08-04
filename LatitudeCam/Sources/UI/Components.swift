@@ -493,6 +493,50 @@ struct DialRow: View {
 
 // MARK: - Toggle row
 
+/// A row of mutually exclusive chips. Plain buttons rather than a Menu — a Menu
+/// inside the bottom sheet swallowed the taps that were meant to open it.
+struct ChipRow: View {
+    var label: String
+    var options: [String]
+    @Binding var selection: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(label)
+                .font(.ui(13, .medium))
+                .foregroundStyle(Tone.primary)
+
+            HStack(spacing: 6) {
+                ForEach(options, id: \.self) { option in
+                    let active = option == selection
+                    Button {
+                        guard !active else { return }
+                        Haptics.detent()
+                        selection = option
+                    } label: {
+                        Text(option)
+                            .font(.mono(11, .medium))
+                            .foregroundStyle(active ? Ink.base : Tone.primary)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 7)
+                            .frame(maxWidth: .infinity)
+                            .background(
+                                active ? Accent.amber : Color.white.opacity(0.08),
+                                in: Capsule()
+                            )
+                            .contentShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .padding(.vertical, 10)
+        .overlay(alignment: .top) {
+            Rectangle().fill(Tone.separator).frame(height: 0.5)
+        }
+    }
+}
+
 struct ToggleRow: View {
     var label: String
     @Binding var isOn: Bool

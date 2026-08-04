@@ -409,6 +409,9 @@ struct LibraryThumbnail: View {
 struct ManualControlsSheet: View {
     @EnvironmentObject var app: AppState
 
+    @AppStorage(Pref.captureFormat) private var captureFormat = "RAW + JPEG"
+    @AppStorage(Pref.captureResolution) private var captureResolution = "Full"
+
     private let columns = [GridItem(.flexible(), spacing: 14), GridItem(.flexible(), spacing: 14)]
 
     var body: some View {
@@ -446,7 +449,17 @@ struct ManualControlsSheet: View {
             .padding(.bottom, 20)
 
             ToggleRow(label: "Focus Peaking", isOn: $app.focusPeaking)
-            ToggleRow(label: "ProRAW", isOn: $app.proRAW)
+
+            ChipRow(label: "Format", options: Pref.captureFormatOptions, selection: $captureFormat)
+            ChipRow(label: "Resolution", options: Pref.captureResolutionOptions, selection: $captureResolution)
+
+            if !app.cameraManager.supportsRAW {
+                Text("This camera has no RAW format — captures save as JPEG.")
+                    .font(.ui(11))
+                    .foregroundStyle(Tone.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.top, 2)
+            }
         }
         // The highlight is a pointer, not a mode — it clears once the sheet has
         // done its job of showing you where the control lives.

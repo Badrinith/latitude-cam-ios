@@ -161,11 +161,21 @@ enum Pref {
         }
     }
 
+    /// Nil means the sensor's own largest size.
+    static func megapixels(_ name: String) -> Int? {
+        switch name {
+        case "4MP":  return 4
+        case "8MP":  return 8
+        case "12MP": return 12
+        default:     return nil   // Full
+        }
+    }
+
     static func compressionQuality(_ name: String) -> CGFloat {
         switch name {
         case "Maximum":  return 1.0
         case "Balanced": return 0.75
-        default:         return 1.0
+        default:         return 0.92   // High
         }
     }
 
@@ -344,31 +354,91 @@ final class AppState: ObservableObject {
         cameraManager.apply(s)
     }
 
-    /// Freeze the current frame, auto-save per user settings, and return to viewfinder for continuous shooting.
-    /// No-op with nothing to shoot, which is the Simulator's normal state.
+    /// Take a full-resolution frame off the sensor, save it, and stay on the
+    /// viewfinder so the next shot needs only the shutter.
+    ///
+    /// The saved photo comes from `AVCapturePhotoOutput`, not from the preview
+    /// stream. The preview is 2MP and only ever a viewfinder — saving it was what
+    /// made every file 250KB.
     @discardableResult
     func capture() -> Bool {
-        guard let image = cameraManager.capturePhoto() else {
+        guard cameraManager.status.isLive else {
             lastSaveMessage = "No frame yet — camera still starting"
             clearMessageSoon()
             return false
         }
-        // The sensor frame is 16:9; the chosen aspect is a crop of it, so the
-        // saved photo matches what the viewfinder's aspect badge promised.
-        let aspect = Pref.string(Pref.aspect, default: "3:2")
-        let frame = image.centerCropped(toHeightOverWidth: Pref.aspectRatio(aspect))
-        capturedImage = frame
 
-        let format = UserDefaults.standard.string(forKey: Pref.captureFormat) ?? "RAW + JPEG"
-        let resolution = UserDefaults.standard.string(forKey: Pref.captureResolution) ?? "Full"
+        let format = Pref.string(Pref.captureFormat, default: "RAW + JPEG")
+        let resolution = Pref.string(Pref.captureResolution, default: "Full")
+        let wantsRAW = format != "JPEG Only"
+        let wantsProcessed = format != "RAW Only"
 
-        // For now, just save JPEG to avoid RAW capture crashes
-        keep(frame)
+        lastSaveMessage = "Capturing…"
 
-        let formatLabel = "✓ JPEG"
-        lastSaveMessage = "\(formatLabel) (\(resolution))"
-        clearMessageSoon()
+        cameraManager.captureStill(
+            wantsRAW: wantsRAW,
+            wantsProcessed: wantsProcessed,
+            targetMegapixels: Pref.megapixels(resolution)
+        ) { [weak self] still in
+            self?.store(still, requestedFormat: format)
+        }
         return true
+    }
+
+    /// Writes one finished capture to the roll, to Apple Photos, and to the DNG
+    /// folder, then reports what actually landed.
+    private func store(_ still: CameraManager.CapturedStill, requestedFormat: String) {
+        let aspect = Pref.string(Pref.aspect, default: "3:2")
+        let quality = Pref.compressionQuality(Pref.string(Pref.jpegQuality, default: "Maximum"))
+
+        var jpeg: Data?
+        if let image = still.image {
+            let frame = image.centerCropped(toHeightOverWidth: Pref.aspectRatio(aspect))
+            capturedImage = frame
+            savedPhotoID = gallery.addPhoto(
+                frame,
+                filmID: selectedFilm.id,
+                iso: isoValue,
+                shutterDenominator: shutterValue
+            )
+            jpeg = frame.jpegData(compressionQuality: quality)
+        }
+
+        if let dng = still.raw {
+            PhotoExporter.saveRawDNG(dng, iso: isoValue) { _, _ in }
+        }
+
+        guard still.raw != nil || jpeg != nil else {
+            lastSaveMessage = "Capture failed"
+            clearMessageSoon()
+            return
+        }
+
+        let megapixels = Double(still.pixelWidth * still.pixelHeight) / 1_000_000
+        let sizeLabel = megapixels >= 1 ? String(format: "%.0fMP", megapixels.rounded()) : ""
+        let landed = still.raw != nil && jpeg != nil ? "RAW+JPEG"
+            : still.raw != nil ? "RAW" : "JPEG"
+
+        let mirrorEnabled = UserDefaults.standard.object(forKey: Pref.mirrorToPhotos) as? Bool ?? true
+        guard mirrorEnabled else {
+            lastSaveMessage = "✓ \(landed) \(sizeLabel)"
+            clearMessageSoon()
+            return
+        }
+
+        PhotoExporter.saveCapture(jpeg: jpeg, dng: still.raw) { [weak self] ok, problem in
+            guard let self else { return }
+            if ok {
+                // Say so when RAW was asked for and the hardware declined, rather
+                // than reporting a DNG that was never written.
+                self.lastSaveMessage = still.rawUnavailable
+                    ? "✓ JPEG \(sizeLabel) — RAW unsupported"
+                    : "✓ \(landed) \(sizeLabel)"
+            } else {
+                self.lastSaveMessage = problem ?? "Could not save to Photos"
+            }
+            self.clearMessageSoon()
+        }
     }
 
     /// Writes to the roll, mirrors to Apple Photos when enabled, and saves RAW backup.

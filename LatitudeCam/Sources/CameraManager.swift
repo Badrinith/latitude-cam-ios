@@ -87,9 +87,10 @@ public final class CameraManager: NSObject, ObservableObject {
     private var photoOutput: AVCapturePhotoOutput?
     private let cameraQueue = DispatchQueue(label: "com.latitude.camera", qos: .userInitiated)
 
-    // RAW capture
-    private var rawPhotoCaptured: ((Data?, String?) -> Void)?
-    private let photoDelegate = RawPhotoCaptureDelegate()
+    // Still capture. One delegate per capture, retained here for its lifetime —
+    // AVFoundation holds only a weak reference and continuous shooting overlaps.
+    private let delegateLock = NSLock()
+    private var activeCaptures: [Int64: StillCaptureDelegate] = [:]
 
     // Render pipeline — built once, reused for every frame. Rebuilding the
     // CIContext per frame was costing more than the filters themselves.
@@ -198,8 +199,10 @@ public final class CameraManager: NSObject, ObservableObject {
 
         let session = AVCaptureSession()
         session.beginConfiguration()
-        // Keep 1080p for live preview, but photo output will use full resolution
-        session.sessionPreset = .hd1920x1080
+        // .photo, not .hd1920x1080. The preset caps the *photo* output as well as
+        // the video one — under 1080p every still came back 2MP, which is what
+        // made saved files 250KB no matter what the JPEG quality was set to.
+        session.sessionPreset = .photo
 
         do {
             let input = try AVCaptureDeviceInput(device: camera)
@@ -236,20 +239,35 @@ public final class CameraManager: NSObject, ObservableObject {
             connection.videoRotationAngle = 90
         }
 
-        // Add photo output for RAW capture with maximum resolution
+        // Full-resolution stills, taken from the sensor rather than lifted out of
+        // the preview stream.
         let photoOutput = AVCapturePhotoOutput()
-
-        do {
-            guard session.canAddOutput(photoOutput) else {
-                session.commitConfiguration()
-                setStatus(.failed("Cannot add photo output"))
-                return
-            }
-            session.addOutput(photoOutput)
-        } catch {
+        guard session.canAddOutput(photoOutput) else {
             session.commitConfiguration()
-            setStatus(.failed("Photo output error: \(error.localizedDescription)"))
+            setStatus(.failed("Cannot add photo output"))
             return
+        }
+        session.addOutput(photoOutput)
+
+        // Must be raised here, while configuring. A per-capture
+        // photoQualityPrioritization above this ceiling is not clamped — AVFoundation
+        // raises NSInvalidArgumentException, which is what crashed the shutter.
+        photoOutput.maxPhotoQualityPrioritization = .quality
+
+        // ProRAW where the hardware has it; plain Bayer RAW elsewhere. Both arrive
+        // as DNG from fileDataRepresentation().
+        if photoOutput.isAppleProRAWSupported {
+            photoOutput.isAppleProRAWEnabled = true
+        }
+
+        if #available(iOS 16.0, *),
+           let largest = camera.activeFormat.supportedMaxPhotoDimensions.last {
+            photoOutput.maxPhotoDimensions = largest
+        }
+
+        if let photoConnection = photoOutput.connection(with: .video),
+           photoConnection.isVideoRotationAngleSupported(90) {
+            photoConnection.videoRotationAngle = 90
         }
 
         session.commitConfiguration()
@@ -324,27 +342,123 @@ public final class CameraManager: NSObject, ObservableObject {
         frames.image
     }
 
-    /// Capture high-quality image from camera sensor
-    public func captureRaw(completion: @escaping (Data?, String?) -> Void) {
-        guard let photoOutput = photoOutput else {
-            DispatchQueue.main.async {
-                completion(nil, "Photo output not available")
-            }
+    /// One sensor capture. `raw` is DNG straight off the sensor with no look
+    /// applied; `image` is the same frame at full resolution developed through the
+    /// film pipeline, so the two are the negative and the print of one exposure.
+    public struct CapturedStill {
+        public var raw: Data?
+        public var image: UIImage?
+        public var pixelWidth: Int = 0
+        public var pixelHeight: Int = 0
+        /// Set when RAW was asked for and the hardware would not give it.
+        public var rawUnavailable = false
+    }
+
+    /// True when this device can hand back a DNG. The viewfinder greys the RAW
+    /// options out otherwise rather than promising a file that never arrives.
+    public var supportsRAW: Bool {
+        !(photoOutput?.availableRawPhotoPixelFormatTypes.isEmpty ?? true)
+    }
+
+    /// Full-resolution still from `AVCapturePhotoOutput`.
+    ///
+    /// The preview stream is 2MP and is only ever a viewfinder; everything saved
+    /// comes from here instead.
+    public func captureStill(
+        wantsRAW: Bool,
+        wantsProcessed: Bool,
+        targetMegapixels: Int?,
+        completion: @escaping (CapturedStill) -> Void
+    ) {
+        guard let photoOutput else {
+            DispatchQueue.main.async { completion(CapturedStill()) }
             return
         }
 
+        let rawFormats = photoOutput.availableRawPhotoPixelFormatTypes
+        // Prefer ProRAW: it is demosaiced and carries Apple's tone mapping as
+        // metadata, so it opens sensibly in Photos as well as in a raw editor.
+        let rawType = rawFormats.first(where: { AVCapturePhotoOutput.isAppleProRAWPixelFormat($0) })
+            ?? rawFormats.first
+        let takingRAW = wantsRAW && rawType != nil
+        // Never leave a capture with nothing to deliver.
+        let takingProcessed = wantsProcessed || !takingRAW
+
+        let settings: AVCapturePhotoSettings
+        if takingRAW, let rawType {
+            if takingProcessed {
+                settings = AVCapturePhotoSettings(
+                    rawPixelFormatType: rawType,
+                    processedFormat: [AVVideoCodecKey: AVVideoCodecType.hevc]
+                )
+            } else {
+                settings = AVCapturePhotoSettings(rawPixelFormatType: rawType)
+            }
+        } else {
+            settings = AVCapturePhotoSettings(format: [AVVideoCodecKey: AVVideoCodecType.hevc])
+        }
+
+        // Safe only because maxPhotoQualityPrioritization was raised to .quality
+        // during configuration.
+        settings.photoQualityPrioritization = .quality
+
+        if #available(iOS 16.0, *), let dimensions = photoDimensions(targetMegapixels) {
+            settings.maxPhotoDimensions = dimensions
+        }
+
+        let renderSettings = self.settings
+        let rawWasRefused = wantsRAW && !takingRAW
+
+        let delegate = StillCaptureDelegate(id: settings.uniqueID) { [weak self] raw, processed in
+            guard let self else { return }
+            var result = CapturedStill()
+            result.raw = raw
+            result.rawUnavailable = rawWasRefused
+
+            // Develop the full-resolution frame through the same pipeline the
+            // viewfinder uses, so the saved photo matches what was framed.
+            if let processed, let source = CIImage(data: processed) {
+                let rendered = self.render(source, with: renderSettings)
+                if let cg = self.ciContext.createCGImage(rendered, from: source.extent) {
+                    result.image = UIImage(cgImage: cg)
+                    result.pixelWidth = cg.width
+                    result.pixelHeight = cg.height
+                }
+            }
+
+            self.finishCapture(id: settings.uniqueID)
+            DispatchQueue.main.async { completion(result) }
+        }
+
+        // Held until the capture completes: AVFoundation keeps only a weak
+        // reference, and rapid shutter taps overlap.
+        delegateLock.lock()
+        activeCaptures[settings.uniqueID] = delegate
+        delegateLock.unlock()
+
         cameraQueue.async { [weak self] in
-            guard let self = self else { return }
+            self?.photoOutput?.capturePhoto(with: settings, delegate: delegate)
+        }
+    }
 
-            // Create photo settings with maximum quality
-            let settings = AVCapturePhotoSettings()
-            settings.photoQualityPrioritization = .quality
+    private func finishCapture(id: Int64) {
+        delegateLock.lock()
+        activeCaptures[id] = nil
+        delegateLock.unlock()
+    }
 
-            // Set completion handler before capturing
-            self.photoDelegate.captureCompletion = completion
+    /// The supported photo size closest to the requested megapixel count. Nil
+    /// target means the sensor's largest.
+    @available(iOS 16.0, *)
+    private func photoDimensions(_ targetMegapixels: Int?) -> CMVideoDimensions? {
+        guard let supported = videoDevice?.activeFormat.supportedMaxPhotoDimensions,
+              !supported.isEmpty else { return nil }
+        guard let targetMegapixels else { return supported.last }
 
-            // Capture photo
-            self.photoOutput?.capturePhoto(with: settings, delegate: self.photoDelegate)
+        let target = targetMegapixels * 1_000_000
+        return supported.min {
+            abs(Int($0.width) * Int($0.height) - target)
+                < abs(Int($1.width) * Int($1.height) - target)
         }
     }
 
@@ -375,36 +489,44 @@ public final class CameraManager: NSObject, ObservableObject {
     }
 }
 
-// MARK: - Photo Capture Delegate
+// MARK: - Still capture delegate
+//
+// A RAW + processed capture calls didFinishProcessingPhoto twice — once per
+// photo. Both halves are collected here and handed over together in
+// didFinishCaptureFor, which fires exactly once whether one arrived or two.
 
-class RawPhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegate {
-    var captureCompletion: ((Data?, String?) -> Void)?
+final class StillCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegate {
+    private let id: Int64
+    private let completion: (_ raw: Data?, _ processed: Data?) -> Void
+
+    private var rawData: Data?
+    private var processedData: Data?
+
+    init(id: Int64, completion: @escaping (Data?, Data?) -> Void) {
+        self.id = id
+        self.completion = completion
+        super.init()
+    }
 
     func photoOutput(
         _ output: AVCapturePhotoOutput,
         didFinishProcessingPhoto photo: AVCapturePhoto,
         error: Error?
     ) {
-        defer { captureCompletion = nil }
-
-        if let error = error {
-            DispatchQueue.main.async { [weak self] in
-                self?.captureCompletion?(nil, error.localizedDescription)
-            }
-            return
+        guard error == nil, let data = photo.fileDataRepresentation() else { return }
+        if photo.isRawPhoto {
+            rawData = data
+        } else {
+            processedData = data
         }
+    }
 
-        // Get photo data (HEIF, DNG, or JPEG)
-        guard let imageData = photo.fileDataRepresentation() else {
-            DispatchQueue.main.async { [weak self] in
-                self?.captureCompletion?(nil, "Could not get photo data")
-            }
-            return
-        }
-
-        DispatchQueue.main.async { [weak self] in
-            self?.captureCompletion?(imageData, nil)
-        }
+    func photoOutput(
+        _ output: AVCapturePhotoOutput,
+        didFinishCaptureFor resolvedSettings: AVCaptureResolvedPhotoSettings,
+        error: Error?
+    ) {
+        completion(rawData, processedData)
     }
 }
 

@@ -8,10 +8,65 @@
 import Foundation
 import UIKit
 import Photos
+import UniformTypeIdentifiers
 
 // MARK: - Photo Exporter
 
 public class PhotoExporter {
+
+    /// UTType.dng is iOS 18; the deployment target is 17, so the identifier is
+    /// spelled out.
+    private static let dngTypeIdentifier = "com.adobe.raw-image"
+
+    /// Save one exposure to Apple Photos: the developed JPEG, and the DNG attached
+    /// to the same asset as its raw alternate rather than as a second photo.
+    public static func saveCapture(
+        jpeg: Data?,
+        dng: Data?,
+        completion: @escaping (Bool, String?) -> Void
+    ) {
+        guard jpeg != nil || dng != nil else {
+            completion(false, "Nothing to save")
+            return
+        }
+
+        PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in
+            guard status == .authorized || status == .limited else {
+                DispatchQueue.main.async {
+                    completion(false, permissionMessage(for: status))
+                }
+                return
+            }
+
+            PHPhotoLibrary.shared().performChanges({
+                let request = PHAssetCreationRequest.forAsset()
+                if let jpeg {
+                    request.addResource(with: .photo, data: jpeg, options: nil)
+                    if let dng {
+                        let options = PHAssetResourceCreationOptions()
+                        options.uniformTypeIdentifier = dngTypeIdentifier
+                        request.addResource(with: .alternatePhoto, data: dng, options: options)
+                    }
+                } else if let dng {
+                    let options = PHAssetResourceCreationOptions()
+                    options.uniformTypeIdentifier = dngTypeIdentifier
+                    request.addResource(with: .photo, data: dng, options: options)
+                }
+            }) { success, error in
+                DispatchQueue.main.async {
+                    completion(success, success ? nil : (error?.localizedDescription ?? "Could not save to Photos"))
+                }
+            }
+        }
+    }
+
+    private static func permissionMessage(for status: PHAuthorizationStatus) -> String {
+        switch status {
+        case .denied:     return "Photos permission denied. Settings › Latitude › Photos."
+        case .restricted: return "Photos access is restricted on this device."
+        default:          return "Unable to access Photos library."
+        }
+    }
 
     /// Export a processed image to Camera Roll
     public static func saveToPhotos(
