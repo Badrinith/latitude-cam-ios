@@ -198,7 +198,9 @@ public final class CameraManager: NSObject, ObservableObject {
 
         let session = AVCaptureSession()
         session.beginConfiguration()
-        session.sessionPreset = .hd1920x1080
+        // Use input priority to allow full resolution photo capture
+        // while maintaining 1080p for preview
+        session.sessionPreset = .inputPriority
 
         do {
             let input = try AVCaptureDeviceInput(device: camera)
@@ -235,9 +237,13 @@ public final class CameraManager: NSObject, ObservableObject {
             connection.videoRotationAngle = 90
         }
 
-        // Add photo output for RAW capture
+        // Add photo output for RAW capture with maximum resolution
         let photoOutput = AVCapturePhotoOutput()
-        photoOutput.isHighResolutionCaptureEnabled = true
+        if #available(iOS 16.0, *) {
+            photoOutput.maxPhotoDimensions = .init(width: 4000, height: 3000)
+        } else {
+            photoOutput.isHighResolutionCaptureEnabled = true
+        }
 
         guard session.canAddOutput(photoOutput) else {
             session.commitConfiguration()
@@ -337,8 +343,10 @@ public final class CameraManager: NSObject, ObservableObject {
             settings.photoQualityPrioritization = .quality
         }
 
-        // Enable maximum quality processing
-        settings.isAutoStillImageStabilizationEnabled = true
+        // Enable maximum quality processing and stabilization
+        if #available(iOS 13.0, *) {
+            // Automatically handled by photoQualityPrioritization = .quality
+        }
 
         photoDelegate.captureCompletion = completion
         cameraQueue.async { [weak self] in

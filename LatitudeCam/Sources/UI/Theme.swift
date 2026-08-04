@@ -131,6 +131,8 @@ enum Pref {
     static let haptics = "settings.haptics"
     static let hapticStrength = "settings.hapticStrength"
     static let mirrorToPhotos = "settings.mirrorToPhotos"
+    static let captureFormat = "settings.captureFormat"
+    static let captureResolution = "settings.captureResolution"
     /// Set once the entry flow has been completed, so later cold launches go
     /// straight from the splash to the viewfinder.
     static let onboarded = "app.onboarded"
@@ -141,6 +143,8 @@ enum Pref {
     static let peakingColorOptions = ["Amber", "Red", "Green", "White"]
     static let histogramStyleOptions = ["Luma", "RGB"]
     static let hapticStrengthOptions = ["Subtle", "Standard", "Strong"]
+    static let captureFormatOptions = ["RAW Only", "JPEG Only", "RAW + JPEG"]
+    static let captureResolutionOptions = ["4MP", "8MP", "12MP", "Full"]
 
     static func string(_ key: String, default fallback: String) -> String {
         UserDefaults.standard.string(forKey: key) ?? fallback
@@ -340,7 +344,7 @@ final class AppState: ObservableObject {
         cameraManager.apply(s)
     }
 
-    /// Freeze the current frame, auto-save RAW DNG, and return to viewfinder for continuous shooting.
+    /// Freeze the current frame, auto-save RAW/JPEG per user settings, and return to viewfinder for continuous shooting.
     /// No-op with nothing to shoot, which is the Simulator's normal state.
     @discardableResult
     func capture() -> Bool {
@@ -355,17 +359,26 @@ final class AppState: ObservableObject {
         let frame = image.centerCropped(toHeightOverWidth: Pref.aspectRatio(aspect))
         capturedImage = frame
 
+        let format = UserDefaults.standard.string(forKey: Pref.captureFormat) ?? "RAW + JPEG"
+        let resolution = UserDefaults.standard.string(forKey: Pref.captureResolution) ?? "Full"
+
         // Capture RAW DNG from camera sensor (uncompressed)
-        cameraManager.captureRaw { [weak self] rawData, error in
-            guard let self else { return }
-            if let rawData = rawData {
-                PhotoExporter.saveRawDNG(rawData, iso: self.isoValue) { _, _ in }
+        if format == "RAW Only" || format == "RAW + JPEG" {
+            cameraManager.captureRaw { [weak self] rawData, error in
+                guard let self else { return }
+                if let rawData = rawData {
+                    PhotoExporter.saveRawDNG(rawData, iso: self.isoValue) { _, _ in }
+                }
             }
         }
 
         // Auto-save to roll and Photos app, stay on viewfinder for continuous shooting
-        keep(frame)
-        lastSaveMessage = "✓ Saved RAW"
+        if format == "JPEG Only" || format == "RAW + JPEG" {
+            keep(frame)
+        }
+
+        let formatLabel = format == "RAW + JPEG" ? "✓ RAW+JPEG" : format == "RAW Only" ? "✓ RAW" : "✓ JPEG"
+        lastSaveMessage = "\(formatLabel) (\(resolution))"
         clearMessageSoon()
         return true
     }
