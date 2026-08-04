@@ -1,6 +1,7 @@
 # Latitude Cam iOS — Handover
 
-**Status:** Live camera pipeline working on device. 192 tests passing.
+**Status:** Live camera pipeline and full-resolution RAW capture working on device.
+220 tests passing.
 
 **Deployment:** Debug builds install and run on device. Not yet submitted to TestFlight.
 
@@ -77,7 +78,36 @@ tests assert against — `FilmMatrixTests` pins the GPU matrices to them so the 
 sRGB byte multiply in `FilmProfiles`. Tests assert direction and equality-of-channels, not exact
 values. Do not "fix" this by asserting exact equality.
 
-### 3. Settings live in `UserDefaults`, not on `AppState`
+### 3. The viewfinder and the photograph are two different capture paths
+
+`AVCaptureVideoDataOutput` feeds the preview. `AVCapturePhotoOutput` produces
+everything that gets saved. They are not interchangeable.
+
+**Why:** stills used to be lifted out of the preview stream — `capturePhoto()`
+returned `frames.image`. That stream is 1080p, so every saved file was 2MP and
+about 250KB, and no JPEG quality setting could change it. The size looked like a
+compression bug for several rounds; it was the source that was wrong.
+
+**Rule:** nothing saved to the roll, to Photos, or to disk may come from
+`FrameBuffer`. The preview is a viewfinder.
+
+Three things about the photo output are load-bearing, each set during
+`configureAndStart`:
+
+- `sessionPreset` must be `.photo`. A resolution preset such as `.hd1920x1080`
+  caps the *photo* output too, so full-resolution stills are impossible under it.
+- `maxPhotoQualityPrioritization` must be raised to `.quality` before any capture
+  sets `photoQualityPrioritization = .quality`. AVFoundation does not clamp a
+  per-capture value above the ceiling — it raises `NSInvalidArgumentException`.
+  This crashed the shutter on every press.
+- Zero shutter lag, responsive capture and fast capture prioritization are all
+  enabled. Responsive capture is why the develop step must not run on
+  AVFoundation's callback queue.
+
+Focus peaking is excluded from the still render. It is a viewfinder aid and has
+no business in a saved photograph.
+
+### 4. Settings live in `UserDefaults`, not on `AppState`
 
 `Pref` (Theme.swift) holds the keys. The Settings screen binds with `@AppStorage`; the viewfinder,
 render pipeline and gallery read the same keys directly.
@@ -130,7 +160,9 @@ a control that renders but is not connected fails there.
 | Grain / halation / vignette | cached noise overlay / `CIBloom` / `CIVignette` |
 | Focus peaking | `CIEdges`, tinted by the Settings colour |
 | Aspect badge | cycles the ratio, dims the crop, and crops the saved photo |
-| Shutter | freezes the frame → Review → Save writes to the roll |
+| Shutter | full-resolution sensor capture → roll + Photos, staying on the viewfinder |
+| Format (Pro sheet) | RAW Only · JPEG Only · RAW + JPEG |
+| Resolution (Pro sheet) | 4/8/12MP or Full, matched to the nearest `supportedMaxPhotoDimensions` |
 | Grid setting | viewfinder overlay (thirds / golden / off) |
 | JPEG quality | `jpegData(compressionQuality:)` on save |
 | Haptic strength | changes generator *and* intensity (see below) |
@@ -178,8 +210,13 @@ returning after the exposure.
 
 ## Verified vs not
 
-**Verified:** all 192 tests; every screen rendered and inspected via `LAT_SCREEN`; the live camera
-feed, film look and capture confirmed on device by the owner.
+**Verified:** all 220 tests; every screen rendered and inspected via `LAT_SCREEN`; the live camera
+feed, film look, and RAW + JPEG capture reaching Apple Photos, all confirmed on device by the owner.
+
+**Not covered by tests:** the whole photo-output path. `AVCapturePhotoOutput` needs real hardware,
+so `.photo` preset, the quality-prioritization ceiling, RAW availability and the Photos pairing are
+all device-verified only. The four faults behind "the files are 250KB" and "the shutter crashes"
+would each have been caught by a test that could run — none can.
 
 **Not verified — no Simulator app in this Xcode install, so touches could not be driven:**
 
@@ -197,8 +234,9 @@ With a working Simulator, `mcp__Claude_Code_iOS_Simulator__control` drives all o
 
 | Gap | Note |
 |---|---|
-| Stills come from the video stream | Capture uses the live 1080p pipeline rather than `AVCapturePhotoOutput`. One proven code path; full-resolution stills would need a second one plus re-applying the look. |
-| ProRAW toggle is cosmetic | Labels the Review screen. No DNG is written. |
+| RAW pairs split in two on a cropped aspect | The developed JPEG is cropped to the chosen aspect, the DNG keeps the full sensor frame, so Photos rejects the pairing (`PHPhotosErrorDomain` 3300, `changeNotSupported`) and `saveCapture` falls back to two assets. At the sensor's own aspect they merge into one ProRAW-style asset. Fixing it properly means either not cropping the JPEG when RAW is on, or cropping the DNG — both change a promise the aspect badge makes. |
+| Review screen is unreachable | Capture goes straight back to the viewfinder. `ReviewScreen`, `deleteCapture()` and `mirrorCaptureToPhotos()` are still built and still tested, but nothing routes to them. |
+| ProRAW toggle in the Pro sheet does nothing | RAW is driven by the Format chips. The toggle predates them and should be removed. |
 | "Share…" has no custom activity | Presents the standard `UIActivityViewController` with the `UIImage`. |
 | Edit saves a new frame | `PhotoGallery` has no update method; edits are non-destructive by adding. The roll grows with each save. |
 | `PreviewEngine` / `AdvancedFeatures` are off the hot path | Still contain main-thread `UIGraphics` and per-pixel loops. Harmless where they sit; do not call them per frame. |
