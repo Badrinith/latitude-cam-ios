@@ -91,6 +91,9 @@ public final class CameraManager: NSObject, ObservableObject {
     // AVFoundation holds only a weak reference and continuous shooting overlaps.
     private let delegateLock = NSLock()
     private var activeCaptures: [Int64: StillCaptureDelegate] = [:]
+    /// Developing a full-resolution still belongs neither on the frame queue nor
+    /// on AVFoundation's callback queue — both stall something the user can feel.
+    private let developQueue = DispatchQueue(label: "com.latitude.develop", qos: .userInitiated)
 
     // Render pipeline — built once, reused for every frame. Rebuilding the
     // CIContext per frame was costing more than the filters themselves.
@@ -260,6 +263,25 @@ public final class CameraManager: NSObject, ObservableObject {
             photoOutput.isAppleProRAWEnabled = true
         }
 
+        // Zero shutter lag serves the frame from the moment the button went down,
+        // out of a ring buffer the camera is already keeping, rather than starting
+        // an exposure once the tap has been handled.
+        if photoOutput.isZeroShutterLagSupported {
+            photoOutput.isZeroShutterLagEnabled = true
+        }
+        // Lets the next shot begin while the previous one is still being processed
+        // — the difference between a camera that keeps up with the shutter and one
+        // that makes you wait for it. Requires zero shutter lag, so it follows it.
+        if photoOutput.isResponsiveCaptureSupported {
+            photoOutput.isResponsiveCaptureEnabled = true
+        }
+        // Under rapid fire the system may trade a little processing for keeping
+        // pace. It only engages when shots are coming faster than they can be
+        // finished, so a single considered frame is unaffected.
+        if photoOutput.isFastCapturePrioritizationSupported {
+            photoOutput.isFastCapturePrioritizationEnabled = true
+        }
+
         if #available(iOS 16.0, *),
            let largest = camera.activeFormat.supportedMaxPhotoDimensions.last {
             photoOutput.maxPhotoDimensions = largest
@@ -406,28 +428,38 @@ public final class CameraManager: NSObject, ObservableObject {
             settings.maxPhotoDimensions = dimensions
         }
 
-        let renderSettings = self.settings
+        // Focus peaking is a viewfinder aid, not part of the photograph — its edge
+        // highlights have no business in a saved frame, and a CIEdges pass over a
+        // 48MP image is not cheap either.
+        var renderSettings = self.settings
+        renderSettings.focusPeaking = false
+
         let rawWasRefused = wantsRAW && !takingRAW
 
         let delegate = StillCaptureDelegate(id: settings.uniqueID) { [weak self] raw, processed in
             guard let self else { return }
-            var result = CapturedStill()
-            result.raw = raw
-            result.rawUnavailable = rawWasRefused
+            // Get off AVFoundation's callback queue before developing anything.
+            // Holding it stalls the next capture, which is exactly what responsive
+            // capture is there to avoid.
+            self.developQueue.async {
+                var result = CapturedStill()
+                result.raw = raw
+                result.rawUnavailable = rawWasRefused
 
-            // Develop the full-resolution frame through the same pipeline the
-            // viewfinder uses, so the saved photo matches what was framed.
-            if let processed, let source = CIImage(data: processed) {
-                let rendered = self.render(source, with: renderSettings)
-                if let cg = self.ciContext.createCGImage(rendered, from: source.extent) {
-                    result.image = UIImage(cgImage: cg)
-                    result.pixelWidth = cg.width
-                    result.pixelHeight = cg.height
+                // Develop the full-resolution frame through the same pipeline the
+                // viewfinder uses, so the saved photo matches what was framed.
+                if let processed, let source = CIImage(data: processed) {
+                    let rendered = self.render(source, with: renderSettings)
+                    if let cg = self.ciContext.createCGImage(rendered, from: source.extent) {
+                        result.image = UIImage(cgImage: cg)
+                        result.pixelWidth = cg.width
+                        result.pixelHeight = cg.height
+                    }
                 }
-            }
 
-            self.finishCapture(id: settings.uniqueID)
-            DispatchQueue.main.async { completion(result) }
+                self.finishCapture(id: settings.uniqueID)
+                DispatchQueue.main.async { completion(result) }
+            }
         }
 
         // Held until the capture completes: AVFoundation keeps only a weak
@@ -436,9 +468,10 @@ public final class CameraManager: NSObject, ObservableObject {
         activeCaptures[settings.uniqueID] = delegate
         delegateLock.unlock()
 
-        cameraQueue.async { [weak self] in
-            self?.photoOutput?.capturePhoto(with: settings, delegate: delegate)
-        }
+        // Called straight from the caller's queue. cameraQueue is the video
+        // delegate's queue and is busy thirty times a second — hopping onto it put
+        // the shutter behind whichever preview frame was mid-render.
+        photoOutput.capturePhoto(with: settings, delegate: delegate)
     }
 
     private func finishCapture(id: Int64) {

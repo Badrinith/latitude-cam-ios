@@ -208,6 +208,9 @@ final class AppState: ObservableObject {
 
     let cameraManager = CameraManager()
     let gallery = PhotoGallery()
+    /// Encoding and library writes, kept off the main queue so the shutter stays
+    /// responsive while a frame is still being filed.
+    private let exportQueue = DispatchQueue(label: "com.latitude.export", qos: .utility)
 
     /// The frame the shutter froze, held for the Review screen.
     @Published var capturedImage: UIImage?
@@ -373,8 +376,6 @@ final class AppState: ObservableObject {
         let wantsRAW = format != "JPEG Only"
         let wantsProcessed = format != "RAW Only"
 
-        lastSaveMessage = "Capturing…"
-
         cameraManager.captureStill(
             wantsRAW: wantsRAW,
             wantsProcessed: wantsProcessed,
@@ -387,13 +388,24 @@ final class AppState: ObservableObject {
 
     /// Writes one finished capture to the roll, to Apple Photos, and to the DNG
     /// folder, then reports what actually landed.
+    ///
+    /// Confirms as soon as the frame is in the roll rather than waiting on the
+    /// library. Encoding and the Photos write take a moment and the shutter should
+    /// not be held hostage to either; only a failure revises the message.
     private func store(_ still: CameraManager.CapturedStill, requestedFormat: String) {
+        guard still.raw != nil || still.image != nil else {
+            lastSaveMessage = "Capture failed"
+            clearMessageSoon()
+            return
+        }
+
         let aspect = Pref.string(Pref.aspect, default: "3:2")
         let quality = Pref.compressionQuality(Pref.string(Pref.jpegQuality, default: "Maximum"))
 
-        var jpeg: Data?
-        if let image = still.image {
-            let frame = image.centerCropped(toHeightOverWidth: Pref.aspectRatio(aspect))
+        // cropping() on a CGImage is a reference, not a copy — cheap enough for
+        // the main queue, unlike the encode below.
+        let frame = still.image?.centerCropped(toHeightOverWidth: Pref.aspectRatio(aspect))
+        if let frame {
             capturedImage = frame
             savedPhotoID = gallery.addPhoto(
                 frame,
@@ -401,43 +413,36 @@ final class AppState: ObservableObject {
                 iso: isoValue,
                 shutterDenominator: shutterValue
             )
-            jpeg = frame.jpegData(compressionQuality: quality)
-        }
-
-        if let dng = still.raw {
-            PhotoExporter.saveRawDNG(dng, iso: isoValue) { _, _ in }
-        }
-
-        guard still.raw != nil || jpeg != nil else {
-            lastSaveMessage = "Capture failed"
-            clearMessageSoon()
-            return
         }
 
         let megapixels = Double(still.pixelWidth * still.pixelHeight) / 1_000_000
         let sizeLabel = megapixels >= 1 ? String(format: "%.0fMP", megapixels.rounded()) : ""
-        let landed = still.raw != nil && jpeg != nil ? "RAW+JPEG"
+        let landed = still.raw != nil && frame != nil ? "RAW+JPEG"
             : still.raw != nil ? "RAW" : "JPEG"
+        lastSaveMessage = still.rawUnavailable
+            ? "✓ JPEG \(sizeLabel) — RAW unsupported"
+            : "✓ \(landed) \(sizeLabel)"
+        clearMessageSoon()
 
         let mirrorEnabled = UserDefaults.standard.object(forKey: Pref.mirrorToPhotos) as? Bool ?? true
-        guard mirrorEnabled else {
-            lastSaveMessage = "✓ \(landed) \(sizeLabel)"
-            clearMessageSoon()
-            return
-        }
 
-        PhotoExporter.saveCapture(jpeg: jpeg, dng: still.raw) { [weak self] ok, problem in
+        exportQueue.async { [weak self] in
             guard let self else { return }
-            if ok {
-                // Say so when RAW was asked for and the hardware declined, rather
-                // than reporting a DNG that was never written.
-                self.lastSaveMessage = still.rawUnavailable
-                    ? "✓ JPEG \(sizeLabel) — RAW unsupported"
-                    : "✓ \(landed) \(sizeLabel)"
-            } else {
-                self.lastSaveMessage = problem ?? "Could not save to Photos"
+            if let dng = still.raw {
+                PhotoExporter.saveRawDNG(dng, iso: self.isoValue) { _, _ in }
             }
-            self.clearMessageSoon()
+            guard mirrorEnabled else { return }
+
+            // A full-resolution encode is far too slow for the main queue; running
+            // it there froze the whole viewfinder for the duration.
+            let jpeg = frame?.jpegData(compressionQuality: quality)
+            PhotoExporter.saveCapture(jpeg: jpeg, dng: still.raw) { ok, problem in
+                guard !ok else { return }
+                Task { @MainActor in
+                    self.lastSaveMessage = problem ?? "Could not save to Photos"
+                    self.clearMessageSoon()
+                }
+            }
         }
     }
 
