@@ -324,33 +324,27 @@ public final class CameraManager: NSObject, ObservableObject {
         frames.image
     }
 
-    /// Capture high-quality image (RAW DNG if available, HEIF otherwise)
+    /// Capture high-quality image from camera sensor
     public func captureRaw(completion: @escaping (Data?, String?) -> Void) {
         guard let photoOutput = photoOutput else {
-            completion(nil, "Photo output not available")
-            return
-        }
-
-        // First try RAW DNG if available
-        let availableRawFormats = photoOutput.availableRawPhotoPixelFormatTypes
-        if !availableRawFormats.isEmpty {
-            let rawFormat = availableRawFormats[0]
-            let rawSettings = AVCapturePhotoSettings(rawPixelFormatType: rawFormat)
-            rawSettings.photoQualityPrioritization = .quality
-            photoDelegate.captureCompletion = completion
-            cameraQueue.async { [weak self] in
-                self?.photoOutput?.capturePhoto(with: rawSettings, delegate: self?.photoDelegate ?? RawPhotoCaptureDelegate())
+            DispatchQueue.main.async {
+                completion(nil, "Photo output not available")
             }
             return
         }
 
-        // Fallback to high-quality HEIF with maximum quality
-        let heifSettings = AVCapturePhotoSettings()
-        heifSettings.photoQualityPrioritization = .quality
-
-        photoDelegate.captureCompletion = completion
         cameraQueue.async { [weak self] in
-            self?.photoOutput?.capturePhoto(with: heifSettings, delegate: self?.photoDelegate ?? RawPhotoCaptureDelegate())
+            guard let self = self else { return }
+
+            // Create photo settings with maximum quality
+            let settings = AVCapturePhotoSettings()
+            settings.photoQualityPrioritization = .quality
+
+            // Set completion handler before capturing
+            self.photoDelegate.captureCompletion = completion
+
+            // Capture photo
+            self.photoOutput?.capturePhoto(with: settings, delegate: self.photoDelegate)
         }
     }
 
@@ -381,7 +375,7 @@ public final class CameraManager: NSObject, ObservableObject {
     }
 }
 
-// MARK: - RAW Photo Capture Delegate
+// MARK: - Photo Capture Delegate
 
 class RawPhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegate {
     var captureCompletion: ((Data?, String?) -> Void)?
@@ -391,29 +385,25 @@ class RawPhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegate {
         didFinishProcessingPhoto photo: AVCapturePhoto,
         error: Error?
     ) {
+        defer { captureCompletion = nil }
+
         if let error = error {
-            DispatchQueue.main.async {
-                self.captureCompletion?(nil, error.localizedDescription)
+            DispatchQueue.main.async { [weak self] in
+                self?.captureCompletion?(nil, error.localizedDescription)
             }
             return
         }
 
-        var imageData: Data?
-        var errorMsg: String?
-
-        // Try RAW DNG capture first (uncompressed sensor data)
-        if photo.isRawPhoto, let dngData = photo.fileDataRepresentation() {
-            imageData = dngData
-        }
-        // Fallback to HEIF with maximum quality
-        else if let heifData = photo.fileDataRepresentation() {
-            imageData = heifData
-        } else {
-            errorMsg = "Could not capture photo data"
+        // Get photo data (HEIF, DNG, or JPEG)
+        guard let imageData = photo.fileDataRepresentation() else {
+            DispatchQueue.main.async { [weak self] in
+                self?.captureCompletion?(nil, "Could not get photo data")
+            }
+            return
         }
 
-        DispatchQueue.main.async {
-            self.captureCompletion?(imageData, errorMsg)
+        DispatchQueue.main.async { [weak self] in
+            self?.captureCompletion?(imageData, nil)
         }
     }
 }
