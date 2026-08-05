@@ -2,7 +2,7 @@
 
 **Date:** 5 Aug 2026
 **Branch:** `feat/camera-pipeline-dials-splash` — 33 commits, **all local, nothing pushed to `origin`**
-**Tests:** 260 passing
+**Tests:** 266 passing
 **Device:** iPhone 17 Pro Max, UDID `854CD202-7808-597B-A70F-6A6628AED263` (build installed and current)
 
 ---
@@ -60,14 +60,14 @@ PhotoExporter  paired asset (.photo + .alternatePhoto), falls back to two assets
 ## Code state
 
 - `Barrel.swift` is in `project.pbxproj` by hand (`A021`/`B021`) — this project lists sources explicitly.
-- Dead but compiled: `FilmKnob.swift`, `RotaryDial.swift`, `ReviewScreen`, `ManualControlsSheet`, `BottomSheet` presentation in `ViewfinderScreen`, `AppState.proRAW`.
+- Dead but compiled: `FilmKnob.swift`, `RotaryDial.swift`, `ReviewScreen`, `ManualControlsSheet`, `BottomSheet` presentation in `ViewfinderScreen`, `AppState.proRAW`, `BackLink`, `SliderRow` (editor now uses barrels).
 - Design mockups in `design/` — `ten-styles.html`, `bottom-dials.html`, `command-dial.html`.
 - Not covered by tests: the whole photo-output path (needs hardware).
 
 ## Known gaps
 
 1. RAW pairs split into two Photos assets at any aspect but the sensor's own (JPEG cropped, DNG not → `PHPhotosErrorDomain 3300`, falls back to two assets).
-2. `proRAW` toggle in the corner rail does nothing — Format chips superseded it.
+2. `AppState.proRAW` is now read only by the unreachable `ReviewScreen`; the button is gone.
 3. Edit screen writes a new frame rather than replacing; roll grows per save.
 4. No Simulator.app in this Xcode (`~/Downloads/Apps/Xcode-beta.app`) — device verification only.
 

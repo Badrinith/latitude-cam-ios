@@ -282,15 +282,21 @@ struct ViewfinderScreen: View {
     /// The exposure readouts that used to sit up here are gone: the chips above
     /// the shutter show the same three values and are now the way to change them,
     /// so keeping a second copy at arm's reach was two of everything.
+    /// Instruments across the top, in one strip.
+    ///
+    /// They were a column down the right edge, which put them under the hand
+    /// holding the phone and made each one 32pt — small for a control you reach
+    /// for while framing. A row along the top is clear of the grip, and the
+    /// buttons grow to 42.
     private var chrome: some View {
-        VStack(spacing: 0) {
-            ZStack {
-                MeterReadout(
-                    frames: app.cameraManager.frames,
-                    rotation: orientation.angle
-                )
-            }
-            .padding(.top, 8)
+        VStack(spacing: 9) {
+            controlRow
+                .padding(.top, 6)
+
+            MeterReadout(
+                frames: app.cameraManager.frames,
+                rotation: orientation.angle
+            )
 
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 8) {
@@ -300,74 +306,70 @@ struct ViewfinderScreen: View {
                     )
                     CameraStatusPill(camera: app.cameraManager)
                 }
-
-                Spacer()
-
-                VStack(spacing: 8) {
-                    Button { app.go(.settings) } label: {
-                        optionLabel {
-                            Image(systemName: "gearshape")
-                                .font(.system(size: 13, weight: .medium))
-                                .foregroundStyle(Tone.primary)
-                                .rotationEffect(orientation.angle)
-                        }
-                    }
-                    .buttonStyle(.plain)
-
-                    Button { app.flipCamera() } label: {
-                        optionLabel {
-                            Image(systemName: "arrow.triangle.2.circlepath.camera")
-                                .font(.system(size: 13, weight: .medium))
-                                .foregroundStyle(app.usingFrontCamera ? Accent.amber : Tone.primary)
-                                .rotationEffect(orientation.angle)
-                        }
-                    }
-                    .buttonStyle(.plain)
-
-                    if app.cameraManager.supportsPortrait {
-                        Button { app.togglePortrait() } label: {
-                            optionLabel {
-                                Image(systemName: "person.and.background.dotted")
-                                    .font(.system(size: 12, weight: .medium))
-                                    .foregroundStyle(app.portrait ? Accent.amber : Tone.primary)
-                                    .rotationEffect(orientation.angle)
-                            }
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Portrait")
-                    }
-
-                    Button { cycleAspect() } label: {
-                        optionLabel {
-                            Text(aspect)
-                                .font(.mono(9, .semibold))
-                                .foregroundStyle(Tone.primary)
-                                .rotationEffect(orientation.angle)
-                        }
-                    }
-                    .buttonStyle(.plain)
-
-                    Button {
-                        Haptics.toggle()
-                        app.proRAW.toggle()
-                    } label: {
-                        optionLabel {
-                            Text("RAW")
-                                .font(.mono(8, .semibold))
-                                .foregroundStyle(app.proRAW ? Accent.amber : Tone.quaternary)
-                                .rotationEffect(orientation.angle)
-                        }
-                    }
-                    .buttonStyle(.plain)
-
-                }
+                Spacer(minLength: 0)
             }
             .padding(.horizontal, 16)
-            .padding(.top, 12)
+            .padding(.top, 2)
 
             Spacer(minLength: 0)
         }
         .overlay(alignment: .bottom) { deck }
+    }
+
+    /// One capsule rather than five floating circles: the strip reads as a top
+    /// plate, and the shared ground is what keeps five glyphs from looking like
+    /// five unrelated decisions.
+    private var controlRow: some View {
+        HStack(spacing: 8) {
+            Button { app.go(.settings) } label: {
+                optionLabel {
+                    Image(systemName: "gearshape")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundStyle(Tone.primary)
+                        .rotationEffect(orientation.angle)
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Settings")
+
+            Button { app.flipCamera() } label: {
+                optionLabel {
+                    Image(systemName: "arrow.triangle.2.circlepath.camera")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundStyle(app.usingFrontCamera ? Accent.amber : Tone.primary)
+                        .rotationEffect(orientation.angle)
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Switch camera")
+
+            if app.cameraManager.supportsPortrait {
+                Button { app.togglePortrait() } label: {
+                    optionLabel {
+                        Image(systemName: "person.and.background.dotted")
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundStyle(app.portrait ? Accent.amber : Tone.primary)
+                            .rotationEffect(orientation.angle)
+                    }
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Portrait")
+            }
+
+            Button { cycleAspect() } label: {
+                optionLabel {
+                    Text(aspect)
+                        .font(.mono(11, .semibold))
+                        .foregroundStyle(Tone.primary)
+                        .rotationEffect(orientation.angle)
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Aspect ratio")
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .glass(radius: 30)
     }
 
     /// Everything a thumb needs, in the band below the picture: the pro barrels,
@@ -604,11 +606,17 @@ struct ViewfinderScreen: View {
         Rectangle().fill(Tone.hairline).frame(width: 0.5, height: 14)
     }
 
+    /// 42pt, up from 32. These are reached for while the other hand is holding
+    /// the phone and the eye is on the picture, which is the worst case for a
+    /// small target. The strip behind them carries the glass now, so each button
+    /// only needs its own tint when it is on.
     private func optionLabel<C: View>(@ViewBuilder content: () -> C) -> some View {
         content()
-            .frame(width: 32, height: 32)
-            .glass(radius: 16)
-            .contentShape(Rectangle())
+            .frame(width: 42, height: 42)
+            .background {
+                Circle().fill(Color.white.opacity(0.07))
+            }
+            .contentShape(Circle())
     }
 }
 
