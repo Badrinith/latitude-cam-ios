@@ -52,7 +52,7 @@ public struct RenderSettings: Equatable {
     public var peakingColorName = "Amber"
     /// Either dial on its A position hands the whole exposure back to the camera,
     /// the way a Fuji body behaves with its dials on A.
-    public var autoExposure = false
+    public var autoExposure = true
 
     public init() {}
 }
@@ -235,17 +235,19 @@ public final class CameraManager: NSObject, ObservableObject {
     private func orient(_ connection: AVCaptureConnection?, front: Bool) {
         guard let connection else { return }
 
-        // Back is 90 and known good. The front sensor is mounted differently and
-        // has been bracketed rather than reasoned about: at 90 the frame came out
-        // turned one way, at 270 turned the other. Those two differ by half a
-        // circle, so the answer lies between them — 0 or 180 — and 180 is the one
-        // that corresponds to a sensor mounted the other way up.
+        // Back is 90 and known good. Front is 0 — the buffer arrives portrait-upright
+        // already, so rotating it at all was the mistake.
+        //
+        // Found by bracketing on device rather than by reasoning, over four tries:
+        // 90 turned it one way, 270 turned it the other, and since those differ by
+        // half a circle the answer had to lie between them. 180 was inverted, which
+        // left 0.
         //
         // The fallback chain matters as much as the value. The original code set
         // the angle only `if isVideoRotationAngleSupported`, with no else, so a
         // refused angle meant no rotation at all and a sideways frame with nothing
         // to indicate why.
-        for angle in [front ? 180.0 : 90.0, 90.0, 270.0, 0.0]
+        for angle in [front ? 0.0 : 90.0, 90.0, 270.0, 0.0]
         where connection.isVideoRotationAngleSupported(angle) {
             connection.videoRotationAngle = angle
             break
@@ -589,6 +591,7 @@ public final class CameraManager: NSObject, ObservableObject {
         defaults.set(s.shutterDenominator, forKey: "LatitudeCam.Shutter")
         defaults.set(s.filmID, forKey: "LatitudeCam.FilmProfile")
         defaults.set(s.kelvin, forKey: "LatitudeCam.Kelvin")
+        defaults.set(s.autoExposure, forKey: "LatitudeCam.AutoExposure")
     }
 
     private func loadSettings() {
@@ -601,6 +604,10 @@ public final class CameraManager: NSObject, ObservableObject {
         if let film = defaults.string(forKey: "LatitudeCam.FilmProfile") { s.filmID = film }
         let kelvin = defaults.double(forKey: "LatitudeCam.Kelvin")
         if kelvin > 0 { s.kelvin = kelvin }
+        // Absent on a first run, where the default of auto is what we want.
+        if let auto = defaults.object(forKey: "LatitudeCam.AutoExposure") as? Bool {
+            s.autoExposure = auto
+        }
 
         settingsLock.lock()
         _settings = s

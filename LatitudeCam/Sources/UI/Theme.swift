@@ -246,15 +246,22 @@ final class AppState: ObservableObject {
 
     // Manual controls — stored 0…1 so the sliders and the viewfinder HUD read
     // from one source of truth.
-    @Published var shutter: Double = 0.62 { didSet { syncCamera() } }
-    @Published var iso: Double = 0.18 { didSet { syncCamera() } }
+    // Where the dials sit once taken off A. 1/60 at ISO 400 is a room, not a
+    // beach — the old 1/240 at ISO 100 was a sunlit exposure and the reason the
+    // viewfinder looked several stops down on the stock camera indoors.
+    @Published var shutter: Double = 0.36 { didSet { syncCamera() } }
+    @Published var iso: Double = 0.50 { didSet { syncCamera() } }
     @Published var whiteBalance: Double = 0.58 { didSet { syncCamera() } }
     @Published var exposureComp: Double = 0.5 { didSet { syncCamera() } }
     @Published var focusPeaking = true { didSet { syncCamera() } }
     @Published var proRAW = false
     /// Either dial on A. Kept as one flag because AVFoundation's continuous auto
     /// mode governs shutter and ISO together — there is no half-auto.
-    @Published var autoExposure = false { didSet { syncCamera() } }
+    /// On by default: the camera meters the scene, which is what every other
+    /// camera app does and what "as the camera sees it" means. Manual exposure was
+    /// forced from launch, pinning the sensor at a fixed shutter and ISO no matter
+    /// the light — turning either dial off A is what opts into that.
+    @Published var autoExposure = true { didSet { syncCamera() } }
 
     static let shutterStops = [15, 30, 60, 125, 240, 500, 1000]
     static let isoStops = [50, 100, 200, 400, 800, 1600, 3200]
@@ -557,8 +564,8 @@ final class AppState: ObservableObject {
     static let defaultControls = ControlSnapshot(
         filmID: "amber", intensity: 0.8,
         grain: false, halation: false, vignette: false,
-        shutter: 0.36, iso: 0.21, whiteBalance: 0.64, exposureComp: 0.5,
-        focusPeaking: true, autoExposure: false
+        shutter: 0.36, iso: 0.50, whiteBalance: 0.64, exposureComp: 0.5,
+        focusPeaking: true, autoExposure: true
     )
 
     private var undoStack: [ControlSnapshot] = []

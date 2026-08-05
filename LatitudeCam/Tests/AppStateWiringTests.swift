@@ -133,6 +133,9 @@ final class AppStateWiringTests: XCTestCase {
 
     func testHUDLabelsTrackTheirControls() {
         let app = AppState()
+        // Exposure is automatic by default, so the readouts say so until a dial is
+        // taken off A. Reading the stops back requires opting into manual first.
+        app.autoExposure = false
         app.iso = 1.0
         app.shutter = 1.0
         app.exposureComp = 0.5
@@ -140,6 +143,21 @@ final class AppStateWiringTests: XCTestCase {
         XCTAssertEqual(app.isoLabel, "ISO \(AppState.isoStops.last!)")
         XCTAssertEqual(app.shutterLabel, "1/\(AppState.shutterStops.last!)")
         XCTAssertEqual(app.exposureLabel, "+0.0 EV")
+    }
+
+    /// The default that stops the viewfinder sitting several stops under the
+    /// stock camera indoors: the sensor meters the scene until told otherwise.
+    func testExposureIsAutomaticUntilADialLeavesA() {
+        let app = AppState()
+        XCTAssertTrue(app.autoExposure)
+        XCTAssertEqual(app.shutterLabel, "AUTO")
+        XCTAssertEqual(app.isoLabel, "ISO A")
+        XCTAssertTrue(app.cameraManager.currentSettings.autoExposure)
+
+        // Index 0 is A on both ladders, so anything above it is manual.
+        app.shutterIndex = 3
+        XCTAssertFalse(app.autoExposure)
+        XCTAssertFalse(app.cameraManager.currentSettings.autoExposure)
     }
 
     func testStopLadderNeverIndexesOutOfBounds() {
