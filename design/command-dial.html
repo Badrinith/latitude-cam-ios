@@ -1,0 +1,1010 @@
+<title>Latitude Cam — Command Dial</title>
+
+<style>
+  /* ============================================================
+     Palette is the app's own (Theme.swift), not a new one.
+     Ink / Tone / Accent names match the Swift enums so the
+     mockup and the build stay in one vocabulary.
+     ============================================================ */
+  :root {
+    --ink-base:    #0D0D0D;
+    --ink-raised:  #161616;
+    --ink-card:    #1C1C1E;
+    --tone-primary:#F2EFE8;
+    --amber:       #D98A52;
+    --amber-deep:  #8A5A34;
+    --film-rust:   #9C3F2E;
+
+    /* Page ground. Warm-biased near-black — a darkroom, not a neutral grey. */
+    --page-bg:     #100F0D;
+    --page-panel:  #191714;
+    --page-rule:   rgba(242, 239, 232, 0.12);
+    --page-text:   #E7E2D8;
+    --page-dim:    rgba(231, 226, 216, 0.58);
+    --page-faint:  rgba(231, 226, 216, 0.38);
+
+    --display: ui-serif, "New York", Georgia, serif;
+    --body: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, monospace;
+
+    --measure: 66ch;
+  }
+
+  /* Light theme: a contact sheet on a lightbox rather than an inverted darkroom. */
+  @media (prefers-color-scheme: light) {
+    :root {
+      --page-bg:    #E9E5DC;
+      --page-panel: #F5F2EB;
+      --page-rule:  rgba(28, 24, 20, 0.14);
+      --page-text:  #1E1A16;
+      --page-dim:   rgba(30, 26, 22, 0.62);
+      --page-faint: rgba(30, 26, 22, 0.42);
+    }
+  }
+  :root[data-theme="light"] {
+    --page-bg:    #E9E5DC;
+    --page-panel: #F5F2EB;
+    --page-rule:  rgba(28, 24, 20, 0.14);
+    --page-text:  #1E1A16;
+    --page-dim:   rgba(30, 26, 22, 0.62);
+    --page-faint: rgba(30, 26, 22, 0.42);
+  }
+  :root[data-theme="dark"] {
+    --page-bg:    #100F0D;
+    --page-panel: #191714;
+    --page-rule:  rgba(242, 239, 232, 0.12);
+    --page-text:  #E7E2D8;
+    --page-dim:   rgba(231, 226, 216, 0.58);
+    --page-faint: rgba(231, 226, 216, 0.38);
+  }
+
+  body {
+    background: var(--page-bg);
+    color: var(--page-text);
+    font-family: var(--body);
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: clamp(28px, 5vw, 64px) clamp(18px, 4vw, 40px) 96px;
+    display: flex;
+    flex-direction: column;
+    gap: clamp(48px, 7vw, 88px);
+  }
+
+  /* ---------- masthead ---------- */
+
+  .masthead { display: flex; flex-direction: column; gap: 18px; }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--amber);
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .eyebrow span { color: var(--page-faint); }
+
+  h1 {
+    font-family: var(--display);
+    font-size: clamp(34px, 6vw, 62px);
+    line-height: 1.02;
+    letter-spacing: -0.02em;
+    font-weight: 500;
+    text-wrap: balance;
+    margin: 0;
+  }
+  h1 em { font-style: italic; color: var(--amber); }
+
+  .standfirst {
+    font-size: clamp(16px, 1.6vw, 18.5px);
+    color: var(--page-dim);
+    max-width: var(--measure);
+    text-wrap: pretty;
+  }
+
+  h2 {
+    font-family: var(--display);
+    font-weight: 500;
+    font-size: clamp(23px, 2.8vw, 31px);
+    letter-spacing: -0.012em;
+    margin: 0;
+    text-wrap: balance;
+  }
+
+  .section { display: flex; flex-direction: column; gap: 26px; }
+
+  .section-head { display: flex; flex-direction: column; gap: 9px; }
+  .section-head p { margin: 0; color: var(--page-dim); max-width: var(--measure); }
+
+  .rule { height: 1px; background: var(--page-rule); border: 0; margin: 0; }
+
+  /* ---------- phone ---------- */
+
+  .phone {
+    --w: 286px;
+    width: var(--w);
+    aspect-ratio: 286 / 620;
+    border-radius: 42px;
+    background: var(--ink-base);
+    position: relative;
+    overflow: hidden;
+    box-shadow:
+      0 0 0 1.5px rgba(255,255,255,0.09),
+      0 0 0 9px #0a0a0a,
+      0 26px 60px rgba(0,0,0,0.55);
+    flex: none;
+    color: var(--tone-primary);
+  }
+  .phone.lg { --w: 348px; }
+
+  /* The scene behind the glass. Abstract, but it has to be a photograph-like
+     thing or the transparency claim can't be judged. */
+  .scene {
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(58% 34% at 68% 21%, rgba(255,240,214,0.92), transparent 62%),
+      radial-gradient(115% 76% at 71% 17%, rgba(226,171,110,0.50), transparent 58%),
+      linear-gradient(191deg, #4a3b2e 0%, #2b221b 42%, #14100d 100%);
+  }
+  /* window mullion + a sill silhouette, enough to read as a room */
+  .scene::before {
+    content: "";
+    position: absolute;
+    left: 47%; top: 4%;
+    width: 44%; height: 34%;
+    background:
+      linear-gradient(to right, transparent 48%, rgba(20,14,10,0.55) 48%, rgba(20,14,10,0.55) 52%, transparent 52%),
+      linear-gradient(to bottom, transparent 46%, rgba(20,14,10,0.55) 46%, rgba(20,14,10,0.55) 50%, transparent 50%);
+    filter: blur(0.4px);
+  }
+  .scene::after {
+    content: "";
+    position: absolute;
+    left: -12%; bottom: -6%;
+    width: 78%; height: 42%;
+    border-radius: 50% 46% 38% 54%;
+    background: rgba(9,7,6,0.72);
+    filter: blur(9px);
+  }
+
+  /* app chrome */
+  .glass {
+    background: rgba(0,0,0,0.30);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 0.5px solid rgba(255,255,255,0.13);
+  }
+
+  .chrome { position: absolute; inset: 0; display: flex; flex-direction: column; }
+
+  .topbar {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    padding: 13px 12px 0;
+    gap: 8px;
+  }
+
+  .pill {
+    font-family: var(--mono);
+    font-size: 8.5px;
+    letter-spacing: 0.06em;
+    padding: 5px 9px;
+    border-radius: 14px;
+    white-space: nowrap;
+  }
+
+  .hud {
+    display: flex;
+    align-items: stretch;
+    border-radius: 9px;
+    overflow: hidden;
+    font-family: var(--mono);
+    font-size: 10px;
+  }
+  .hud div { padding: 5px 8px; color: var(--tone-primary); }
+  .hud div + div { border-left: 0.5px solid rgba(255,255,255,0.13); }
+  .hud div.on { color: var(--ink-base); background: var(--amber); font-weight: 600; }
+
+  .rail { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
+  .knob-btn {
+    width: 27px; height: 27px;
+    border-radius: 50%;
+    display: grid; place-items: center;
+    font-family: var(--mono);
+    font-size: 7.5px;
+    font-weight: 600;
+    color: var(--tone-primary);
+  }
+  .knob-btn.amber { color: var(--amber); }
+  .knob-btn.dim { color: rgba(255,255,255,0.4); }
+
+  .histo {
+    position: absolute; left: 12px; top: 46px;
+    width: 62px; height: 26px;
+    border-radius: 5px;
+    background: rgba(0,0,0,0.3);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 0.5px solid rgba(255,255,255,0.1);
+    overflow: hidden;
+  }
+  .histo i {
+    position: absolute; bottom: 0; left: 0; right: 0; height: 100%;
+    background:
+      radial-gradient(38% 100% at 28% 100%, rgba(242,239,232,0.55), transparent 70%),
+      radial-gradient(30% 82% at 62% 100%, rgba(242,239,232,0.34), transparent 72%);
+  }
+
+  /* the deck: film knob arc, shutter, thumbnail */
+  .deck { margin-top: auto; position: relative; padding: 0 0 16px; }
+  .deck::before {
+    content: "";
+    position: absolute; left: 0; right: 0; bottom: 0; height: 190px;
+    background: linear-gradient(to bottom, transparent, rgba(0,0,0,0.68));
+    pointer-events: none;
+  }
+  .knobarc {
+    position: relative;
+    height: 54px;
+    display: flex; align-items: center; justify-content: center;
+    gap: 26px;
+  }
+  .knobarc::before {
+    content: "";
+    position: absolute; left: 50%; transform: translateX(-50%);
+    bottom: -14px;
+    width: 250px; height: 250px;
+    border-radius: 50%;
+    border: 0.5px solid rgba(255,255,255,0.11);
+  }
+  .stock {
+    width: 17px; height: 17px; border-radius: 50%;
+    position: relative;
+    box-shadow: inset 0 0 0 0.5px rgba(255,255,255,0.22);
+  }
+  .stock.sel { box-shadow: inset 0 0 0 0.5px rgba(255,255,255,0.22), 0 0 0 2.5px var(--amber); }
+
+  .deckrow {
+    position: relative;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 26px 0;
+  }
+  .shutter {
+    width: 54px; height: 54px; border-radius: 50%;
+    background: var(--tone-primary);
+    box-shadow: 0 0 0 3px rgba(242,239,232,0.24);
+  }
+  .thumb {
+    width: 31px; height: 31px; border-radius: 7px;
+    background: linear-gradient(150deg, #6d5a44, #2a221b);
+    box-shadow: inset 0 0 0 1.4px rgba(255,255,255,0.5);
+  }
+  .prolabel {
+    font-family: var(--body);
+    font-size: 11px; font-weight: 600;
+    color: var(--amber);
+    width: 31px;
+  }
+
+  /* ---------- the bloom dial: the proposal ---------- */
+
+  .bloom {
+    position: absolute;
+    left: 50%; top: 47%;
+    transform: translate(-50%, -50%);
+    width: 224px; height: 224px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+  }
+  .phone.lg .bloom { width: 268px; height: 268px; }
+
+  /* Frosted ring only — the middle stays clear so the subject is never hidden. */
+  .bloom .ring {
+    position: absolute; inset: 0;
+    border-radius: 50%;
+    background: radial-gradient(closest-side, rgba(12,11,10,0) 52%, rgba(12,11,10,0.60) 62%, rgba(12,11,10,0.74) 100%);
+    backdrop-filter: blur(9px) saturate(0.86);
+    -webkit-backdrop-filter: blur(9px) saturate(0.86);
+    -webkit-mask: radial-gradient(closest-side, transparent 50%, #000 57%);
+    mask: radial-gradient(closest-side, transparent 50%, #000 57%);
+    box-shadow:
+      inset 0 0 0 0.5px rgba(255,255,255,0.16),
+      0 18px 44px rgba(0,0,0,0.4);
+  }
+
+  /* Knurl: repeating conic stripes, masked down to the rim. Cheap and exact. */
+  .bloom .knurl {
+    position: absolute; inset: 0;
+    border-radius: 50%;
+    background: repeating-conic-gradient(
+      from 0deg,
+      rgba(255,255,255,0.20) 0deg 0.5deg,
+      rgba(255,255,255,0) 0.5deg 3deg
+    );
+    -webkit-mask: radial-gradient(closest-side, transparent 86%, #000 88%, #000 99%, transparent 100%);
+    mask: radial-gradient(closest-side, transparent 86%, #000 88%, #000 99%, transparent 100%);
+  }
+
+  .bloom .index {
+    position: absolute;
+    top: -11px; left: 50%;
+    transform: translateX(-50%);
+    width: 0; height: 0;
+    border-left: 5.5px solid transparent;
+    border-right: 5.5px solid transparent;
+    border-top: 8px solid var(--amber);
+    filter: drop-shadow(0 1px 3px rgba(0,0,0,0.6));
+  }
+
+  .engraved { position: absolute; inset: 0; }
+  .engraved b {
+    position: absolute;
+    left: 50%; top: 50%;
+    font-family: var(--mono);
+    font-weight: 500;
+    font-size: 10px;
+    color: rgba(201,194,182,0.62);
+    white-space: nowrap;
+    transform-origin: center;
+  }
+  .engraved b.cur {
+    color: var(--amber);
+    font-weight: 700;
+    font-size: 12px;
+  }
+  .engraved b.faint { color: rgba(201,194,182,0.3); }
+
+  .bloom .hub {
+    position: relative;
+    width: 47%; aspect-ratio: 1;
+    border-radius: 50%;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 2px;
+    text-align: center;
+  }
+  .bloom .hub .v {
+    font-family: var(--mono);
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    color: var(--tone-primary);
+    line-height: 1;
+  }
+  .bloom .hub .v.auto { color: var(--amber); font-size: 34px; }
+  .bloom .hub .k {
+    font-family: var(--mono);
+    font-size: 7px;
+    letter-spacing: 0.18em;
+    color: rgba(255,255,255,0.45);
+  }
+
+  /* the label that says which control is live */
+  .bloomlabel {
+    position: absolute;
+    left: 50%; transform: translateX(-50%);
+    bottom: 26%;
+    font-family: var(--mono);
+    font-size: 8px;
+    letter-spacing: 0.2em;
+    color: rgba(255,255,255,0.5);
+  }
+
+  .hint {
+    position: absolute;
+    left: 50%; transform: translateX(-50%);
+    bottom: 15.5%;
+    font-family: var(--mono);
+    font-size: 7.5px;
+    letter-spacing: 0.09em;
+    color: rgba(255,255,255,0.34);
+    white-space: nowrap;
+  }
+
+  /* ---------- mode strip (format / resolution) ---------- */
+
+  .strip {
+    position: absolute;
+    left: 10px; right: 10px; bottom: 88px;
+    border-radius: 20px;
+    padding: 13px 13px 15px;
+    display: flex; flex-direction: column; gap: 13px;
+    background: rgba(10,9,8,0.55);
+    backdrop-filter: blur(16px) saturate(0.9);
+    -webkit-backdrop-filter: blur(16px) saturate(0.9);
+    border: 0.5px solid rgba(255,255,255,0.14);
+  }
+  .strip .grp { display: flex; flex-direction: column; gap: 7px; }
+  .strip .lbl {
+    font-family: var(--mono);
+    font-size: 7.5px;
+    letter-spacing: 0.19em;
+    color: rgba(255,255,255,0.46);
+  }
+  .plates { display: flex; gap: 5px; }
+  .plate {
+    flex: 1;
+    text-align: center;
+    font-family: var(--mono);
+    font-size: 9px;
+    font-weight: 600;
+    padding: 8px 2px;
+    border-radius: 7px;
+    color: rgba(242,239,232,0.72);
+    background:
+      linear-gradient(#232326, #171719);
+    box-shadow:
+      inset 0 0.5px 0 rgba(255,255,255,0.14),
+      inset 0 -0.5px 0 rgba(0,0,0,0.6);
+  }
+  .plate.on {
+    color: var(--ink-base);
+    background: linear-gradient(var(--amber), #b9713f);
+    box-shadow: inset 0 0.5px 0 rgba(255,255,255,0.4), 0 1px 6px rgba(217,138,82,0.36);
+  }
+  .plate.off { color: rgba(242,239,232,0.28); }
+
+  .stripnote {
+    font-family: var(--mono);
+    font-size: 7px;
+    letter-spacing: 0.05em;
+    color: rgba(255,255,255,0.36);
+  }
+
+  /* ---------- annotated hero ---------- */
+
+  .hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    gap: clamp(18px, 3vw, 44px);
+    align-items: center;
+  }
+  @media (max-width: 900px) {
+    .hero { grid-template-columns: 1fr; justify-items: center; }
+    .hero .notes { max-width: 460px; }
+  }
+
+  .notes { display: flex; flex-direction: column; gap: 20px; }
+  .notes.r { text-align: right; }
+  @media (max-width: 900px) { .notes.r { text-align: left; } }
+
+  .note { display: flex; flex-direction: column; gap: 4px; }
+  .note h4 {
+    margin: 0;
+    font-family: var(--mono);
+    font-size: 9.5px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--amber);
+  }
+  .note p { margin: 0; font-size: 13.5px; color: var(--page-dim); text-wrap: pretty; }
+
+  /* ---------- contact strip ---------- */
+
+  .strip-row {
+    display: flex;
+    gap: clamp(14px, 2.4vw, 30px);
+    overflow-x: auto;
+    padding: 22px 6px 26px;
+    background: var(--page-panel);
+    border-radius: 6px;
+    border-top: 1px solid var(--page-rule);
+    border-bottom: 1px solid var(--page-rule);
+    position: relative;
+    scrollbar-width: thin;
+  }
+  /* rebate: sprocket run, small and quiet */
+  .strip-row::before, .strip-row::after {
+    content: "";
+    position: absolute; left: 0; right: 0; height: 8px;
+    background-image: repeating-linear-gradient(
+      to right,
+      var(--page-rule) 0 9px,
+      transparent 9px 20px
+    );
+    opacity: 0.6;
+    pointer-events: none;
+  }
+  .strip-row::before { top: 5px; }
+  .strip-row::after { bottom: 5px; }
+
+  .frame { display: flex; flex-direction: column; gap: 11px; align-items: center; flex: none; }
+  .frame figcaption {
+    display: flex; flex-direction: column; gap: 3px;
+    align-items: center;
+    text-align: center;
+    max-width: 286px;
+  }
+  .frame .fnum {
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.16em;
+    color: var(--amber);
+  }
+  .frame .fttl { font-size: 13.5px; font-weight: 600; }
+  .frame .fdesc { font-size: 12.5px; color: var(--page-faint); line-height: 1.45; text-wrap: pretty; }
+
+  /* ---------- spec ---------- */
+
+  .spec {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(232px, 1fr));
+    gap: 1px;
+    background: var(--page-rule);
+    border: 1px solid var(--page-rule);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .spec > div {
+    background: var(--page-panel);
+    padding: 17px 18px;
+    display: flex; flex-direction: column; gap: 5px;
+  }
+  .spec dt {
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--page-faint);
+  }
+  .spec dd {
+    margin: 0;
+    font-family: var(--mono);
+    font-size: 14px;
+    color: var(--page-text);
+    font-variant-numeric: tabular-nums;
+  }
+  .spec small { font-size: 12px; color: var(--page-dim); font-family: var(--body); line-height: 1.45; }
+
+  /* ---------- questions ---------- */
+
+  .qs { display: flex; flex-direction: column; gap: 0; border-top: 1px solid var(--page-rule); }
+  .q {
+    display: grid;
+    grid-template-columns: 30px minmax(0, 1fr);
+    gap: 16px;
+    padding: 18px 2px;
+    border-bottom: 1px solid var(--page-rule);
+    align-items: start;
+  }
+  .q .n {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--amber);
+    padding-top: 2px;
+  }
+  .q h4 { margin: 0 0 3px; font-size: 15px; font-weight: 600; }
+  .q p { margin: 0; color: var(--page-dim); font-size: 14px; max-width: var(--measure); text-wrap: pretty; }
+
+  .foot {
+    font-size: 13px;
+    color: var(--page-faint);
+    border-top: 1px solid var(--page-rule);
+    padding-top: 20px;
+    max-width: var(--measure);
+  }
+
+  /* ---------- motion ---------- */
+
+  @keyframes bloomin {
+    from { opacity: 0; transform: translate(-50%, -50%) scale(0.88); }
+    to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  }
+  .bloom { animation: bloomin 620ms cubic-bezier(0.19, 1, 0.22, 1) both; }
+  .phone.lg .bloom { animation-delay: 120ms; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .bloom { animation: none; }
+  }
+
+  a { color: var(--amber); }
+  :focus-visible { outline: 2px solid var(--amber); outline-offset: 3px; border-radius: 3px; }
+</style>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <div class="eyebrow">
+      Latitude Cam <span>/</span> Pro controls, proposed <span>/</span> 4 Aug 2026
+    </div>
+    <h1>The dial belongs <em>in the frame</em>, not on top of it.</h1>
+    <p class="standfirst">
+      Today the Pro sheet slides up and covers the picture, so every adjustment is made blind — you
+      change a stop, dismiss the sheet, then find out what it did. This proposal removes the sheet.
+      Tapping a readout blooms that one control into the middle of the viewfinder as a large
+      translucent dial: the scene stays visible through it, and the exposure changes live underneath
+      your thumb while you turn.
+    </p>
+  </header>
+
+  <hr class="rule" />
+
+  <!-- ============ HERO ============ -->
+  <section class="section">
+    <div class="section-head">
+      <h2>One control at a time, at thumb scale</h2>
+      <p>
+        Tap <span style="font-family:var(--mono);font-size:13px">1/125</span> in the readout strip and the shutter dial blooms. The strip segment
+        stays amber so it is obvious which control is live.
+      </p>
+    </div>
+
+    <div class="hero">
+      <div class="notes r">
+        <div class="note">
+          <h4>Index at twelve</h4>
+          <p>The amber mark sits outside the ring, exactly as it does on the existing top-plate dials. Values turn under it; the mark never moves.</p>
+        </div>
+        <div class="note">
+          <h4>Clear centre</h4>
+          <p>Only the rim is frosted. The middle stays transparent, so the subject is never behind glass — the point of putting the control here at all.</p>
+        </div>
+        <div class="note">
+          <h4>Live underneath</h4>
+          <p>Exposure applies as you turn, not on release. The frame you are looking at is the frame you will get.</p>
+        </div>
+      </div>
+
+      <div class="phone lg">
+        <div class="scene"></div>
+        <div class="chrome">
+          <div class="topbar">
+            <div class="pill glass">SETTINGS</div>
+            <div class="hud glass">
+              <div class="on">1/125</div>
+              <div>ISO 400</div>
+              <div>5600K</div>
+            </div>
+            <div class="rail">
+              <div class="knob-btn glass">⟲</div>
+              <div class="knob-btn glass">3:2</div>
+              <div class="knob-btn glass amber">RAW</div>
+            </div>
+          </div>
+
+          <div class="bloom">
+            <div class="ring"></div>
+            <div class="knurl"></div>
+            <div class="index"></div>
+            <!-- Only the neighbours are engraved, tilted with the plate: the real
+                 dial's engravedSweep is 50deg at a 46deg pitch. -->
+            <div class="engraved">
+              <b style="transform: translate(-50%,-50%) rotate(-46deg) translateY(-104px)">1/60</b>
+              <b class="cur" style="transform: translate(-50%,-50%) translateY(-104px)">1/125</b>
+              <b style="transform: translate(-50%,-50%) rotate(46deg) translateY(-104px)">1/250</b>
+            </div>
+            <div class="hub">
+              <div class="v">1/125</div>
+              <div class="k">SEC</div>
+            </div>
+          </div>
+
+          <div class="bloomlabel">SHUTTER</div>
+          <div class="hint">DRAG ANYWHERE TO TURN · TAP TO CLOSE</div>
+
+          <div class="deck">
+            <div class="deckrow">
+              <div class="prolabel">&nbsp;</div>
+              <div class="shutter"></div>
+              <div class="thumb"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="notes">
+        <div class="note">
+          <h4>Drag anywhere</h4>
+          <p>The whole viewfinder is the gesture surface while a dial is open — not a 132pt circle. This is the fix for the dials that will not turn today: there is no small target left to miss.</p>
+        </div>
+        <div class="note">
+          <h4>A click per stop</h4>
+          <p>One detent haptic per value, at the moment the value changes. Two soft ticks at either end of the scale, so you feel the limit instead of wondering.</p>
+        </div>
+        <div class="note">
+          <h4>Gets out of the way</h4>
+          <p>Closes on a tap, on the shutter, or on its own after four seconds idle — the way a meter times out. Never a mode you can get stuck in.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <hr class="rule" />
+
+  <!-- ============ CONTACT STRIP ============ -->
+  <section class="section">
+    <div class="section-head">
+      <h2>The four states</h2>
+      <p>Idle, a turning dial, the auto position, and the mode plates that replace the format and resolution chips.</p>
+    </div>
+
+    <div class="strip-row">
+
+      <!-- 1: idle -->
+      <figure class="frame">
+        <div class="phone">
+          <div class="scene"></div>
+          <div class="chrome">
+            <div class="topbar">
+              <div class="pill glass">SETTINGS</div>
+              <div class="hud glass">
+                <div>1/125</div><div>ISO 400</div><div>5600K</div>
+              </div>
+              <div class="rail">
+                <div class="knob-btn glass">⟲</div>
+                <div class="knob-btn glass">3:2</div>
+                <div class="knob-btn glass amber">RAW</div>
+                <div class="knob-btn glass dim">◎</div>
+              </div>
+            </div>
+            <div class="histo"><i></i></div>
+            <div class="deck">
+              <div class="knobarc">
+                <div class="stock" style="background:#8A7A63"></div>
+                <div class="stock sel" style="background:#6B6A63"></div>
+                <div class="stock" style="background:#9C3F2E"></div>
+                <div class="stock" style="background:#2B2B2B"></div>
+              </div>
+              <div class="deckrow">
+                <div class="prolabel">PRO</div>
+                <div class="shutter"></div>
+                <div class="thumb"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <figcaption>
+          <span class="fnum">01</span>
+          <span class="fttl">Idle</span>
+          <span class="fdesc">Nothing covers the picture. The flip control joins the right rail — new this build.</span>
+        </figcaption>
+      </figure>
+
+      <!-- 2: white balance turning -->
+      <figure class="frame">
+        <div class="phone">
+          <div class="scene"></div>
+          <div class="chrome">
+            <div class="topbar">
+              <div class="pill glass">SETTINGS</div>
+              <div class="hud glass">
+                <div>1/125</div><div>ISO 400</div><div class="on">5600K</div>
+              </div>
+              <div class="rail">
+                <div class="knob-btn glass">⟲</div>
+                <div class="knob-btn glass">3:2</div>
+              </div>
+            </div>
+            <div class="bloom">
+              <div class="ring"></div>
+              <div class="knurl"></div>
+              <div class="index"></div>
+              <div class="engraved">
+                <b style="transform: translate(-50%,-50%) rotate(-46deg) translateY(-86px)">5000K</b>
+                <b class="cur" style="transform: translate(-50%,-50%) translateY(-86px)">5600K</b>
+                <b style="transform: translate(-50%,-50%) rotate(46deg) translateY(-86px)">6500K</b>
+              </div>
+              <div class="hub">
+                <div class="v" style="font-size:21px">5600</div>
+                <div class="k">KELVIN</div>
+              </div>
+            </div>
+            <div class="bloomlabel">WHITE BALANCE</div>
+            <div class="deck">
+              <div class="deckrow">
+                <div class="prolabel">&nbsp;</div>
+                <div class="shutter"></div>
+                <div class="thumb"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <figcaption>
+          <span class="fnum">02</span>
+          <span class="fttl">Turning</span>
+          <span class="fdesc">Neighbours stay engraved on the rim so you can see what the next stop is before committing.</span>
+        </figcaption>
+      </figure>
+
+      <!-- 3: ISO auto -->
+      <figure class="frame">
+        <div class="phone">
+          <div class="scene"></div>
+          <div class="chrome">
+            <div class="topbar">
+              <div class="pill glass">SETTINGS</div>
+              <div class="hud glass">
+                <div>AUTO</div><div class="on">ISO A</div><div>5600K</div>
+              </div>
+              <div class="rail">
+                <div class="knob-btn glass">⟲</div>
+                <div class="knob-btn glass">3:2</div>
+              </div>
+            </div>
+            <div class="bloom">
+              <div class="ring"></div>
+              <div class="knurl"></div>
+              <div class="index"></div>
+              <div class="engraved">
+                <b class="cur" style="transform: translate(-50%,-50%) translateY(-86px)">A</b>
+                <b style="transform: translate(-50%,-50%) rotate(46deg) translateY(-86px)">50</b>
+              </div>
+              <div class="hub">
+                <div class="v auto">A</div>
+                <div class="k">AUTO</div>
+              </div>
+            </div>
+            <div class="bloomlabel">ISO</div>
+            <div class="hint">TURN RIGHT FOR 50 · 100 · 200</div>
+            <div class="deck">
+              <div class="deckrow">
+                <div class="prolabel">&nbsp;</div>
+                <div class="shutter"></div>
+                <div class="thumb"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <figcaption>
+          <span class="fnum">03</span>
+          <span class="fttl">The A stop</span>
+          <span class="fdesc">Turn past the end of the scale and the camera takes the exposure back, as on an X-series body.</span>
+        </figcaption>
+      </figure>
+
+      <!-- 4: mode plates -->
+      <figure class="frame">
+        <div class="phone">
+          <div class="scene"></div>
+          <div class="chrome">
+            <div class="topbar">
+              <div class="pill glass">SETTINGS</div>
+              <div class="hud glass">
+                <div>1/125</div><div>ISO 400</div><div>5600K</div>
+              </div>
+              <div class="rail">
+                <div class="knob-btn glass">⟲</div>
+                <div class="knob-btn glass">3:2</div>
+              </div>
+            </div>
+
+            <div class="strip">
+              <div class="grp">
+                <div class="lbl">FORMAT</div>
+                <div class="plates">
+                  <div class="plate">RAW</div>
+                  <div class="plate">JPEG</div>
+                  <div class="plate on">BOTH</div>
+                </div>
+              </div>
+              <div class="grp">
+                <div class="lbl">RESOLUTION</div>
+                <div class="plates">
+                  <div class="plate">4</div>
+                  <div class="plate">8</div>
+                  <div class="plate">12</div>
+                  <div class="plate on">FULL</div>
+                </div>
+              </div>
+              <div class="stripnote">48 MP · DNG + JPEG · ~62 MB / FRAME</div>
+            </div>
+
+            <div class="deck">
+              <div class="deckrow">
+                <div class="prolabel">&nbsp;</div>
+                <div class="shutter"></div>
+                <div class="thumb"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <figcaption>
+          <span class="fnum">04</span>
+          <span class="fttl">Mode plates</span>
+          <span class="fdesc">Format and resolution are settings, not scales — chunky plates near the shutter, showing the cost per frame.</span>
+        </figcaption>
+      </figure>
+
+    </div>
+  </section>
+
+  <hr class="rule" />
+
+  <!-- ============ SPEC ============ -->
+  <section class="section">
+    <div class="section-head">
+      <h2>What I would build to</h2>
+      <p>Numbers so the build has something to be checked against, rather than being eyeballed later.</p>
+    </div>
+
+    <dl class="spec">
+      <div>
+        <dt>Dial diameter</dt>
+        <dd>268 pt</dd>
+        <small>Twice today's 132pt, centred on the frame rather than tucked into a grid cell.</small>
+      </div>
+      <div>
+        <dt>Gesture surface</dt>
+        <dd>Full screen</dd>
+        <small>Horizontal drag anywhere turns the live dial. Nothing to aim at.</small>
+      </div>
+      <div>
+        <dt>Travel per stop</dt>
+        <dd>46 pt</dd>
+        <small>Unchanged from the current dial, which already felt right in the code review.</small>
+      </div>
+      <div>
+        <dt>Ring opacity</dt>
+        <dd>60 → 74 %</dd>
+        <small>Frosted at the rim, fully clear across the middle 50% of the diameter.</small>
+      </div>
+      <div>
+        <dt>Bloom / dismiss</dt>
+        <dd>620 / 240 ms</dd>
+        <small>Slow out, quick away. Reduced-motion cuts both to a cross-fade.</small>
+      </div>
+      <div>
+        <dt>Idle timeout</dt>
+        <dd>4.0 s</dd>
+        <small>Closes itself, like a meter going to sleep. The shutter also closes it.</small>
+      </div>
+    </dl>
+  </section>
+
+  <hr class="rule" />
+
+  <!-- ============ QUESTIONS ============ -->
+  <section class="section">
+    <div class="section-head">
+      <h2>Decisions I need from you</h2>
+      <p>Each of these changes what gets built. I have given my recommendation, but they are yours to make.</p>
+    </div>
+
+    <div class="qs">
+      <div class="q">
+        <div class="n">01</div>
+        <div>
+          <h4>Does the bottom sheet go entirely?</h4>
+          <p>This proposal deletes it. Everything that lived there becomes either a bloom dial or a mode plate. That also removes the Reset / Undo / Redo row — I would move those to Settings rather than lose them. Recommended: yes, delete it.</p>
+        </div>
+      </div>
+      <div class="q">
+        <div class="n">02</div>
+        <div>
+          <h4>Exposure compensation: fourth dial, or a strip?</h4>
+          <p>EV is the one control you often want visible while framing rather than opened. It could live as a permanent thin scale along the bottom edge instead of a dial you have to summon. Recommended: keep it a dial for now, revisit once the dials feel right.</p>
+        </div>
+      </div>
+      <div class="q">
+        <div class="n">03</div>
+        <div>
+          <h4>Vertical drag as a second axis?</h4>
+          <p>A real camera has two command dials. Horizontal could turn the open dial while vertical trims exposure at the same time. Powerful, and easy to trigger by accident. Recommended: no, not in the first pass.</p>
+        </div>
+      </div>
+      <div class="q">
+        <div class="n">04</div>
+        <div>
+          <h4>Should the film ring bloom the same way?</h4>
+          <p>The knob at the bottom already turns through the four stocks. Making it use the same bloom would be consistent, but it is the one control that genuinely wants its thumbnails visible. Recommended: leave it alone.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <p class="foot">
+    Rendered with the app's own tokens from <span style="font-family:var(--mono);font-size:12px">Theme.swift</span> — Ink, Tone, Accent, the film swatches, SF Pro and SF Mono in
+    their existing roles — so this is a proposal about behaviour and layout, not a repaint. The scene
+    behind the glass is drawn, not photographed; it is there so the transparency can be judged.
+    Nothing here is built yet.
+  </p>
+
+</div>
