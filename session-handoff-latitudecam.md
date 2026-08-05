@@ -1,8 +1,8 @@
 # Latitude Cam — Session Handoff
 
 **Date:** 5 Aug 2026
-**Branch:** `feat/camera-pipeline-dials-splash` — 32 commits, **all local, nothing pushed to `origin`**
-**Tests:** 257 passing
+**Branch:** `feat/camera-pipeline-dials-splash` — 33 commits, **all local, nothing pushed to `origin`**
+**Tests:** 260 passing
 **Device:** iPhone 17 Pro Max, UDID `854CD202-7808-597B-A70F-6A6628AED263` (build installed and current)
 
 ---
@@ -32,6 +32,8 @@
 | Gallery holds a 420pt grid copy beside the 1280pt roll copy | A 3-column cell is ~360px; downsampling a megapixel per cell per scroll tick |
 | Portrait reconfigures the photo output, on demand only | Depth delivery narrows the device format and costs resolution on every frame |
 | Portrait applies on capture, not in the preview | Live depth needs a depth stream; the matte arrives with the still |
+| Editor uses the same barrel as the camera | An editor should not be learned separately from the camera it belongs to |
+| Edit ladders have an odd stop count | Only an odd count puts a notch exactly at neutral |
 
 ## Architecture
 

@@ -20,13 +20,16 @@ struct FilmSimScreen: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
-                    BackLink(title: "Viewfinder") { app.go(.viewfinder) }
-                        .padding(.bottom, 16)
-
-                    Text("Film Sim")
-                        .font(.ui(22, .bold))
-                        .foregroundStyle(Tone.primary)
-                        .padding(.bottom, 16)
+                    ScreenHeader(
+                        title: "Film Sim",
+                        leading: AnyView(ViewfinderReturn { app.go(.viewfinder) })
+                    ) {
+                        Text(app.selectedFilm.family.uppercased())
+                            .font(.mono(9, .semibold))
+                            .kerning(1)
+                            .foregroundStyle(Accent.amber)
+                    }
+                    .padding(.bottom, 16)
 
                     LazyVGrid(columns: columns, spacing: 12) {
                         ForEach(FilmPreset.all) { preset in
@@ -130,13 +133,16 @@ struct LibraryScreen: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
-                    BackLink(title: "Viewfinder") { app.go(.viewfinder) }
-                        .padding(.bottom, 16)
-
-                    Text("Library")
-                        .font(.ui(22, .bold))
-                        .foregroundStyle(Tone.primary)
-                        .padding(.bottom, 16)
+                    ScreenHeader(
+                        title: "Library",
+                        leading: AnyView(ViewfinderReturn { app.go(.viewfinder) })
+                    ) {
+                        Text("\(app.gallery.photos.count) FRAMES")
+                            .font(.mono(9, .semibold))
+                            .kerning(1)
+                            .foregroundStyle(Tone.quaternary)
+                    }
+                    .padding(.bottom, 16)
 
                     LibraryGrid(gallery: app.gallery)
                 }
@@ -296,22 +302,23 @@ struct EditScreen: View {
 
     private var header: some View {
         HStack {
-            BackLink(title: "Library") { app.go(.library) }
-            Spacer()
-            Text("Edit")
-                .font(.ui(15, .semibold))
-                .foregroundStyle(Tone.primary)
+            ScreenReturn(title: "Library") { app.go(.library) }
             Spacer()
             Button {
-                Haptics.success()
-                save()
+                Haptics.toggle()
+                editor.reset()
             } label: {
-                Text("Save")
-                    .font(.ui(13, .semibold))
-                    .foregroundStyle(editor.canSave ? Accent.amber : Tone.quaternary)
+                Text("RESET")
+                    .font(.mono(9, .semibold))
+                    .kerning(1)
+                    .foregroundStyle(Tone.secondary)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background { Capsule().fill(Color.white.opacity(0.07)) }
+                    .contentShape(Capsule())
             }
             .buttonStyle(.plain)
-            .disabled(!editor.canSave)
+            PrimaryAction(title: "Save", enabled: editor.canSave) { save() }
         }
         .padding(.horizontal, 16)
         .padding(.top, 8)
@@ -347,6 +354,27 @@ struct EditScreen: View {
         }
     }
 
+    /// Three across, wrapping. A barrel narrower than this stops showing its
+    /// neighbours, and a barrel that shows only the current value is a label.
+    private func barrelBank(
+        _ controls: [(String, Binding<Double>, Int, (Double) -> String)]
+    ) -> some View {
+        LazyVGrid(
+            columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3),
+            spacing: 14
+        ) {
+            ForEach(Array(controls.enumerated()), id: \.offset) { _, control in
+                EditBarrel(
+                    label: control.0,
+                    position: control.1,
+                    stops: control.2,
+                    format: control.3
+                )
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
     // MARK: Tabs
 
     private var tabBar: some View {
@@ -375,95 +403,27 @@ struct EditScreen: View {
     private var panel: some View {
         switch tab {
         case "Light":
-            ScrollView(showsIndicators: false) {
-                VStack(spacing: 15) {
-                    SliderRow(
-                        label: "Exposure",
-                        value: String(format: "%+.1f EV", editor.exposureEV),
-                        position: $editor.exposure,
-                        bipolar: true
-                    )
-                    SliderRow(
-                        label: "Contrast",
-                        value: String(format: "%.2f", editor.contrastValue),
-                        position: $editor.contrast,
-                        bipolar: true
-                    )
-                    SliderRow(
-                        label: "Highlights",
-                        value: String(format: "%+.0f", editor.highlightValue * 100),
-                        position: $editor.highlights,
-                        bipolar: true
-                    )
-                    SliderRow(
-                        label: "Shadows",
-                        value: String(format: "%+.0f", editor.shadowValue * 100),
-                        position: $editor.shadows,
-                        bipolar: true
-                    )
-                    SliderRow(
-                        label: "Black Point",
-                        value: String(format: "%+.0f", editor.blackPointValue * 500),
-                        position: $editor.blackPoint,
-                        bipolar: true
-                    )
-                }
-                .padding(.bottom, 4)
-            }
-            .frame(maxHeight: 178)
+            barrelBank([
+                ("Exposure", $editor.exposure, 25, { String(format: "%+.1f", ($0 - 0.5) * 4) }),
+                ("Contrast", $editor.contrast, 21, { String(format: "%+.0f", ($0 - 0.5) * 200) }),
+                ("Highlights", $editor.highlights, 21, { String(format: "%+.0f", (0.5 - $0) * 200) }),
+                ("Shadows", $editor.shadows, 21, { String(format: "%+.0f", ($0 - 0.5) * 200) }),
+                ("Blacks", $editor.blackPoint, 21, { String(format: "%+.0f", ($0 - 0.5) * 200) })
+            ])
 
         case "Color":
-            ScrollView(showsIndicators: false) {
-                VStack(spacing: 15) {
-                    SliderRow(
-                        label: "Temperature",
-                        value: "\(Int(editor.kelvinValue))K",
-                        position: $editor.temperature,
-                        temperatureTrack: true
-                    )
-                    SliderRow(
-                        label: "Tint",
-                        value: String(format: "%+.0f", editor.tintValue),
-                        position: $editor.tint,
-                        bipolar: true
-                    )
-                    SliderRow(
-                        label: "Saturation",
-                        value: String(format: "%.2f", editor.saturationValue),
-                        position: $editor.saturation,
-                        bipolar: true
-                    )
-                    SliderRow(
-                        label: "Vibrance",
-                        value: String(format: "%+.0f", editor.vibranceValue * 100),
-                        position: $editor.vibrance,
-                        bipolar: true
-                    )
-                }
-                .padding(.bottom, 4)
-            }
-            .frame(maxHeight: 178)
+            barrelBank([
+                ("Temp", $editor.temperature, 21, { "\(Int(((3000 + $0 * 6000) / 100).rounded() * 100 / 100))" }),
+                ("Tint", $editor.tint, 21, { String(format: "%+.0f", ($0 - 0.5) * 150) }),
+                ("Saturation", $editor.saturation, 21, { String(format: "%.2f", $0 * 2) }),
+                ("Vibrance", $editor.vibrance, 21, { String(format: "%+.0f", ($0 - 0.5) * 200) })
+            ])
 
         case "Detail":
-            VStack(spacing: 15) {
-                SliderRow(
-                    label: "Structure",
-                    value: String(format: "%+.0f", editor.structureValue * 100),
-                    position: $editor.structure,
-                    bipolar: true
-                )
-                SliderRow(
-                    label: "Sharpen",
-                    value: String(format: "%.0f", max(0, editor.sharpenValue) * 100),
-                    position: $editor.sharpen,
-                    bipolar: true
-                )
-                Text("STRUCTURE WORKS ON REGIONS · SHARPEN ON EDGES")
-                    .font(.mono(7, .medium))
-                    .kerning(0.6)
-                    .foregroundStyle(Tone.quaternary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
+            barrelBank([
+                ("Structure", $editor.structure, 21, { String(format: "%+.0f", ($0 - 0.5) * 200) }),
+                ("Sharpen", $editor.sharpen, 21, { String(format: "%+.0f", ($0 - 0.5) * 200) })
+            ])
 
         case "Film":
             VStack(alignment: .leading, spacing: 16) {

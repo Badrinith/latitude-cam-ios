@@ -214,13 +214,16 @@ struct SettingsScreen: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
-                    BackLink(title: "Viewfinder") { app.go(.viewfinder) }
-                        .padding(.bottom, 16)
-
-                    Text("Settings")
-                        .font(.ui(22, .bold))
-                        .foregroundStyle(Tone.primary)
-                        .padding(.bottom, 20)
+                    ScreenHeader(
+                        title: "Settings",
+                        leading: AnyView(ViewfinderReturn { app.go(.viewfinder) })
+                    ) {
+                        Text("V1.0")
+                            .font(.mono(9, .semibold))
+                            .kerning(1)
+                            .foregroundStyle(Tone.quaternary)
+                    }
+                    .padding(.bottom, 20)
 
                     SettingsGroup(header: "Capture") {
                         OptionRow(title: "Grid & Composition",

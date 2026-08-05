@@ -918,3 +918,138 @@ struct BottomSheet<Content: View>: View {
         .ignoresSafeArea(edges: .bottom)
     }
 }
+
+// MARK: - Screen navigation
+//
+// Every screen away from the viewfinder was returning through the same bare
+// "‹ Viewfinder" in amber — correct, invisible, and identical whether you were
+// leaving Settings or abandoning an edit. These give the return a shape: an iris
+// closing back down to the finder, with the screen's own name beside it.
+
+/// Returns to the camera. The glyph is the iris from the shutter release, small
+/// and closed — going back to the viewfinder is the same idea as taking the
+/// picture, so it uses the same object.
+struct ViewfinderReturn: View {
+    var action: () -> Void
+
+    var body: some View {
+        Button {
+            Haptics.tap()
+            action()
+        } label: {
+            HStack(spacing: 6) {
+                ZStack {
+                    Circle()
+                        .strokeBorder(Accent.amber, lineWidth: 1.2)
+                        .frame(width: 15, height: 15)
+                    // Three strokes across the ring read as blades without needing
+                    // six of them at this size.
+                    ForEach(0..<3, id: \.self) { index in
+                        Capsule()
+                            .fill(Accent.amber)
+                            .frame(width: 1.2, height: 7)
+                            .offset(y: -3.4)
+                            .rotationEffect(.degrees(Double(index) * 120))
+                    }
+                }
+                Text("VIEWFINDER")
+                    .font(.mono(9, .semibold))
+                    .kerning(1.1)
+                    .foregroundStyle(Accent.amber)
+            }
+            .padding(.leading, 8)
+            .padding(.trailing, 12)
+            .padding(.vertical, 7)
+            .background {
+                Capsule().fill(Accent.amber.opacity(0.12))
+                    .overlay { Capsule().strokeBorder(Accent.amber.opacity(0.35), lineWidth: 0.5) }
+            }
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Back to viewfinder")
+    }
+}
+
+/// A plain return to another screen in the app — the library, say. Deliberately
+/// quieter than ViewfinderReturn: leaving the camera behind is the bigger move,
+/// and the two should not compete.
+struct ScreenReturn: View {
+    var title: String
+    var action: () -> Void
+
+    var body: some View {
+        Button {
+            Haptics.tap()
+            action()
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 10, weight: .bold))
+                Text(title.uppercased())
+                    .font(.mono(9, .semibold))
+                    .kerning(1)
+            }
+            .foregroundStyle(Tone.secondary)
+            .padding(.vertical, 7)
+            .padding(.trailing, 8)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+/// A committing action — Save. Filled, so it reads as the end of something
+/// rather than as one more control.
+struct PrimaryAction: View {
+    var title: String
+    var enabled: Bool = true
+    var action: () -> Void
+
+    var body: some View {
+        Button {
+            Haptics.success()
+            action()
+        } label: {
+            Text(title.uppercased())
+                .font(.mono(9.5, .bold))
+                .kerning(1.1)
+                .foregroundStyle(enabled ? Ink.base : Tone.quaternary)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 7)
+                .background {
+                    Capsule().fill(enabled ? AnyShapeStyle(Accent.amber)
+                                           : AnyShapeStyle(Color.white.opacity(0.08)))
+                }
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled)
+    }
+}
+
+/// The header every screen away from the camera shares. A serif title, because
+/// these are the reading screens — the camera is the instrument, these are the
+/// notebook.
+struct ScreenHeader<Trailing: View>: View {
+    var title: String
+    var leading: AnyView
+    @ViewBuilder var trailing: Trailing
+
+    var body: some View {
+        VStack(spacing: 10) {
+            HStack {
+                leading
+                Spacer()
+                trailing
+            }
+
+            HStack {
+                Text(title)
+                    .font(.system(size: 26, weight: .semibold, design: .serif))
+                    .foregroundStyle(Tone.primary)
+                Spacer()
+            }
+        }
+    }
+}

@@ -340,3 +340,43 @@ final class LibraryCategoryTests: XCTestCase {
         XCTAssertLessThan(PhotoGallery.gridEdge, PhotoGallery.inMemoryEdge / 2)
     }
 }
+
+// MARK: - Barrel bank
+
+@MainActor
+final class EditBarrelStopTests: XCTestCase {
+
+    /// The barrel works in stops and the editor stores 0…1, so the conversion has
+    /// to land back where it started or a control would drift every time the tab
+    /// was reopened.
+    func testStopRoundTripIsStable() {
+        for stops in [21, 25] {
+            for index in 0..<stops {
+                let position = (Double(index) + 0.5) / Double(stops)
+                let back = min(stops - 1, max(0, Int((position * Double(stops)).rounded(.down))))
+                XCTAssertEqual(back, index, "stop \(index) of \(stops) did not survive")
+            }
+        }
+    }
+
+    /// An odd number of stops is what puts a stop exactly at centre. With an even
+    /// count there is no neutral position at all, and every control would sit
+    /// fractionally off no matter where it was left.
+    func testOddStopCountsPutANotchAtNeutral() {
+        for stops in [21, 25] {
+            XCTAssertEqual(stops % 2, 1)
+            let middle = stops / 2
+            let position = (Double(middle) + 0.5) / Double(stops)
+            XCTAssertEqual(position, 0.5, accuracy: 0.0001)
+        }
+    }
+
+    func testCentreStopReadsAsNoChange() {
+        let e = PhotoEditor()
+        // 0.5 is the centre stop of an odd ladder, and every formatter should
+        // report nothing happening there.
+        XCTAssertEqual(String(format: "%+.1f", (e.exposure - 0.5) * 4), "+0.0")
+        XCTAssertEqual(String(format: "%+.0f", (e.contrast - 0.5) * 200), "+0")
+        XCTAssertEqual(String(format: "%+.0f", (0.5 - e.highlights) * 200), "+0")
+    }
+}

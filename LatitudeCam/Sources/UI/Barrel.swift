@@ -641,3 +641,67 @@ struct LensBarrel: View {
         }
     }
 }
+
+// MARK: - Edit barrel
+//
+// The editor's control, and deliberately the camera's control at a smaller size.
+// Every other direction considered introduced a widget the app does not otherwise
+// have; an editor should not have to be learned separately from the camera it
+// belongs to, so this is the same drag, the same detent and the same haptic as
+// the shutter and film barrels.
+//
+// Barrels engrave values, not names, which is the honest weakness of the choice —
+// so the label sits above each one and the group heading carries the rest.
+
+struct EditBarrel: View {
+    var label: String
+    /// 0…1, matching the editor's storage. The barrel works in stops, so the two
+    /// are converted at the boundary rather than the editor changing shape.
+    @Binding var position: Double
+    var stops: Int = 21
+    /// Turns a 0…1 position into what is engraved on the barrel.
+    var format: (Double) -> String
+
+    private var index: Binding<Int> {
+        Binding(
+            get: { min(stops - 1, max(0, Int((position * Double(stops)).rounded(.down)))) },
+            set: { position = (Double(min(max($0, 0), stops - 1)) + 0.5) / Double(stops) }
+        )
+    }
+
+    private var engraved: [String] {
+        (0..<stops).map { format((Double($0) + 0.5) / Double(stops)) }
+    }
+
+    /// A control at its centre stop is doing nothing, and should look like it.
+    private var isNeutral: Bool { abs(position - 0.5) < (0.5 / Double(stops)) }
+
+    var body: some View {
+        VStack(spacing: 4) {
+            HStack(spacing: 4) {
+                Text(label.uppercased())
+                    .font(.mono(7, .semibold))
+                    .kerning(0.7)
+                    .foregroundStyle(isNeutral ? Tone.quaternary : Accent.amber)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                Spacer(minLength: 0)
+            }
+
+            Barrel(
+                values: engraved,
+                index: index,
+                height: 34,
+                pitch: 52,
+                pointsPerStop: 34,
+                radius: 7
+            )
+            .overlay(alignment: .top) {
+                Triangle()
+                    .fill(isNeutral ? Tone.quaternary : Accent.amber)
+                    .frame(width: 6, height: 4)
+                    .offset(y: -2.5)
+            }
+        }
+    }
+}
