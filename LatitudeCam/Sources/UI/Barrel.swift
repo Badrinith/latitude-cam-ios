@@ -680,8 +680,8 @@ struct EditBarrel: View {
         VStack(spacing: 4) {
             HStack(spacing: 4) {
                 Text(label.uppercased())
-                    .font(.mono(7, .semibold))
-                    .kerning(0.7)
+                    .font(.mono(8, .semibold))
+                    .kerning(0.9)
                     .foregroundStyle(isNeutral ? Tone.quaternary : Accent.amber)
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
@@ -691,16 +691,19 @@ struct EditBarrel: View {
             Barrel(
                 values: engraved,
                 index: index,
-                height: 34,
-                pitch: 52,
-                pointsPerStop: 34,
-                radius: 7
+                height: 40,
+                // Wider now the barrel spans the screen: at 52 the values crowded
+                // each other, and the whole point of the extra width is being able
+                // to read the stops either side of the one you are on.
+                pitch: 78,
+                pointsPerStop: 40,
+                radius: 8
             )
             .overlay(alignment: .top) {
                 Triangle()
                     .fill(isNeutral ? Tone.quaternary : Accent.amber)
-                    .frame(width: 6, height: 4)
-                    .offset(y: -2.5)
+                    .frame(width: 7, height: 4.5)
+                    .offset(y: -3)
             }
         }
     }

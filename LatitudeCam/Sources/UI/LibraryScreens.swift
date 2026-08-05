@@ -283,16 +283,23 @@ struct EditScreen: View {
             VStack(spacing: 0) {
                 header
 
+                // Capped rather than flexible: the picture has to stay the
+                // largest thing on screen, but not at the price of the controls
+                // being a strip along the bottom.
                 preview
+                    .frame(maxHeight: 248)
                     .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                    .padding(16)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 12)
 
                 tabBar
-                    .padding(.bottom, 14)
+                    .padding(.vertical, 12)
 
-                panel
-                    .padding(.horizontal, 22)
-                    .padding(.bottom, 28)
+                ScrollView(showsIndicators: false) {
+                    panel
+                        .padding(.horizontal, 18)
+                        .padding(.bottom, 30)
+                }
             }
         }
         .onAppear { editor.load(app.editingPhoto) }
@@ -354,15 +361,14 @@ struct EditScreen: View {
         }
     }
 
-    /// Three across, wrapping. A barrel narrower than this stops showing its
-    /// neighbours, and a barrel that shows only the current value is a label.
+    /// One per row, the full width of the screen. Three across left each barrel
+    /// about 100pt wide, which is barely two stops — a barrel showing only its
+    /// current value is a label with knurling on it. Full width shows five or six,
+    /// which is what makes the scale readable while you are turning it.
     private func barrelBank(
         _ controls: [(String, Binding<Double>, Int, (Double) -> String)]
     ) -> some View {
-        LazyVGrid(
-            columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3),
-            spacing: 14
-        ) {
+        VStack(spacing: 13) {
             ForEach(Array(controls.enumerated()), id: \.offset) { _, control in
                 EditBarrel(
                     label: control.0,
