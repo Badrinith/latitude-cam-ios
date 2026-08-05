@@ -522,3 +522,31 @@ final class FilmKnobGeometryTests: XCTestCase {
         XCTAssertEqual(apex.y, hub.y - 116, accuracy: 0.001)
     }
 }
+
+// MARK: - Deck geometry
+
+@MainActor
+final class ViewfinderBandTests: XCTestCase {
+
+    /// The band that holds the pro cluster has to be at least as tall as the
+    /// cluster gets when open. A SwiftUI frame does not clip, so when it was not,
+    /// the open cluster was drawn and touched over the shutter row below — the
+    /// controls there stopped responding and nothing about the layout looked
+    /// wrong, which is the worst way for a bug to present.
+    func testClusterBandHoldsTheClusterWhenOpen() {
+        XCTAssertGreaterThanOrEqual(
+            ViewfinderScreen.clusterBandHeight,
+            BarrelCluster.expandedHeight,
+            "the open cluster would overhang the shutter row"
+        )
+    }
+
+    /// Some clearance, not merely equality — the two rows of chips sit at the
+    /// bottom of the band and should not touch the release.
+    func testBandLeavesClearanceAboveTheRelease() {
+        XCTAssertGreaterThanOrEqual(
+            ViewfinderScreen.clusterBandHeight - BarrelCluster.expandedHeight,
+            12
+        )
+    }
+}

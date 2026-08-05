@@ -350,6 +350,16 @@ struct FilmTwoTier: View {
 // a barrel at thumb height. Nothing ever occupies the middle of the frame.
 
 struct BarrelCluster: View {
+
+    /// The tallest the cluster gets: one open barrel with its label, above two
+    /// rows of chips, plus the spacing between them.
+    ///
+    /// The viewfinder sizes its band from this rather than from a number typed
+    /// beside it. When the two disagreed the open cluster was drawn — and touched
+    /// — over the shutter row below, so controls down there stopped responding
+    /// while nothing looked wrong: a SwiftUI frame does not clip what overflows it.
+    static let expandedHeight: CGFloat = 150
+
     @EnvironmentObject var app: AppState
 
     /// nil while collapsed.

@@ -321,6 +321,17 @@ struct ViewfinderScreen: View {
     /// five unrelated decisions.
     private var controlRow: some View {
         HStack(spacing: 8) {
+            Button { app.flipCamera() } label: {
+                optionLabel {
+                    Image(systemName: "arrow.triangle.2.circlepath.camera")
+                        .font(.system(size: 19, weight: .medium))
+                        .foregroundStyle(app.usingFrontCamera ? Accent.amber : Tone.primary)
+                        .rotationEffect(orientation.angle)
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Switch camera")
+
             Button { app.go(.settings) } label: {
                 optionLabel {
                     Image(systemName: "gearshape")
@@ -371,7 +382,13 @@ struct ViewfinderScreen: View {
     /// lettering alone was not enough — a barrel you drag sideways is the wrong
     /// shape entirely once sideways has become up. The release does not move; a
     /// shutter you have to hunt for is worse than one held at an odd angle.
-    private static let clusterBand: CGFloat = 118
+    /// Taken from the cluster itself, not guessed alongside it. At 118 the open
+    /// cluster overflowed its band and was drawn — and touched — over the shutter
+    /// row beneath, so controls there stopped responding while nothing looked
+    /// wrong. A frame does not clip what overflows it.
+    private static let clusterBand: CGFloat = BarrelCluster.expandedHeight + 18
+    /// Exposed so the relationship above can be asserted rather than eyeballed.
+    static var clusterBandHeight: CGFloat { clusterBand }
     private static let filmBand: CGFloat = 106
     private static let shutterBand: CGFloat = 80
     private static let bandInset: CGFloat = 12
@@ -475,30 +492,6 @@ struct ViewfinderScreen: View {
                 }
                 .buttonStyle(.plain)
 
-                // Beside the roll and within reach of the thumb already resting
-                // near the release. Turning the camera round is something you do
-                // between frames, not while setting one up — it belongs down here
-                // with the shutter rather than up with the instruments.
-                Button { app.flipCamera() } label: {
-                    Image(systemName: "arrow.triangle.2.circlepath.camera")
-                        .font(.system(size: 15, weight: .medium))
-                        .foregroundStyle(app.usingFrontCamera ? Ink.base : Tone.primary)
-                        .rotationEffect(orientation.angle)
-                        .frame(width: 36, height: 36)
-                        .background {
-                            if app.usingFrontCamera {
-                                Circle().fill(Accent.amber)
-                            } else {
-                                Circle().fill(.ultraThinMaterial)
-                                    .overlay { Circle().fill(Color.black.opacity(0.2)) }
-                                    .overlay { Circle().strokeBorder(Tone.hairline, lineWidth: 0.5) }
-                            }
-                        }
-                        .contentShape(Circle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Switch camera")
-
                 proButton
 
                 Spacer(minLength: 0)
@@ -521,11 +514,11 @@ struct ViewfinderScreen: View {
             }
         } label: {
             Text("PRO")
-                .font(.mono(11, .bold))
-                .kerning(0.8)
+                .font(.mono(13, .bold))
+                .kerning(0.9)
                 .foregroundStyle(app.proMode ? Ink.base : Tone.secondary)
                 .rotationEffect(orientation.angle)
-                .frame(width: 40, height: 28)
+                .frame(width: 52, height: 36)
                 .background {
                     if app.proMode {
                         Capsule().fill(Accent.amber)
