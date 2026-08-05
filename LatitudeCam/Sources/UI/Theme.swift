@@ -426,16 +426,24 @@ final class AppState: ObservableObject {
 
         // cropping() on a CGImage is a reference, not a copy — cheap enough for
         // the main queue, unlike the encode below.
-        let frame = still.image?.centerCropped(toHeightOverWidth: Pref.aspectRatio(aspect))
-        if let frame {
-            capturedImage = frame
+        // Falling back to the preview frame keeps the shot in the roll when the
+        // full-resolution develop fails; an empty grid was the worse outcome.
+        let full = (still.image ?? cameraManager.capturePhoto())?
+            .centerCropped(toHeightOverWidth: Pref.aspectRatio(aspect))
+
+        if let full {
+            capturedImage = full
+            // The roll is a contact sheet and holds a display-sized copy. The
+            // masters go to Apple Photos and to the DNG folder — keeping 48MP
+            // frames in the photos array is what exhausted memory and emptied it.
             savedPhotoID = gallery.addPhoto(
-                frame,
+                PhotoGallery.downscaled(full, maxEdge: PhotoGallery.inMemoryEdge),
                 filmID: selectedFilm.id,
                 iso: isoValue,
                 shutterDenominator: shutterValue
             )
         }
+        let frame = full
 
         let megapixels = Double(still.pixelWidth * still.pixelHeight) / 1_000_000
         let sizeLabel = megapixels >= 1 ? String(format: "%.0fMP", megapixels.rounded()) : ""

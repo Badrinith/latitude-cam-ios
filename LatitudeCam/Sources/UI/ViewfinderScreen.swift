@@ -287,33 +287,16 @@ struct ViewfinderScreen: View {
         .overlay(alignment: .bottom) { deck }
     }
 
-    /// The knob and the shutter share one region, so the thumb turns the roll and
-    /// lands on the release without repositioning.
+    /// Everything a thumb needs, stacked in the band below the picture: the pro
+    /// barrels, the release, then the film barrel. Nothing sits over the frame —
+    /// the knob this replaces occupied the lower 340pt of every shot.
     private var deck: some View {
-        ZStack(alignment: .bottom) {
-            LinearGradient(
-                colors: [.clear, Color.black.opacity(0.66)],
-                startPoint: .top, endPoint: .bottom
-            )
-            .frame(height: 340)
-            .allowsHitTesting(false)
-
-            FilmKnob(
-                presets: FilmPreset.all,
-                selection: $app.selectedFilm,
-                previews: app.cameraManager.filmPreviews,
-                counts: app.frameCounts,
-                onOpenDetail: { app.go(.filmSim) }
-            )
-            .frame(height: 340)
+        VStack(spacing: 0) {
+            BarrelCluster()
+                .padding(.bottom, 12)
 
             HStack {
-                Button { app.proSheetOpen = true } label: {
-                    Text("PRO")
-                        .font(.ui(13, .semibold))
-                        .foregroundStyle(Accent.amber)
-                }
-                .buttonStyle(.plain)
+                Color.clear.frame(width: 34, height: 34)
 
                 Spacer()
 
@@ -327,8 +310,20 @@ struct ViewfinderScreen: View {
                 .buttonStyle(.plain)
             }
             .padding(.horizontal, 30)
-            .padding(.bottom, 22)   // FilmKnob.hubFromBottom assumes 22 + 37
 
+            FilmBarrel(
+                selection: $app.selectedFilm,
+                onOpenDetail: { app.go(.filmSim) }
+            )
+            .padding(.top, 14)
+        }
+        .padding(.bottom, 18)
+        .background {
+            LinearGradient(
+                colors: [.clear, Color.black.opacity(0.72)],
+                startPoint: .top, endPoint: .bottom
+            )
+            .allowsHitTesting(false)
         }
     }
 

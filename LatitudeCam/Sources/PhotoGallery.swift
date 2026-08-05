@@ -7,6 +7,7 @@
 
 import Foundation
 import UIKit
+import ImageIO
 
 public final class PhotoGallery: ObservableObject {
 
@@ -81,6 +82,46 @@ public final class PhotoGallery: ObservableObject {
 
     // MARK: - Disk
 
+    /// The longest edge kept in memory. The roll is a contact sheet — the masters
+    /// live on disk and in Apple Photos. Holding full 48MP frames here cost about
+    /// 190MB each, which is what emptied the grid: a few shots in, allocations
+    /// started failing and later captures had nothing left to render into.
+    static let inMemoryEdge: CGFloat = 2048
+
+    /// Decoded straight to the size we need. UIImage(contentsOfFile:) would
+    /// materialise the whole frame first, which is the cost being avoided.
+    static func thumbnail(at url: URL, maxEdge: CGFloat) -> UIImage? {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxEdge
+        ]
+        guard let cg = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
+            return nil
+        }
+        return UIImage(cgImage: cg)
+    }
+
+    /// Fits an image inside `maxEdge` without going through a file.
+    static func downscaled(_ image: UIImage, maxEdge: CGFloat) -> UIImage {
+        guard let cg = image.cgImage else { return image }
+        let longest = CGFloat(max(cg.width, cg.height))
+        guard longest > maxEdge else { return image }
+
+        let scale = maxEdge / longest
+        let size = CGSize(
+            width: (CGFloat(cg.width) * scale).rounded(),
+            height: (CGFloat(cg.height) * scale).rounded()
+        )
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = 1
+        format.opaque = true
+        return UIGraphicsImageRenderer(size: size, format: format).image { _ in
+            image.draw(in: CGRect(origin: .zero, size: size))
+        }
+    }
+
     private func loadPhotos() {
         let urls = (try? fileManager.contentsOfDirectory(
             at: galleryDirectory(), includingPropertiesForKeys: nil
@@ -89,7 +130,7 @@ public final class PhotoGallery: ObservableObject {
         let loaded: [Photo] = urls
             .filter { $0.pathExtension.lowercased() == "jpg" }
             .compactMap { url in
-                guard let image = UIImage(contentsOfFile: url.path) else { return nil }
+                guard let image = Self.thumbnail(at: url, maxEdge: Self.inMemoryEdge) else { return nil }
                 let id = url.deletingPathExtension().lastPathComponent
                 let meta = Self.parseID(id)
                 return Photo(
