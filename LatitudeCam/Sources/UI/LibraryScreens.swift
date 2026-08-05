@@ -280,25 +280,32 @@ struct EditScreen: View {
         ZStack {
             Ink.base.ignoresSafeArea()
 
-            VStack(spacing: 0) {
-                header
+            GeometryReader { geo in
+                VStack(spacing: 0) {
+                    header
 
-                // Capped rather than flexible: the picture has to stay the
-                // largest thing on screen, but not at the price of the controls
-                // being a strip along the bottom.
-                preview
-                    .frame(maxHeight: 248)
-                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                    .padding(.horizontal, 16)
-                    .padding(.top, 12)
+                    // The picture takes whatever the controls do not. Capping the
+                    // preview instead left it small on every screen size; bounding
+                    // the controls means the photograph grows with the phone,
+                    // which is the right way round for a thing you are looking at.
+                    preview
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .padding(.horizontal, 16)
+                        .padding(.top, 12)
 
-                tabBar
-                    .padding(.vertical, 12)
+                    tabBar
+                        .padding(.vertical, 12)
 
-                ScrollView(showsIndicators: false) {
-                    panel
-                        .padding(.horizontal, 18)
-                        .padding(.bottom, 30)
+                    // Under a third of the screen, whatever the group holds. Five
+                    // barrels do not fit that and are not meant to — the scroll is
+                    // the mechanism, not a fallback.
+                    ScrollView(showsIndicators: false) {
+                        panel
+                            .padding(.horizontal, 18)
+                            .padding(.bottom, 24)
+                    }
+                    .frame(height: geo.size.height * 0.30)
                 }
             }
         }
