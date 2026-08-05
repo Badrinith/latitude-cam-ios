@@ -12,6 +12,49 @@
 //
 
 import SwiftUI
+import UIKit
+
+// MARK: - Orientation
+//
+// The app is locked to portrait, as a camera should be — the picture must not
+// reflow because the body turned. But once the body is sideways every readout is
+// sideways too, so the glyphs counter-rotate in place. This is what a camera does
+// with the icons in its finder, and it is the whole of "landscape support" for a
+// screen that is otherwise a live image.
+
+final class DeviceOrientation: ObservableObject {
+    @Published private(set) var angle: Angle = .zero
+
+    private var token: NSObjectProtocol?
+
+    init() {
+        UIDevice.current.beginGeneratingDeviceOrientationNotifications()
+        token = NotificationCenter.default.addObserver(
+            forName: UIDevice.orientationDidChangeNotification,
+            object: nil, queue: .main
+        ) { [weak self] _ in self?.update() }
+        update()
+    }
+
+    deinit {
+        if let token { NotificationCenter.default.removeObserver(token) }
+        UIDevice.current.endGeneratingDeviceOrientationNotifications()
+    }
+
+    private func update() {
+        let next: Angle
+        switch UIDevice.current.orientation {
+        case .landscapeLeft:  next = .degrees(90)
+        case .landscapeRight: next = .degrees(-90)
+        case .portrait:       next = .zero
+        // faceUp, faceDown, upside-down and unknown all keep the last good angle
+        // rather than snapping upright on a table.
+        default:              return
+        }
+        guard next != angle else { return }
+        withAnimation(.spring(response: 0.42, dampingFraction: 0.78)) { angle = next }
+    }
+}
 
 // MARK: - The barrel
 
@@ -27,6 +70,12 @@ struct Barrel: View {
     /// engraving can be spaced for legibility and the turn tuned for feel.
     var pointsPerStop: CGFloat = 52
     var radius: CGFloat = 10
+    /// One colour per value, when the values name something that has a colour.
+    /// The film barrel uses the stock swatches so the engraving shows what the
+    /// frame will look like, not just what it is called.
+    var tints: [Color]?
+    /// Counter-rotation that keeps the engraving upright when the body is turned.
+    var glyphRotation: Angle = .zero
 
     @State private var dragStart: Int?
     @State private var lastEndTick = Date.distantPast
@@ -106,6 +155,7 @@ struct Barrel: View {
                         .font(.mono(slot == clamped ? 15 : 12, slot == clamped ? .bold : .medium))
                         .foregroundStyle(engravingColour(slot))
                         .shadow(color: .black.opacity(0.6), radius: 1, y: 0.5)
+                        .rotationEffect(glyphRotation)
                         .frame(width: pitch)
                 }
             }
@@ -118,6 +168,11 @@ struct Barrel: View {
     }
 
     private func engravingColour(_ slot: Int) -> Color {
+        // A tinted scale keeps its own colours; the live one simply burns brighter
+        // than its neighbours rather than turning into the accent.
+        if let tints, tints.indices.contains(slot) {
+            return slot == clamped ? tints[slot] : tints[slot].opacity(0.42)
+        }
         if slot == clamped { return isAuto ? Accent.amber : Tone.primary }
         if hasAuto && slot == 0 { return Tone.secondary }
         return Color(hex: 0xC9C2B6).opacity(0.5)
@@ -191,6 +246,8 @@ struct FilmBarrel: View {
     var presets: [FilmPreset] = FilmPreset.all
     var onOpenDetail: () -> Void
 
+    @StateObject private var orientation = DeviceOrientation()
+
     private var index: Binding<Int> {
         Binding(
             get: { presets.firstIndex(of: selection) ?? 0 },
@@ -205,7 +262,11 @@ struct FilmBarrel: View {
                 index: index,
                 height: 44,
                 pitch: 96,
-                radius: 9
+                radius: 9,
+                // Each stock engraved in its own colour, so the barrel shows what
+                // the frame will look like rather than only what it is called.
+                tints: presets.map(\.engraved),
+                glyphRotation: orientation.angle
             )
             .overlay(alignment: .top) {
                 Triangle()
@@ -217,7 +278,7 @@ struct FilmBarrel: View {
             // The swatch is the one thing the engraving cannot say.
             HStack(spacing: 6) {
                 Circle()
-                    .fill(selection.swatch)
+                    .fill(selection.engraved)
                     .frame(width: 7, height: 7)
                     .overlay { Circle().strokeBorder(Color.white.opacity(0.25), lineWidth: 0.5) }
                 Text(selection.blurb.uppercased())
@@ -225,6 +286,7 @@ struct FilmBarrel: View {
                     .kerning(0.8)
                     .foregroundStyle(Tone.quaternary)
             }
+            .rotationEffect(orientation.angle)
             .contentShape(Rectangle())
             .onTapGesture {
                 Haptics.tap()
@@ -246,6 +308,8 @@ struct BarrelCluster: View {
     /// nil while collapsed.
     @State private var focus: String?
     @State private var idle: Task<Void, Never>?
+
+    @StateObject private var orientation = DeviceOrientation()
 
     private struct Control: Identifiable {
         let id: String
@@ -276,9 +340,7 @@ struct BarrelCluster: View {
         .padding(.horizontal, 18)
         .animation(.spring(response: 0.34, dampingFraction: 0.84), value: focus)
         // A capture closes the cluster: the shot is taken, the adjustment is done.
-        .onChange(of: app.lastSaveMessage) { _, message in
-            if message != nil { collapse() }
-        }
+        .onChange(of: app.captureTick) { _, _ in collapse() }
         .onDisappear { idle?.cancel() }
     }
 
@@ -292,10 +354,12 @@ struct BarrelCluster: View {
                     .font(.mono(7.5, .semibold))
                     .kerning(1.6)
                     .foregroundStyle(Tone.quaternary)
+                    .rotationEffect(orientation.angle)
                 Spacer()
                 Text(control.chip)
                     .font(.mono(11, .bold))
                     .foregroundStyle(Accent.amber)
+                    .rotationEffect(orientation.angle)
             }
             .padding(.horizontal, 2)
 
@@ -318,23 +382,27 @@ struct BarrelCluster: View {
             Barrel(
                 values: AppState.shutterLabels,
                 index: binding(get: { app.shutterIndex }, set: { app.shutterIndex = $0 }),
-                hasAuto: true
+                hasAuto: true,
+                glyphRotation: orientation.angle
             )
         case "iso":
             Barrel(
                 values: AppState.isoLabels,
                 index: binding(get: { app.isoIndex }, set: { app.isoIndex = $0 }),
-                hasAuto: true
+                hasAuto: true,
+                glyphRotation: orientation.angle
             )
         case "wb":
             Barrel(
                 values: AppState.whiteBalanceLabels,
-                index: binding(get: { app.whiteBalanceIndex }, set: { app.whiteBalanceIndex = $0 })
+                index: binding(get: { app.whiteBalanceIndex }, set: { app.whiteBalanceIndex = $0 }),
+                glyphRotation: orientation.angle
             )
         default:
             Barrel(
                 values: AppState.exposureLabels,
-                index: binding(get: { app.exposureIndex }, set: { app.exposureIndex = $0 })
+                index: binding(get: { app.exposureIndex }, set: { app.exposureIndex = $0 }),
+                glyphRotation: orientation.angle
             )
         }
     }
@@ -358,6 +426,7 @@ struct BarrelCluster: View {
                         .foregroundStyle(focus == control.id ? Ink.base : Tone.primary)
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
+                        .rotationEffect(orientation.angle)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 6)
                         .frame(maxWidth: .infinity)

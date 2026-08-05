@@ -108,6 +108,9 @@ public final class CameraManager: NSObject, ObservableObject {
         return _settings
     }
 
+    /// Drives the render-side mirror. Read on the camera queue, written there too.
+    private(set) var isFrontCamera = false
+
     /// True once the device accepted custom exposure, so the render pipeline
     /// stops simulating ISO/shutter and only applies EV compensation.
     private var usingDeviceExposure = false
@@ -222,17 +225,33 @@ public final class CameraManager: NSObject, ObservableObject {
         }
     }
 
-    /// Portrait, and mirrored for the front camera. A selfie preview that is not
-    /// mirrored reads as someone else's face — every phone camera mirrors it.
-    private func orient(_ connection: AVCaptureConnection?, mirrored: Bool) {
+    /// Portrait, and never mirrored on the connection.
+    ///
+    /// Connection mirroring is applied in the connection's own coordinate space,
+    /// which already carries the 90° portrait rotation — so asking for a
+    /// left-right mirror there produced a vertical flip, and the selfie preview
+    /// came out upside down. The mirror is done in the render pipeline instead,
+    /// where the axes are the ones on screen.
+    private func orient(_ connection: AVCaptureConnection?) {
         guard let connection else { return }
         if connection.isVideoRotationAngleSupported(90) {
             connection.videoRotationAngle = 90
         }
         if connection.isVideoMirroringSupported {
             connection.automaticallyAdjustsVideoMirroring = false
-            connection.isVideoMirrored = mirrored
+            connection.isVideoMirrored = false
         }
+    }
+
+    /// Flips the frame about its own vertical centre for the front camera. An
+    /// unmirrored selfie preview reads as someone else's face.
+    func mirroredForFrontCamera(_ image: CIImage) -> CIImage {
+        guard isFrontCamera else { return image }
+        let extent = image.extent
+        let flip = CGAffineTransform(translationX: extent.midX, y: 0)
+            .scaledBy(x: -1, y: 1)
+            .translatedBy(x: -extent.midX, y: 0)
+        return image.transformed(by: flip)
     }
 
     /// Swap between the front and back cameras, reporting the position actually in
@@ -269,13 +288,13 @@ public final class CameraManager: NSObject, ObservableObject {
             }
             // Connections are rebuilt with the input, so rotation and mirroring
             // have to be set again on both outputs.
-            let mirrored = target == .front
-            self.orient(self.videoOutput?.connection(with: .video), mirrored: mirrored)
-            self.orient(self.photoOutput?.connection(with: .video), mirrored: mirrored)
+            self.orient(self.videoOutput?.connection(with: .video))
+            self.orient(self.photoOutput?.connection(with: .video))
 
             session.commitConfiguration()
 
             self.videoDevice = next
+            self.isFrontCamera = target == .front
             self.applyDeviceExposure(self.settings)
             DispatchQueue.main.async { completion(target) }
         }
@@ -340,8 +359,8 @@ public final class CameraManager: NSObject, ObservableObject {
         session.addOutput(photoOutput)
         configurePhotoOutput(photoOutput, for: camera)
 
-        orient(output.connection(with: .video), mirrored: false)
-        orient(photoOutput.connection(with: .video), mirrored: false)
+        orient(output.connection(with: .video))
+        orient(photoOutput.connection(with: .video))
 
         session.commitConfiguration()
 
@@ -499,7 +518,8 @@ public final class CameraManager: NSObject, ObservableObject {
 
                 // Develop the full-resolution frame through the same pipeline the
                 // viewfinder uses, so the saved photo matches what was framed.
-                if let processed, let source = CIImage(data: processed) {
+                if let processed, let decoded = CIImage(data: processed) {
+                    let source = self.mirroredForFrontCamera(decoded)
                     let rendered = self.render(source, with: renderSettings)
                     if let cg = self.ciContext.createCGImage(rendered, from: source.extent) {
                         result.image = UIImage(cgImage: cg)
@@ -629,7 +649,7 @@ extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate {
 
         guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
 
-        let source = CIImage(cvImageBuffer: pixelBuffer)
+        let source = mirroredForFrontCamera(CIImage(cvImageBuffer: pixelBuffer))
         let rendered = render(source, with: settings)
 
         guard let cgImage = ciContext.createCGImage(rendered, from: source.extent) else { return }

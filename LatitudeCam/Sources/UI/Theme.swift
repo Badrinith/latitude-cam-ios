@@ -85,6 +85,19 @@ struct FilmPreset: Identifiable, Hashable {
 
     /// Short label used on the viewfinder filmstrip.
     var shortName: String { name.split(separator: " ").first.map(String.init) ?? name }
+
+    /// The engraving colour on the film barrel. `swatch` is chosen to sit on a
+    /// dark card and Mono in particular disappears against milled metal, so these
+    /// are the same hues lifted until they read — the barrel is meant to show
+    /// what the frame will look like, which it cannot do if a stock is invisible.
+    var engraved: Color {
+        switch id {
+        case "amber": return Color(hex: 0xE3BA83)
+        case "slate": return Color(hex: 0xA6B2B6)
+        case "rust":  return Color(hex: 0xDE7455)
+        default:      return Color(hex: 0xE9E7E2)   // mono
+        }
+    }
 }
 
 // MARK: - Image helpers
@@ -218,8 +231,11 @@ final class AppState: ObservableObject {
     @Published var editingPhoto: PhotoGallery.Photo?
     /// The roll entry the shutter just wrote, so Review can take it back.
     private var savedPhotoID: String?
-    /// Briefly set after a save so the viewfinder can confirm the shot landed.
+    /// Briefly set when something goes wrong. Successful captures say nothing.
     @Published var lastSaveMessage: String?
+    /// Bumped on every release. The pro cluster watches this to close itself,
+    /// which it used to do by watching the save banner that no longer exists.
+    @Published private(set) var captureTick = 0
 
     // Every control below feeds the render pipeline, so each one syncs on write.
     @Published var selectedFilm: FilmPreset = FilmPreset.all[0] { didSet { syncCamera() } }
@@ -398,6 +414,8 @@ final class AppState: ObservableObject {
         let wantsRAW = format != "JPEG Only"
         let wantsProcessed = format != "RAW Only"
 
+        captureTick &+= 1
+
         cameraManager.captureStill(
             wantsRAW: wantsRAW,
             wantsProcessed: wantsProcessed,
@@ -445,15 +463,10 @@ final class AppState: ObservableObject {
         }
         let frame = full
 
-        let megapixels = Double(still.pixelWidth * still.pixelHeight) / 1_000_000
-        let sizeLabel = megapixels >= 1 ? String(format: "%.0fMP", megapixels.rounded()) : ""
-        let landed = still.raw != nil && frame != nil ? "RAW+JPEG"
-            : still.raw != nil ? "RAW" : "JPEG"
-        lastSaveMessage = still.rawUnavailable
-            ? "✓ JPEG \(sizeLabel) — RAW unsupported"
-            : "✓ \(landed) \(sizeLabel)"
-        clearMessageSoon()
-
+        // No confirmation banner. The shutter's sound and haptic already say the
+        // frame was taken, and the thumbnail updating says where it went — a
+        // caption naming the file format was reporting plumbing, not news.
+        // Failures still speak up, below.
         let mirrorEnabled = UserDefaults.standard.object(forKey: Pref.mirrorToPhotos) as? Bool ?? true
 
         exportQueue.async { [weak self] in
