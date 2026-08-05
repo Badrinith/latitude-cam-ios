@@ -148,3 +148,52 @@ final class HistogramSamplingTests: XCTestCase {
         XCTAssertEqual(sampler.data.brightness, 0)
     }
 }
+
+// MARK: - Shutter meter
+
+final class ExposureDeviationTests: XCTestCase {
+
+    private func data(brightness: Int) -> LiveHistogramData {
+        var d = LiveHistogramData.empty(bins: 32)
+        d.luma[brightness > 0 ? 1 : 0] = 1   // hasData needs a non-empty bucket
+        d.brightness = brightness
+        return d
+    }
+
+    /// The metering target is 18% grey through sRGB's curve, not the middle of
+    /// the 0…255 number line. Metering to 128 would read a third of a stop hot on
+    /// every frame.
+    func testTargetIsMidGreyNotMidScale() {
+        XCTAssertEqual(LiveHistogramData.midGrey, 118, accuracy: 0.001)
+        XCTAssertEqual(data(brightness: 118).deviationStops, 0, accuracy: 0.001)
+        XCTAssertTrue(data(brightness: 118).isWellExposed)
+    }
+
+    func testDeviationIsMeasuredInStops() {
+        // Twice the light is one stop over; half is one stop under.
+        XCTAssertEqual(data(brightness: 236).deviationStops, 1, accuracy: 0.01)
+        XCTAssertEqual(data(brightness: 59).deviationStops, -1, accuracy: 0.01)
+    }
+
+    func testSignDistinguishesUnderFromOver() {
+        XCTAssertLessThan(data(brightness: 40).deviationStops, 0)
+        XCTAssertGreaterThan(data(brightness: 200).deviationStops, 0)
+    }
+
+    /// A third of a stop is the width of the target. Anything tighter reports
+    /// drift no one can see, and the readout never settles.
+    func testGoodBandIsAThirdOfAStopEitherSide() {
+        XCTAssertTrue(data(brightness: 130).isWellExposed)
+        XCTAssertTrue(data(brightness: 107).isWellExposed)
+        XCTAssertFalse(data(brightness: 160).isWellExposed)
+        XCTAssertFalse(data(brightness: 85).isWellExposed)
+    }
+
+    /// Before the first frame the buckets are empty, which must not read as a
+    /// pitch-black scene and claim several stops under.
+    func testNoFrameYetReportsNoDeviation() {
+        let empty = LiveHistogramData.empty(bins: 32)
+        XCTAssertFalse(empty.hasData)
+        XCTAssertEqual(empty.deviationStops, 0, accuracy: 0.001)
+    }
+}

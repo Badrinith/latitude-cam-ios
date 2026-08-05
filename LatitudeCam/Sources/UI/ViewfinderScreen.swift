@@ -409,7 +409,7 @@ struct ViewfinderScreen: View {
     /// A shutter that moves when a lens is added is a shutter you have to look for.
     private var shutterRow: some View {
         ZStack {
-            ShutterButton { fire() }
+            ShutterButton(frames: app.cameraManager.frames) { fire() }
 
             HStack(spacing: 8) {
                 proButton

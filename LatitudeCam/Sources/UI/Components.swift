@@ -575,30 +575,156 @@ struct ToggleRow: View {
 // trips. Paired with the heaviest haptic in the app, the press is legible
 // without looking away from the frame.
 
+/// A leaf iris that closes and reopens on every exposure, with the meter reading
+/// in its opening.
+///
+/// The blades do the thing the button triggers rather than depicting it, and the
+/// aperture is the one place on screen already looking at the light, so the
+/// deviation belongs there — you read the exposure without looking away from the
+/// frame or from the control you are about to press.
+///
+/// Observes the frame buffer, so this must stay a small leaf: it republishes four
+/// times a second and anything larger holding it would rebuild at that rate.
 struct ShutterButton: View {
+    var frames: FrameBuffer
     var action: () -> Void
 
-    var body: some View {
-        Button(action: action) { Color.clear.frame(width: 74, height: 74) }
-            .buttonStyle(ShutterStyle())
-            .accessibilityLabel("Take photo")
-    }
-}
+    @StateObject private var meter = HistogramSampler(bins: 32, samplesPerSecond: 4)
+    /// 0 fully open, 1 fully closed.
+    @State private var closure: CGFloat = 0
+    @State private var pressed = false
 
-private struct ShutterStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        let pressed = configuration.isPressed
-        return configuration.label
-            .overlay {
-                Circle().strokeBorder(.white, lineWidth: 3)
+    private let size: CGFloat = 76
+    /// Blades overhang the frame so their outer corners stay clipped away rather
+    /// than showing as a hexagon when the iris is open.
+    private var petal: CGFloat { size * 1.06 }
+
+    var body: some View {
+        Button {
+            actuate()
+            action()
+        } label: {
+            ZStack {
+                core
+                blades
+                readout
             }
+            .frame(width: size, height: size)
             .overlay {
-                Circle()
-                    .fill(.white)
-                    .frame(width: pressed ? 48 : 60, height: pressed ? 48 : 60)
-                    .opacity(pressed ? 0.7 : 1)
+                Circle().strokeBorder(.white.opacity(0.9), lineWidth: 2.5)
             }
-            .animation(.spring(response: 0.16, dampingFraction: 0.55), value: pressed)
+            .scaleEffect(pressed ? 0.94 : 1)
+            .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .onAppear { meter.follow(frames) }
+        .accessibilityLabel("Take photo")
+        .accessibilityValue(spokenExposure)
+    }
+
+    // MARK: Parts
+
+    private var core: some View {
+        Circle().fill(
+            RadialGradient(
+                colors: [Color(hex: 0xFFFFFF), Color(hex: 0xDCD7CE)],
+                center: .init(x: 0.5, y: 0.32), startRadius: 1, endRadius: size * 0.7
+            )
+        )
+    }
+
+    private var blades: some View {
+        ZStack {
+            ForEach(0..<6, id: \.self) { index in
+                RoundedRectangle(cornerRadius: 3, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [Color(hex: 0x3C3C42), Color(hex: 0x17171A)],
+                            startPoint: .topLeading, endPoint: .bottomTrailing
+                        )
+                    )
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 3, style: .continuous)
+                            .strokeBorder(.white.opacity(0.14), lineWidth: 0.5)
+                    }
+                    .frame(width: petal, height: petal)
+                    // Swept out past the rim when open, drawn in over the centre
+                    // when closed. The slight y offset is what gives the blades
+                    // their overlap rather than meeting edge to edge.
+                    .offset(x: bladeOffset, y: -petal * 0.05)
+                    .rotationEffect(.degrees(Double(index) * 60))
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(Circle())
+    }
+
+    private var bladeOffset: CGFloat {
+        let open = size * 0.60
+        let shut = size * 0.04
+        return open + (shut - open) * closure
+    }
+
+    private var readout: some View {
+        VStack(spacing: 0) {
+            Text(deviationText)
+                .font(.mono(15, .bold))
+                .foregroundStyle(verdictColor)
+                .contentTransition(.numericText())
+            Text(verdictWord)
+                .font(.mono(6, .semibold))
+                .kerning(1.1)
+                .foregroundStyle(verdictColor.opacity(0.75))
+        }
+        // Hidden behind the blades while they are shut, so the actuation reads as
+        // the shutter passing rather than as the number blinking out.
+        .opacity(1 - Double(closure))
+    }
+
+    // MARK: Meter
+
+    private var stops: Double { meter.data.deviationStops }
+
+    private var deviationText: String {
+        guard meter.data.hasData else { return "—" }
+        return String(format: "%+.1f", stops)
+    }
+
+    private var verdictWord: String {
+        guard meter.data.hasData else { return "METER" }
+        if meter.data.isWellExposed { return "GOOD" }
+        return stops < 0 ? "UNDER" : "OVER"
+    }
+
+    /// Severity, not decoration: amber is the app's accent and would read as
+    /// "selected", so a drift worth acting on gets its own red.
+    private var verdictColor: Color {
+        guard meter.data.hasData else { return Color(hex: 0x8A857C) }
+        if meter.data.isWellExposed { return Color(hex: 0x2E7D4F) }
+        return abs(stops) > 1.5 ? Color(hex: 0xC2402F) : Color(hex: 0xB0702F)
+    }
+
+    private var spokenExposure: String {
+        guard meter.data.hasData else { return "Metering" }
+        return meter.data.isWellExposed
+            ? "Exposure good"
+            : String(format: "%@ by %.1f stops", stops < 0 ? "Under" : "Over", abs(stops))
+    }
+
+    // MARK: Actuation
+
+    /// Shut, hold, open — the timing of a leaf shutter rather than a button
+    /// animation. Asymmetric on purpose: blades snap closed and ease open, which
+    /// is how the real thing sounds and how it should feel.
+    private func actuate() {
+        pressed = true
+        withAnimation(.easeIn(duration: 0.07)) { closure = 1 }
+
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(110))
+            withAnimation(.easeOut(duration: 0.17)) { closure = 0 }
+            withAnimation(.spring(response: 0.2, dampingFraction: 0.6)) { pressed = false }
+        }
     }
 }
 

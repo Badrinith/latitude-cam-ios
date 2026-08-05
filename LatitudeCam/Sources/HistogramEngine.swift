@@ -71,6 +71,22 @@ public struct LiveHistogramData: Equatable {
 
     public var exposure: String { HistogramEngine.exposureVerdict(brightness: brightness) }
 
+    /// What a reflected-light meter is trying to put the scene at. 18% grey lands
+    /// near 118 once sRGB's transfer curve is applied, not at 128 — metering to
+    /// the middle of the number line rather than the middle of the tones would
+    /// read about a third of a stop hot on every frame.
+    public static let midGrey: Double = 118
+
+    /// Deviation from that target in stops. Negative is under.
+    public var deviationStops: Double {
+        guard hasData, brightness > 0 else { return 0 }
+        return log2(Double(brightness) / Self.midGrey)
+    }
+
+    /// Within a third of a stop is the width of the target, not a rounding
+    /// tolerance: closer than that and no one can see the difference anyway.
+    public var isWellExposed: Bool { abs(deviationStops) < 0.33 }
+
     public static func empty(bins: Int) -> LiveHistogramData {
         let zeros = [Double](repeating: 0, count: bins)
         return .init(luma: zeros, red: zeros, green: zeros, blue: zeros, brightness: 0)
