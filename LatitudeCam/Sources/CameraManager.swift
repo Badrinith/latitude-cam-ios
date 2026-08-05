@@ -61,6 +61,8 @@ public struct RenderSettings: Equatable {
     /// Normalised sensor coordinates the meter and the lens work from, moved by
     /// tapping the viewfinder.
     public var pointOfInterest = CGPoint(x: 0.5, y: 0.5)
+    /// Device zoom factor for the selected lens.
+    public var zoomFactor: Double = 1
 
     public init() {}
 }
@@ -167,8 +169,13 @@ public final class CameraManager: NSObject, ObservableObject {
             || new.lensPosition != _settings.lensPosition
             || new.metering != _settings.metering
             || new.pointOfInterest != _settings.pointOfInterest
+        let zoomChanged = new.zoomFactor != _settings.zoomFactor
         _settings = new
         settingsLock.unlock()
+
+        if zoomChanged {
+            cameraQueue.async { [weak self] in self?.applyZoom(CGFloat(new.zoomFactor)) }
+        }
 
         if exposureChanged || focusChanged {
             cameraQueue.async { [weak self] in
@@ -211,8 +218,105 @@ public final class CameraManager: NSObject, ObservableObject {
         }
     }
 
+    /// One selectable field of view.
+    public struct Lens: Equatable, Identifiable {
+        public let id: String
+        public let label: String
+        /// Device zoom factor, not the number on the button. On a virtual device
+        /// 1.0 is the widest constituent lens, so the 1× everyone knows sits
+        /// wherever the ultra-wide hands over.
+        public let zoom: CGFloat
+    }
+
+    /// What this camera can actually offer. Published so the selector shows the
+    /// lenses the device has rather than a fixed set it might not.
+    @Published public private(set) var lenses: [Lens] = []
+
     static func camera(at position: AVCaptureDevice.Position) -> AVCaptureDevice? {
-        AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: position)
+        // A virtual device carries every lens behind one input, so changing lens
+        // costs a zoom rather than tearing down and rebuilding the session. Ordered
+        // widest-capability first; the first one that exists wins.
+        let types: [AVCaptureDevice.DeviceType] = position == .front
+            ? [.builtInTrueDepthCamera, .builtInWideAngleCamera]
+            : [.builtInTripleCamera, .builtInDualWideCamera,
+               .builtInDualCamera, .builtInWideAngleCamera]
+
+        let discovery = AVCaptureDevice.DiscoverySession(
+            deviceTypes: types, mediaType: .video, position: position
+        )
+        for type in types {
+            if let device = discovery.devices.first(where: { $0.deviceType == type }) {
+                return device
+            }
+        }
+        return discovery.devices.first
+    }
+
+    /// Reads the lens ladder off the device instead of assuming one. A 17 Pro Max
+    /// and an SE disagree about what exists, and guessing produces buttons that
+    /// select nothing.
+    private func lensOptions(for device: AVCaptureDevice) -> [Lens] {
+        let minZoom = device.minAvailableVideoZoomFactor
+        let maxZoom = device.maxAvailableVideoZoomFactor
+
+        if device.position == .front {
+            // One physical lens, so the wide selfie is the sensor's full field and
+            // the standard one is a crop of it — which is how the phone's own
+            // camera does it too.
+            var options = [Lens(id: "wide", label: "WIDE", zoom: minZoom)]
+            let cropped = min(minZoom * 1.4, maxZoom)
+            if cropped > minZoom + 0.05 {
+                options.append(Lens(id: "std", label: "STD", zoom: cropped))
+            }
+            return options
+        }
+
+        let switchOvers = device.virtualDeviceSwitchOverVideoZoomFactors
+            .map { CGFloat(truncating: $0) }
+            .sorted()
+        let base = switchOvers.first ?? 1
+
+        var options: [Lens] = []
+        if base > 1.05 {
+            options.append(Lens(id: "ultra", label: "0.5×", zoom: max(minZoom, 1)))
+        }
+        options.append(Lens(id: "wide", label: "1×", zoom: base))
+        if maxZoom >= base * 2 {
+            options.append(Lens(id: "2x", label: "2×", zoom: base * 2))
+        }
+        // Anything past the second switch-over is the telephoto, whose factor
+        // differs by model — 3× on some bodies, 5× on others.
+        if switchOvers.count > 1 {
+            let tele = switchOvers[1]
+            options.append(Lens(
+                id: "tele",
+                label: String(format: "%g×", (tele / base).rounded()),
+                zoom: tele
+            ))
+        }
+        return options
+    }
+
+    private func publishLenses(for device: AVCaptureDevice) {
+        let options = lensOptions(for: device)
+        DispatchQueue.main.async { [weak self] in self?.lenses = options }
+    }
+
+    /// Lens changes are a zoom on the virtual device, which is why they do not
+    /// interrupt the preview the way swapping inputs does.
+    private func applyZoom(_ factor: CGFloat) {
+        guard let device = videoDevice else { return }
+        do {
+            try device.lockForConfiguration()
+            defer { device.unlockForConfiguration() }
+            device.videoZoomFactor = min(
+                max(factor, device.minAvailableVideoZoomFactor),
+                device.maxAvailableVideoZoomFactor
+            )
+        } catch {
+            // Left wherever it was; the selector will show the stale value, which
+            // is better than a silent mismatch between button and lens.
+        }
     }
 
     /// Everything about the photo output that depends on which camera is attached.
@@ -328,6 +432,7 @@ public final class CameraManager: NSObject, ObservableObject {
 
             self.videoDevice = next
             self.isFrontCamera = target == .front
+            self.publishLenses(for: next)
             self.applyDeviceFocus(self.settings)
             self.applyDeviceExposure(self.settings)
             DispatchQueue.main.async { completion(target) }
@@ -403,6 +508,7 @@ public final class CameraManager: NSObject, ObservableObject {
         self.videoOutput = output
         self.photoOutput = photoOutput
 
+        publishLenses(for: camera)
         applyDeviceFocus(settings)
         applyDeviceExposure(settings)
 

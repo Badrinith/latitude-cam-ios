@@ -274,6 +274,9 @@ final class AppState: ObservableObject {
     /// Position on the focus ladder: index 0 is AF, the rest are distances.
     @Published var focus: Double = 1.0 { didSet { syncCamera() } }
     @Published var metering = "MATRIX" { didSet { syncCamera() } }
+    /// Which lens is selected, by id. Held as an id rather than a zoom factor so
+    /// it survives a camera flip, where the ladder is a different one entirely.
+    @Published var lensID = "wide" { didSet { syncCamera() } }
     /// Where the meter reads and the lens focuses, set by tapping the viewfinder.
     @Published var pointOfInterest = CGPoint(x: 0.5, y: 0.5) { didSet { syncCamera() } }
     @Published var proRAW = false
@@ -439,6 +442,7 @@ final class AppState: ObservableObject {
         s.lensPosition = focus
         s.metering = metering
         s.pointOfInterest = pointOfInterest
+        s.zoomFactor = Double(currentLens?.zoom ?? 1)
         cameraManager.apply(s)
     }
 
@@ -446,6 +450,19 @@ final class AppState: ObservableObject {
     /// rather than assumed — a flip the hardware refused must not leave the button
     /// claiming otherwise.
     @Published private(set) var usingFrontCamera = false
+
+    /// The lens the selector is on, or nil before the camera has reported what it
+    /// has. Resolved by id every time so a flip cannot leave a zoom factor from
+    /// the other camera's ladder in force.
+    var currentLens: CameraManager.Lens? {
+        cameraManager.lenses.first { $0.id == lensID } ?? cameraManager.lenses.first
+    }
+
+    func selectLens(_ lens: CameraManager.Lens) {
+        guard lens.id != lensID else { return }
+        Haptics.detent()
+        lensID = lens.id
+    }
 
     func flipCamera() {
         Haptics.toggle()
@@ -458,6 +475,10 @@ final class AppState: ObservableObject {
                 return
             }
             self.usingFrontCamera = front
+            // Both ladders happen to start at an id of "wide" — 1× on the back,
+            // the full field on the front — so the selector lands somewhere real
+            // whichever camera answered.
+            self.lensID = "wide"
             // The front camera has no RAW and a narrower exposure range, so the
             // pipeline needs the settings pushed at it again.
             self.syncCamera()

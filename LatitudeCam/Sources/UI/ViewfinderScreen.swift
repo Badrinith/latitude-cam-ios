@@ -314,6 +314,7 @@ struct ViewfinderScreen: View {
     private static let clusterBand: CGFloat = 118
     private static let filmBand: CGFloat = 76
     private static let shutterBand: CGFloat = 88
+    private static let lensBand: CGFloat = 42
     private static let bandInset: CGFloat = 12
 
     /// One view tree in every orientation.
@@ -337,6 +338,20 @@ struct ViewfinderScreen: View {
                          centre: clusterCentre(in: size), length: size.width)
                         .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .bottom)))
                 }
+
+                // Always on screen: which lens you are looking through is not an
+                // advanced setting, it is what the picture is.
+                band(
+                    LensSelector(
+                        camera: app.cameraManager,
+                        selected: app.lensID,
+                        rotation: orientation.angle,
+                        onSelect: { app.selectLens($0) }
+                    ),
+                    thickness: Self.lensBand,
+                    centre: lensCentre(in: size),
+                    length: size.width
+                )
 
                 band(filmSelector, thickness: Self.filmBand,
                      centre: filmCentre(in: size), length: size.width)
@@ -379,6 +394,23 @@ struct ViewfinderScreen: View {
         }
     }
 
+    private func lensCentre(in size: CGSize) -> CGPoint {
+        switch orientation.edge {
+        case .bottom:
+            return CGPoint(
+                x: size.width / 2,
+                y: size.height - Self.bandInset - Self.filmBand
+                    - Self.shutterBand - Self.lensBand / 2
+            )
+        case .leading:
+            return CGPoint(x: Self.bandInset + Self.filmBand + Self.lensBand / 2,
+                           y: size.height / 2)
+        case .trailing:
+            return CGPoint(x: size.width - Self.bandInset - Self.filmBand - Self.lensBand / 2,
+                           y: size.height / 2)
+        }
+    }
+
     private func clusterCentre(in size: CGSize) -> CGPoint {
         switch orientation.edge {
         case .bottom:
@@ -387,14 +419,17 @@ struct ViewfinderScreen: View {
             return CGPoint(
                 x: size.width / 2,
                 y: size.height - Self.bandInset - Self.filmBand
-                    - Self.shutterBand - Self.clusterBand / 2
+                    - Self.shutterBand - Self.lensBand - Self.clusterBand / 2
             )
         case .leading:
-            return CGPoint(x: Self.bandInset + Self.filmBand + Self.clusterBand / 2,
+            return CGPoint(x: Self.bandInset + Self.filmBand + Self.lensBand + Self.clusterBand / 2,
                            y: size.height / 2)
         case .trailing:
-            return CGPoint(x: size.width - Self.bandInset - Self.filmBand - Self.clusterBand / 2,
-                           y: size.height / 2)
+            return CGPoint(
+                x: size.width - Self.bandInset - Self.filmBand
+                    - Self.lensBand - Self.clusterBand / 2,
+                y: size.height / 2
+            )
         }
     }
 

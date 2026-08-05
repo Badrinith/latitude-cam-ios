@@ -1,8 +1,8 @@
 # Latitude Cam — Session Handoff
 
 **Date:** 5 Aug 2026
-**Branch:** `feat/camera-pipeline-dials-splash` — 23 commits, **all local, nothing pushed to `origin`**
-**Tests:** 230 passing
+**Branch:** `feat/camera-pipeline-dials-splash` — 25 commits, **all local, nothing pushed to `origin`**
+**Tests:** 234 passing
 **Device:** iPhone 17 Pro Max, UDID `854CD202-7808-597B-A70F-6A6628AED263` (build installed and current)
 
 ---
@@ -22,6 +22,8 @@
 | Barrel replaces rotary dial for all controls | Its shape states the gesture; the dial failed silently |
 | App locked to portrait; controls migrate to the ground-facing edge | Picture must not reflow when the body turns |
 | Neutral film stock is default, identity matrix | Camera shows the scene before an opinion of it |
+| Lenses come from a virtual device + zoom, not input swapping | Changing lens costs a zoom, not a session reconfiguration |
+| Lens ladder read from `virtualDeviceSwitchOverVideoZoomFactors` | A 17 Pro Max and an SE disagree about what exists |
 
 ## Architecture
 
@@ -43,7 +45,7 @@ PhotoExporter  paired asset (.photo + .alternatePhoto), falls back to two assets
 
 **UI files:** `Barrel.swift` (Barrel · FilmBarrel · BarrelCluster · DeviceOrientation), `ViewfinderScreen.swift` (single view tree; blocks positioned by `clusterCentre`/`filmCentre`, constant size, rotation + position animate).
 
-**Layout:** pro cluster above shutter, film barrel below, shutter fixed. Landscape moves the two control bands to the ground-facing edge; the shutter does not move.
+**Layout:** pro cluster · lens selector · shutter · film barrel, top to bottom. Lens selector is always visible; the cluster is gated on pro mode. Shutter fixed. Landscape moves the two control bands to the ground-facing edge; the shutter does not move.
 
 ## Code state
 

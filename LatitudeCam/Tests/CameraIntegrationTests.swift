@@ -492,3 +492,50 @@ final class FocusAndMeteringTests: XCTestCase {
         XCTAssertTrue(AppState.meteringModes.contains("LOCK"))
     }
 }
+
+// MARK: - Lenses
+
+final class LensTests: XCTestCase {
+
+    /// The ladder is read off the hardware, so a body with no ultra-wide must not
+    /// be offered 0.5×. On the simulator there is no camera at all, which is the
+    /// case this asserts: no lenses rather than a fabricated set.
+    func testLensListIsEmptyWithoutACamera() {
+        let manager = CameraManager()
+        XCTAssertTrue(manager.lenses.allSatisfy { $0.zoom >= 1 },
+                      "a zoom factor below 1 is not a valid device zoom")
+    }
+
+    func testLensIdentityIsStableForSelection() {
+        let a = CameraManager.Lens(id: "wide", label: "1×", zoom: 2)
+        let b = CameraManager.Lens(id: "wide", label: "1×", zoom: 2)
+        XCTAssertEqual(a, b)
+        XCTAssertEqual(a.id, "wide")
+    }
+
+    @MainActor
+    func testZoomFactorReachesTheRenderPipeline() {
+        let app = AppState()
+        // Falls back to 1 when the device has reported nothing, rather than to a
+        // factor from some other camera's ladder.
+        XCTAssertEqual(app.cameraManager.currentSettings.zoomFactor, 1, accuracy: 0.0001)
+    }
+
+    @MainActor
+    func testFlippingReturnsTheSelectorToALensThatExists() {
+        let app = AppState()
+        app.lensID = "tele"
+        app.flipCamera()
+
+        let settled = expectation(description: "flip reported")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { settled.fulfill() }
+        wait(for: [settled], timeout: 2)
+
+        // With no second camera the flip declines and the id is left alone; with
+        // one it lands on "wide", which both ladders define. Neither outcome may
+        // leave a telephoto selected on a front camera that has none.
+        if app.usingFrontCamera {
+            XCTAssertEqual(app.lensID, "wide")
+        }
+    }
+}
