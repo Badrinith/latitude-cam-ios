@@ -1053,3 +1053,67 @@ struct ScreenHeader<Trailing: View>: View {
         }
     }
 }
+
+// MARK: - Scroll rail
+//
+// A scrollbar you can see and hold. The system indicator is a two-point hairline
+// that fades out a second after it appears — too thin to notice on a panel that
+// only shows four of its five controls, and far too thin to take hold of.
+//
+// The visible rail is 5pt; the part that accepts a touch is 30. Making the target
+// wider than the mark is the whole point — the mark says where you are, the
+// target is what a thumb can actually land on.
+
+struct ScrollRail: View {
+    var rows: Int
+    var scrollTo: (Int) -> Void
+
+    @State private var active: Int = 0
+
+    private let markWidth: CGFloat = 5
+    private let touchWidth: CGFloat = 30
+
+    var body: some View {
+        // Fewer than two rows cannot scroll, and a rail over a panel that does not
+        // move is an instruction to do something impossible.
+        if rows > 1 {
+            GeometryReader { geo in
+                let travel = geo.size.height
+                let thumb = max(34, travel / CGFloat(rows) * 1.6)
+
+                ZStack(alignment: .top) {
+                    Capsule()
+                        .fill(Color.white.opacity(0.10))
+                        .frame(width: markWidth)
+
+                    Capsule()
+                        .fill(Accent.amber.opacity(0.85))
+                        .frame(width: markWidth, height: thumb)
+                        .offset(y: offset(for: active, travel: travel, thumb: thumb))
+                        .animation(.spring(response: 0.28, dampingFraction: 0.85), value: active)
+                }
+                .frame(width: touchWidth, alignment: .center)
+                .contentShape(Rectangle())
+                .gesture(
+                    DragGesture(minimumDistance: 0)
+                        .onChanged { value in
+                            let fraction = min(max(value.location.y / travel, 0), 1)
+                            let row = min(rows - 1, Int(fraction * CGFloat(rows)))
+                            guard row != active else { return }
+                            active = row
+                            Haptics.detent()
+                            scrollTo(row)
+                        }
+                )
+            }
+            .frame(width: touchWidth)
+            .padding(.vertical, 4)
+            .accessibilityHidden(true)
+        }
+    }
+
+    private func offset(for row: Int, travel: CGFloat, thumb: CGFloat) -> CGFloat {
+        guard rows > 1 else { return 0 }
+        return (travel - thumb) * CGFloat(row) / CGFloat(rows - 1)
+    }
+}

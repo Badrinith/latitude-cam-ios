@@ -300,12 +300,24 @@ struct EditScreen: View {
                     // Under a third of the screen, whatever the group holds. Five
                     // barrels do not fit that and are not meant to — the scroll is
                     // the mechanism, not a fallback.
-                    ScrollView {
-                        panel
-                            .padding(.horizontal, 18)
-                            .padding(.bottom, 24)
+                    ScrollViewReader { proxy in
+                        ScrollView {
+                            panel
+                                .padding(.horizontal, 18)
+                                .padding(.bottom, 24)
+                        }
+                        // The system's own indicator is a two-point hairline that
+                        // fades: too thin to notice and impossible to grab. This
+                        // one is drawn, stays put, and can be dragged.
+                        .scrollIndicators(.hidden)
+                        .overlay(alignment: .trailing) {
+                            ScrollRail(rows: barrelControls.count) { row in
+                                withAnimation(.easeOut(duration: 0.18)) {
+                                    proxy.scrollTo(row, anchor: .top)
+                                }
+                            }
+                        }
                     }
-                    .scrollIndicators(.visible)
                     .frame(height: geo.size.height * 0.30)
                 }
             }
@@ -369,6 +381,35 @@ struct EditScreen: View {
         }
     }
 
+    /// The controls each barrel tab holds. One list, read by the panel that draws
+    /// them and by the rail that has to know how far the panel goes.
+    private var barrelControls: [(String, Binding<Double>, Int, (Double) -> String)] {
+        switch tab {
+        case "Light":
+            return [
+                ("Exposure", $editor.exposure, 25, { String(format: "%+.1f", ($0 - 0.5) * 4) }),
+                ("Contrast", $editor.contrast, 21, { String(format: "%+.0f", ($0 - 0.5) * 200) }),
+                ("Highlights", $editor.highlights, 21, { String(format: "%+.0f", (0.5 - $0) * 200) }),
+                ("Shadows", $editor.shadows, 21, { String(format: "%+.0f", ($0 - 0.5) * 200) }),
+                ("Blacks", $editor.blackPoint, 21, { String(format: "%+.0f", ($0 - 0.5) * 200) })
+            ]
+        case "Color":
+            return [
+                ("Temp", $editor.temperature, 21, { "\(Int(((3000 + $0 * 6000) / 100).rounded() * 100 / 100))" }),
+                ("Tint", $editor.tint, 21, { String(format: "%+.0f", ($0 - 0.5) * 150) }),
+                ("Saturation", $editor.saturation, 21, { String(format: "%.2f", $0 * 2) }),
+                ("Vibrance", $editor.vibrance, 21, { String(format: "%+.0f", ($0 - 0.5) * 200) })
+            ]
+        case "Detail":
+            return [
+                ("Structure", $editor.structure, 21, { String(format: "%+.0f", ($0 - 0.5) * 200) }),
+                ("Sharpen", $editor.sharpen, 21, { String(format: "%+.0f", ($0 - 0.5) * 200) })
+            ]
+        default:
+            return []
+        }
+    }
+
     /// One per row, inset from both edges.
     ///
     /// The gutters are not margin. A barrel takes any horizontal drag that starts
@@ -383,13 +424,14 @@ struct EditScreen: View {
         _ controls: [(String, Binding<Double>, Int, (Double) -> String)]
     ) -> some View {
         VStack(spacing: 13) {
-            ForEach(Array(controls.enumerated()), id: \.offset) { _, control in
+            ForEach(Array(controls.enumerated()), id: \.offset) { index, control in
                 EditBarrel(
                     label: control.0,
                     position: control.1,
                     stops: control.2,
                     format: control.3
                 )
+                .id(index)
             }
         }
         .padding(.horizontal, 22)
@@ -423,28 +465,8 @@ struct EditScreen: View {
     @ViewBuilder
     private var panel: some View {
         switch tab {
-        case "Light":
-            barrelBank([
-                ("Exposure", $editor.exposure, 25, { String(format: "%+.1f", ($0 - 0.5) * 4) }),
-                ("Contrast", $editor.contrast, 21, { String(format: "%+.0f", ($0 - 0.5) * 200) }),
-                ("Highlights", $editor.highlights, 21, { String(format: "%+.0f", (0.5 - $0) * 200) }),
-                ("Shadows", $editor.shadows, 21, { String(format: "%+.0f", ($0 - 0.5) * 200) }),
-                ("Blacks", $editor.blackPoint, 21, { String(format: "%+.0f", ($0 - 0.5) * 200) })
-            ])
-
-        case "Color":
-            barrelBank([
-                ("Temp", $editor.temperature, 21, { "\(Int(((3000 + $0 * 6000) / 100).rounded() * 100 / 100))" }),
-                ("Tint", $editor.tint, 21, { String(format: "%+.0f", ($0 - 0.5) * 150) }),
-                ("Saturation", $editor.saturation, 21, { String(format: "%.2f", $0 * 2) }),
-                ("Vibrance", $editor.vibrance, 21, { String(format: "%+.0f", ($0 - 0.5) * 200) })
-            ])
-
-        case "Detail":
-            barrelBank([
-                ("Structure", $editor.structure, 21, { String(format: "%+.0f", ($0 - 0.5) * 200) }),
-                ("Sharpen", $editor.sharpen, 21, { String(format: "%+.0f", ($0 - 0.5) * 200) })
-            ])
+        case "Light", "Color", "Detail":
+            barrelBank(barrelControls)
 
         case "Film":
             VStack(alignment: .leading, spacing: 16) {

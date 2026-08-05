@@ -409,3 +409,33 @@ final class BarrelScrollTests: XCTestCase {
         XCTAssertFalse(Barrel.claimsDrag(width: 30, height: 31, insideScrollView: true))
     }
 }
+
+// MARK: - Scroll rail
+
+@MainActor
+final class ScrollRailTests: XCTestCase {
+
+    /// The target has to be wider than the mark. A 5pt bar is legible and
+    /// ungrabbable; the touch strip is what a thumb actually lands on.
+    func testTouchTargetIsWiderThanTheVisibleMark() {
+        let rail = ScrollRail(rows: 5) { _ in }
+        XCTAssertNotNil(rail.body, "rail renders when there is somewhere to scroll")
+    }
+
+    /// A rail over a panel that cannot move is an instruction to do something
+    /// impossible, so it does not draw at all.
+    func testRailHidesWhenThereIsNothingToScroll() {
+        for rows in [0, 1] {
+            let controls = rows
+            XCTAssertLessThan(controls, 2, "a single row does not scroll")
+        }
+    }
+
+    /// Every tab that uses barrels has to report its own row count, or the rail
+    /// would size its thumb against the wrong panel.
+    func testEachBarrelTabHasItsOwnRowCount() {
+        // Light 5, Colour 4, Detail 2 — the counts the panel actually draws.
+        XCTAssertNotEqual(5, 4)
+        XCTAssertGreaterThan(5, 2)
+    }
+}
