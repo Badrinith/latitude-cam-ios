@@ -1,0 +1,760 @@
+<title>Latitude Cam — Bottom Dials, Ten Ways</title>
+
+<style>
+  :root {
+    --ink-base:#0D0D0D; --ink-raised:#161616; --ink-card:#1C1C1E;
+    --tone:#F2EFE8; --amber:#D98A52; --amber-deep:#8A5A34;
+    --film-amber:#8A7A63; --film-slate:#6B6A63; --film-rust:#9C3F2E; --film-mono:#2B2B2B;
+
+    --page-bg:#100F0D; --page-panel:#191714; --page-rule:rgba(242,239,232,0.12);
+    --page-text:#E7E2D8; --page-dim:rgba(231,226,216,0.60); --page-faint:rgba(231,226,216,0.38);
+
+    --display: ui-serif, "New York", Georgia, serif;
+    --body: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, monospace;
+    --measure: 66ch;
+  }
+  @media (prefers-color-scheme: light) {
+    :root { --page-bg:#E9E5DC; --page-panel:#F5F2EB; --page-rule:rgba(28,24,20,0.14);
+            --page-text:#1E1A16; --page-dim:rgba(30,26,22,0.64); --page-faint:rgba(30,26,22,0.44); }
+  }
+  :root[data-theme="light"] { --page-bg:#E9E5DC; --page-panel:#F5F2EB; --page-rule:rgba(28,24,20,0.14);
+            --page-text:#1E1A16; --page-dim:rgba(30,26,22,0.64); --page-faint:rgba(30,26,22,0.44); }
+  :root[data-theme="dark"] { --page-bg:#100F0D; --page-panel:#191714; --page-rule:rgba(242,239,232,0.12);
+            --page-text:#E7E2D8; --page-dim:rgba(231,226,216,0.60); --page-faint:rgba(231,226,216,0.38); }
+
+  body { background:var(--page-bg); color:var(--page-text); font-family:var(--body); line-height:1.55; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:1240px; margin:0 auto; padding:clamp(26px,5vw,60px) clamp(16px,4vw,38px) 90px; display:flex; flex-direction:column; gap:clamp(40px,6vw,72px); }
+
+  .eyebrow { font-family:var(--mono); font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:var(--amber); display:flex; gap:12px; flex-wrap:wrap; }
+  .eyebrow span { color:var(--page-faint); }
+  h1 { font-family:var(--display); font-weight:500; font-size:clamp(32px,5.6vw,58px); line-height:1.03; letter-spacing:-.02em; margin:0; text-wrap:balance; }
+  h1 em { font-style:italic; color:var(--amber); }
+  h2 { font-family:var(--display); font-weight:500; font-size:clamp(22px,2.7vw,30px); letter-spacing:-.012em; margin:0; text-wrap:balance; }
+  .standfirst { font-size:clamp(15.5px,1.5vw,18px); color:var(--page-dim); max-width:var(--measure); text-wrap:pretty; }
+  .masthead { display:flex; flex-direction:column; gap:16px; }
+  .section { display:flex; flex-direction:column; gap:24px; }
+  .section-head { display:flex; flex-direction:column; gap:8px; }
+  .section-head p { margin:0; color:var(--page-dim); max-width:var(--measure); text-wrap:pretty; }
+  hr.rule { height:1px; background:var(--page-rule); border:0; margin:0; }
+
+  .constraints { display:grid; grid-template-columns:repeat(auto-fit,minmax(206px,1fr)); gap:1px; background:var(--page-rule); border:1px solid var(--page-rule); border-radius:4px; overflow:hidden; }
+  .constraints > div { background:var(--page-panel); padding:15px 16px; display:flex; flex-direction:column; gap:4px; }
+  .constraints dt { font-family:var(--mono); font-size:8.5px; letter-spacing:.15em; text-transform:uppercase; color:var(--page-faint); }
+  .constraints dd { margin:0; font-size:13.5px; color:var(--page-dim); line-height:1.45; }
+
+  /* ================= PHONE ================= */
+  .phone { width:228px; aspect-ratio:228/478; border-radius:32px; background:var(--ink-base);
+    position:relative; overflow:hidden; flex:none; color:var(--tone);
+    box-shadow:0 0 0 1.2px rgba(255,255,255,.09), 0 0 0 6px #0a0a0a, 0 16px 38px rgba(0,0,0,.5); }
+  .phone.land { width:300px; aspect-ratio:300/150; border-radius:22px; }
+
+  .scene { position:absolute; inset:0;
+    background:
+      radial-gradient(56% 32% at 68% 20%, rgba(255,240,214,.92), transparent 62%),
+      radial-gradient(112% 74% at 71% 16%, rgba(226,171,110,.48), transparent 58%),
+      linear-gradient(191deg,#4a3b2e 0%,#2b221b 42%,#14100d 100%); }
+  .scene::before { content:""; position:absolute; left:47%; top:5%; width:44%; height:30%;
+    background:
+      linear-gradient(to right, transparent 48%, rgba(20,14,10,.55) 48% 52%, transparent 52%),
+      linear-gradient(to bottom, transparent 46%, rgba(20,14,10,.55) 46% 50%, transparent 50%); }
+  .scene::after { content:""; position:absolute; left:-12%; bottom:-8%; width:78%; height:38%;
+    border-radius:50% 46% 38% 54%; background:rgba(9,7,6,.72); filter:blur(8px); }
+  .phone.land .scene::before { left:62%; top:8%; width:26%; height:44%; }
+
+  .chrome { position:absolute; inset:0; display:flex; flex-direction:column; }
+  .glass { background:rgba(0,0,0,.30); backdrop-filter:blur(13px); -webkit-backdrop-filter:blur(13px); border:.5px solid rgba(255,255,255,.13); }
+
+  .topbar { display:flex; justify-content:space-between; align-items:flex-start; padding:10px 9px 0; gap:6px; }
+  .pill { font-family:var(--mono); font-size:6.5px; letter-spacing:.06em; padding:4px 6px; border-radius:11px; }
+  .rail { display:flex; gap:4px; }
+  .rbtn { width:19px; height:19px; border-radius:50%; display:grid; place-items:center; font-family:var(--mono); font-size:6px; font-weight:600; }
+  .rbtn.amber { color:var(--amber); }
+
+  /* thumb-reach guide: the arc a thumb actually sweeps */
+  .reach { position:absolute; left:50%; bottom:-96px; transform:translateX(-50%);
+    width:280px; height:280px; border-radius:50%;
+    border:1px dashed rgba(217,138,82,.30); pointer-events:none; }
+  .reachlab { position:absolute; right:8px; bottom:112px; font-family:var(--mono); font-size:5.5px;
+    letter-spacing:.12em; color:rgba(217,138,82,.55); }
+
+  /* deck: dials sit ABOVE the shutter, never over the subject */
+  .deck { margin-top:auto; position:relative; padding-bottom:12px; }
+  .deck::before { content:""; position:absolute; left:0; right:0; bottom:0; height:190px;
+    background:linear-gradient(to bottom, transparent, rgba(0,0,0,.72)); pointer-events:none; }
+  .cluster { position:relative; height:112px; }
+  .shutterrow { position:relative; display:flex; align-items:center; justify-content:space-between; padding:0 20px; }
+  .shutter { width:44px; height:44px; border-radius:50%; background:var(--tone); box-shadow:0 0 0 2.5px rgba(242,239,232,.24); }
+  .thumb { width:24px; height:24px; border-radius:6px; background:linear-gradient(150deg,#6d5a44,#2a221b); box-shadow:inset 0 0 0 1.2px rgba(255,255,255,.5); }
+  .prolabel { width:24px; font-size:9px; font-weight:700; color:var(--amber); }
+  .filmrow { position:relative; display:flex; justify-content:center; gap:13px; padding-top:9px;
+    font-family:var(--mono); font-size:7px; letter-spacing:.1em; }
+  .filmrow b { color:rgba(242,239,232,.36); font-weight:500; }
+  .filmrow b.on { color:var(--amber); font-weight:700; }
+
+  /* ---- shared dial atoms ---- */
+  .knurl { position:absolute; inset:0; border-radius:50%;
+    background:repeating-conic-gradient(from 0deg, rgba(255,255,255,.20) 0 .5deg, transparent .5deg 3.2deg);
+    -webkit-mask:radial-gradient(closest-side, transparent 84%, #000 86% 99%, transparent 100%);
+    mask:radial-gradient(closest-side, transparent 84%, #000 86% 99%, transparent 100%); }
+  .frost { position:absolute; inset:0; border-radius:50%;
+    background:radial-gradient(closest-side, rgba(12,11,10,0) 46%, rgba(12,11,10,.62) 60%, rgba(12,11,10,.8) 100%);
+    backdrop-filter:blur(8px) saturate(.88); -webkit-backdrop-filter:blur(8px) saturate(.88);
+    box-shadow:inset 0 0 0 .5px rgba(255,255,255,.17); }
+  .idx { position:absolute; top:-6px; left:50%; transform:translateX(-50%); width:0; height:0;
+    border-left:4px solid transparent; border-right:4px solid transparent; border-top:6px solid var(--amber); }
+  .val { font-family:var(--mono); font-weight:700; color:var(--tone); }
+  .cap { font-family:var(--mono); font-size:5.5px; letter-spacing:.18em; color:rgba(255,255,255,.46); }
+
+  .chip { font-family:var(--mono); font-size:7px; font-weight:600; padding:4px 6px; border-radius:6px;
+    color:var(--tone); background:rgba(0,0,0,.34); backdrop-filter:blur(11px); -webkit-backdrop-filter:blur(11px);
+    border:.5px solid rgba(255,255,255,.14); white-space:nowrap; }
+  .chip.dim { color:rgba(242,239,232,.45); }
+
+  /* ================= THE TEN CLUSTERS ================= */
+
+  /* 01 FAN */
+  .c-fan .big { position:absolute; left:50%; bottom:6px; transform:translateX(-50%); width:88px; height:88px; border-radius:50%; display:grid; place-items:center; }
+  .c-fan .big .val { font-size:15px; }
+  .c-fan .sat { position:absolute; bottom:16px; width:40px; height:40px; border-radius:50%; display:grid; place-items:center; }
+  .c-fan .sat .val { font-size:8px; color:rgba(242,239,232,.62); }
+  .c-fan .sat.l { left:12px; transform:rotate(-16deg); }
+  .c-fan .sat.r { right:12px; transform:rotate(16deg); }
+
+  /* 02 RISE */
+  .c-rise .row { position:absolute; left:0; right:0; bottom:8px; display:flex; justify-content:center; gap:7px; }
+  .c-rise .big { position:absolute; left:50%; bottom:34px; transform:translateX(-50%); width:76px; height:76px; border-radius:50%; display:grid; place-items:center; }
+  .c-rise .big .val { font-size:13px; }
+  .c-rise .stem { position:absolute; left:50%; bottom:26px; width:1px; height:10px; background:linear-gradient(rgba(217,138,82,.7), transparent); }
+
+  /* 03 HALF MOON */
+  .c-moon .moon { position:absolute; left:50%; bottom:0; transform:translateX(-50%);
+    width:186px; height:93px; border-radius:186px 186px 0 0; overflow:hidden;
+    background:linear-gradient(to bottom, rgba(12,11,10,.74), rgba(12,11,10,.5));
+    backdrop-filter:blur(9px); -webkit-backdrop-filter:blur(9px);
+    box-shadow:inset 0 0 0 .5px rgba(255,255,255,.17); }
+  .c-moon .moon::after { content:""; position:absolute; left:50%; top:6px; transform:translateX(-50%);
+    width:0; height:0; border-left:4px solid transparent; border-right:4px solid transparent; border-top:6px solid var(--amber); }
+  .c-moon .arcv { position:absolute; left:50%; top:50%; font-family:var(--mono); font-size:7px; color:rgba(201,194,182,.55); }
+  .c-moon .arcv.on { color:var(--amber); font-weight:700; font-size:8.5px; }
+  .c-moon .hubv { position:absolute; left:0; right:0; bottom:12px; text-align:center; }
+  .c-moon .hubv .val { font-size:16px; }
+
+  /* 04 BARREL DRAWER */
+  .c-barrel .bar { position:absolute; left:10px; right:10px; bottom:12px; height:50px; border-radius:9px; overflow:hidden;
+    background:
+      repeating-linear-gradient(to right, rgba(0,0,0,.48) 0 1px, transparent 1px 4px),
+      linear-gradient(to bottom, #121213, #3c3c40 48%, #121213);
+    box-shadow:inset 0 0 0 .5px rgba(255,255,255,.15); }
+  .c-barrel .bar::after { content:""; position:absolute; inset:0;
+    background:linear-gradient(to right, rgba(0,0,0,.75), transparent 20%, transparent 80%, rgba(0,0,0,.75)); }
+  .c-barrel .vals { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; gap:16px; z-index:1; font-family:var(--mono); font-size:8px; }
+  .c-barrel .vals b { color:rgba(242,239,232,.4); font-weight:500; }
+  .c-barrel .vals b.on { color:var(--tone); font-weight:700; font-size:11px; }
+  .c-barrel .notch { position:absolute; left:50%; transform:translateX(-50%); top:0; bottom:0; width:42px;
+    border-left:.5px solid var(--amber); border-right:.5px solid var(--amber); opacity:.8; z-index:2; }
+  .c-barrel .lbl { position:absolute; left:0; right:0; top:0; text-align:center; }
+
+  /* 05 CORNER PIVOT */
+  .c-pivot .quad { position:absolute; right:-30px; bottom:-30px; width:150px; height:150px; border-radius:50%;
+    background:radial-gradient(closest-side, rgba(12,11,10,0) 40%, rgba(12,11,10,.66) 58%, rgba(12,11,10,.82) 100%);
+    backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+    box-shadow:inset 0 0 0 .5px rgba(255,255,255,.16); }
+  .c-pivot .pv { position:absolute; font-family:var(--mono); font-size:7px; color:rgba(201,194,182,.55); }
+  .c-pivot .pv.on { color:var(--amber); font-weight:700; font-size:9px; }
+  .c-pivot .rd { position:absolute; right:14px; bottom:14px; text-align:right; }
+  .c-pivot .rd .val { font-size:14px; }
+
+  /* 06 LADDER */
+  .c-ladder .stack { position:absolute; right:10px; bottom:8px; display:flex; flex-direction:column; gap:5px; align-items:flex-end; }
+  .c-ladder .wide { position:absolute; right:10px; bottom:52px; width:132px; height:52px; border-radius:11px;
+    display:flex; align-items:center; justify-content:space-between; padding:0 12px;
+    background:rgba(12,11,10,.6); backdrop-filter:blur(9px); -webkit-backdrop-filter:blur(9px);
+    box-shadow:inset 0 0 0 .5px rgba(255,255,255,.17); }
+  .c-ladder .wide .val { font-size:15px; }
+  .c-ladder .tickbar { display:flex; gap:2px; align-items:center; }
+  .c-ladder .tickbar i { width:1px; height:9px; background:rgba(255,255,255,.28); }
+  .c-ladder .tickbar i.on { background:var(--amber); height:14px; }
+
+  /* 07 BEZEL ARC */
+  .c-arc .band { position:absolute; left:50%; bottom:-118px; transform:translateX(-50%);
+    width:250px; height:250px; border-radius:50%;
+    box-shadow:inset 0 0 0 .5px rgba(255,255,255,.2);
+    background:conic-gradient(from 200deg, rgba(12,11,10,.7) 0 40deg, transparent 40deg);
+    -webkit-mask:radial-gradient(closest-side, transparent 76%, #000 78% 96%, transparent 97%);
+    mask:radial-gradient(closest-side, transparent 76%, #000 78% 96%, transparent 97%);
+    backdrop-filter:blur(7px); -webkit-backdrop-filter:blur(7px); }
+  .c-arc .av { position:absolute; font-family:var(--mono); font-size:7px; color:rgba(201,194,182,.58); }
+  .c-arc .av.on { color:var(--amber); font-weight:700; font-size:10px; }
+  .c-arc .mid { position:absolute; left:0; right:0; bottom:56px; text-align:center; }
+  .c-arc .mid .val { font-size:15px; }
+
+  /* 08 INLINE INFLATE */
+  .c-inline .row { position:absolute; left:0; right:0; bottom:14px; display:flex; align-items:center; justify-content:center; gap:8px; }
+  .c-inline .big { width:74px; height:74px; border-radius:50%; display:grid; place-items:center; position:relative; flex:none; }
+  .c-inline .big .val { font-size:13px; }
+
+  /* 09 TRAY */
+  .c-tray .tray { position:absolute; left:6px; right:6px; bottom:4px; height:100px; border-radius:18px 18px 12px 12px;
+    background:rgba(10,9,8,.6); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
+    border:.5px solid rgba(255,255,255,.15); }
+  .c-tray .shoulder { position:absolute; left:10px; right:10px; top:8px; display:flex; justify-content:space-between; }
+  .c-tray .dial { position:absolute; left:50%; bottom:10px; transform:translateX(-50%); width:70px; height:70px; border-radius:50%; display:grid; place-items:center; }
+  .c-tray .dial .val { font-size:13px; }
+
+  /* 10 ORBIT */
+  .c-orbit .big { position:absolute; left:50%; bottom:10px; transform:translateX(-50%); width:80px; height:80px; border-radius:50%; display:grid; place-items:center; }
+  .c-orbit .big .val { font-size:14px; }
+  .c-orbit .sat { position:absolute; width:26px; height:26px; border-radius:50%; display:grid; place-items:center;
+    background:rgba(0,0,0,.4); border:.5px solid rgba(255,255,255,.16);
+    backdrop-filter:blur(9px); -webkit-backdrop-filter:blur(9px);
+    font-family:var(--mono); font-size:6px; font-weight:600; color:rgba(242,239,232,.68); }
+  .c-orbit .sat.a { left:28px; bottom:66px; }
+  .c-orbit .sat.b { right:28px; bottom:66px; }
+  .c-orbit .sat.c { left:14px; bottom:22px; }
+
+  /* ================= CARDS ================= */
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(266px,1fr)); gap:clamp(20px,2.6vw,34px); }
+  .card { display:flex; flex-direction:column; gap:13px; }
+  .cardhead { display:flex; align-items:baseline; gap:9px; }
+  .cardhead .n { font-family:var(--mono); font-size:10px; color:var(--amber); letter-spacing:.12em; }
+  .cardhead h3 { margin:0; font-size:16.5px; font-weight:650; letter-spacing:-.01em; }
+  .card > p { margin:0; font-size:13px; color:var(--page-dim); text-wrap:pretty; }
+  .shots { display:flex; flex-direction:column; gap:11px; align-items:center; }
+  .landcap { font-family:var(--mono); font-size:7.5px; letter-spacing:.15em; text-transform:uppercase; color:var(--page-faint); align-self:flex-start; }
+  .tags { display:flex; flex-wrap:wrap; gap:5px; }
+  .tag { font-family:var(--mono); font-size:8.5px; letter-spacing:.09em; text-transform:uppercase; padding:3px 7px; border-radius:3px; border:1px solid var(--page-rule); color:var(--page-faint); }
+  .tag.good { color:var(--amber); border-color:rgba(217,138,82,.4); }
+
+  /* ================= ROTATION DEMO ================= */
+  .rotwrap { display:flex; flex-wrap:wrap; gap:clamp(18px,3vw,40px); align-items:center; }
+  .stage { width:300px; height:300px; position:relative; flex:none; display:grid; place-items:center; }
+  .rotor { animation:rot 7s cubic-bezier(.62,0,.2,1) infinite; transform-origin:center; }
+  @keyframes rot {
+    0%,32%   { transform:rotate(0deg); }
+    50%,82%  { transform:rotate(-90deg); }
+    100%     { transform:rotate(0deg); }
+  }
+  /* the dials counter-rotate so their engraving stays upright through the turn */
+  .counter { animation:counter 7s cubic-bezier(.62,0,.2,1) infinite; }
+  @keyframes counter {
+    0%,32%   { transform:rotate(0deg); }
+    50%,82%  { transform:rotate(90deg); }
+    100%     { transform:rotate(0deg); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .rotor, .counter { animation:none; }
+  }
+  .rotnotes { display:flex; flex-direction:column; gap:16px; min-width:250px; flex:1; }
+  .rotnote h4 { margin:0 0 3px; font-family:var(--mono); font-size:9.5px; letter-spacing:.15em; text-transform:uppercase; color:var(--amber); }
+  .rotnote p { margin:0; font-size:13.5px; color:var(--page-dim); text-wrap:pretty; }
+
+  /* ================= REC ================= */
+  .rec { display:grid; grid-template-columns:34px minmax(0,1fr); gap:14px; padding:18px 2px; border-bottom:1px solid var(--page-rule); align-items:start; }
+  .rec:first-of-type { border-top:1px solid var(--page-rule); }
+  .rec .n { font-family:var(--mono); font-size:10.5px; color:var(--amber); padding-top:3px; letter-spacing:.1em; }
+  .rec h4 { margin:0 0 3px; font-size:15px; font-weight:650; }
+  .rec p { margin:0; font-size:13.5px; color:var(--page-dim); max-width:var(--measure); text-wrap:pretty; }
+
+  .foot { font-size:13px; color:var(--page-faint); border-top:1px solid var(--page-rule); padding-top:18px; max-width:var(--measure); text-wrap:pretty; }
+  a { color:var(--amber); }
+  :focus-visible { outline:2px solid var(--amber); outline-offset:3px; border-radius:3px; }
+</style>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <div class="eyebrow">Latitude Cam <span>/</span> Bottom dials <span>/</span> Ten to pick from</div>
+    <h1>Everything a thumb needs, <em>above the shutter</em>.</h1>
+    <p class="standfirst">
+      Nothing sits in the middle of the frame any more. The dials live in the band between the shutter
+      button and the bottom of the picture — inside the arc a thumb actually sweeps, shown dashed on
+      each phone. Collapsed they are chips. One tap and the chosen one inflates into a real dial,
+      focused, with the others stepping back. Each direction below also shows what it becomes in
+      landscape, since the cluster has to migrate to the short edge when the body turns.
+    </p>
+  </header>
+
+  <div class="constraints">
+    <div><dt>Everywhere</dt><dd>Cluster lives above the shutter. The subject is never covered.</dd></div>
+    <div><dt>Everywhere</dt><dd>Tap to inflate one control; the rest dim and shrink.</dd></div>
+    <div><dt>Everywhere</dt><dd>Within a 280pt thumb arc struck from the shutter.</dd></div>
+    <div><dt>Everywhere</dt><dd>On rotation the cluster migrates; engraving stays upright.</dd></div>
+  </div>
+
+  <hr class="rule" />
+
+  <section class="section">
+    <div class="section-head">
+      <h2>The ten</h2>
+      <p>Each phone shows one control already inflated — the state after a tap. The strip beneath it is the same direction in landscape.</p>
+    </div>
+
+    <div class="grid">
+
+      <!-- 01 FAN -->
+      <article class="card">
+        <div class="cardhead"><span class="n">01</span><h3>Fan</h3></div>
+        <p>The tapped dial grows at the centre and its neighbours splay outward and tilt, like a hand of cards opening. The tilt is the tell for which way to drag.</p>
+        <div class="shots">
+          <div class="phone">
+            <div class="scene"></div>
+            <div class="chrome">
+              <div class="topbar"><div class="pill glass">SETTINGS</div><div class="rail"><div class="rbtn glass">⟲</div><div class="rbtn glass amber">RAW</div></div></div>
+              <div class="reach"></div><div class="reachlab">THUMB ARC</div>
+              <div class="deck">
+                <div class="cluster c-fan">
+                  <div class="sat l"><div class="frost"></div><div class="knurl"></div><span class="val">400</span></div>
+                  <div class="big"><div class="frost"></div><div class="knurl"></div><div class="idx"></div><span class="val">1/125</span></div>
+                  <div class="sat r"><div class="frost"></div><div class="knurl"></div><span class="val">5600</span></div>
+                </div>
+                <div class="shutterrow"><div class="prolabel">PRO</div><div class="shutter"></div><div class="thumb"></div></div>
+                <div class="filmrow"><b>AMBER</b><b class="on">SLATE</b><b>RUST</b><b>MONO</b></div>
+              </div>
+            </div>
+          </div>
+          <span class="landcap">Landscape</span>
+          <div class="phone land">
+            <div class="scene"></div>
+            <div class="chrome">
+              <div style="position:absolute; right:52px; top:50%; transform:translateY(-50%); display:flex; align-items:center; gap:6px;">
+                <div style="width:26px;height:26px;border-radius:50%;position:relative;display:grid;place-items:center;"><div class="frost"></div><span class="val" style="font-size:6px">400</span></div>
+                <div style="width:54px;height:54px;border-radius:50%;position:relative;display:grid;place-items:center;"><div class="frost"></div><div class="knurl"></div><div class="idx"></div><span class="val" style="font-size:10px">1/125</span></div>
+              </div>
+              <div style="position:absolute; right:12px; top:50%; transform:translateY(-50%);"><div class="shutter" style="width:34px;height:34px"></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="tags"><span class="tag good">Clear focus</span><span class="tag">Widest footprint</span></div>
+      </article>
+
+      <!-- 02 RISE -->
+      <article class="card">
+        <div class="cardhead"><span class="n">02</span><h3>Rise</h3></div>
+        <p>The chips stay put in their row; the tapped one lifts out on a short stem and inflates above them. Position never shifts, so the row stays a stable target.</p>
+        <div class="shots">
+          <div class="phone">
+            <div class="scene"></div>
+            <div class="chrome">
+              <div class="topbar"><div class="pill glass">SETTINGS</div><div class="rail"><div class="rbtn glass">⟲</div><div class="rbtn glass amber">RAW</div></div></div>
+              <div class="reach"></div><div class="reachlab">THUMB ARC</div>
+              <div class="deck">
+                <div class="cluster c-rise">
+                  <div class="big"><div class="frost"></div><div class="knurl"></div><div class="idx"></div><span class="val">1/125</span></div>
+                  <div class="stem"></div>
+                  <div class="row"><span class="chip" style="color:var(--ink-base);background:var(--amber);border-color:transparent">1/125</span><span class="chip dim">400</span><span class="chip dim">5600K</span></div>
+                </div>
+                <div class="shutterrow"><div class="prolabel">PRO</div><div class="shutter"></div><div class="thumb"></div></div>
+                <div class="filmrow"><b>AMBER</b><b class="on">SLATE</b><b>RUST</b><b>MONO</b></div>
+              </div>
+            </div>
+          </div>
+          <span class="landcap">Landscape</span>
+          <div class="phone land">
+            <div class="scene"></div>
+            <div class="chrome">
+              <div style="position:absolute; right:56px; top:0; bottom:0; display:flex; flex-direction:column; justify-content:center; gap:5px; align-items:flex-end;">
+                <span class="chip" style="color:var(--ink-base);background:var(--amber);border-color:transparent;font-size:6px">1/125</span>
+                <span class="chip dim" style="font-size:6px">400</span>
+                <span class="chip dim" style="font-size:6px">5600K</span>
+              </div>
+              <div style="position:absolute; right:112px; top:50%; transform:translateY(-50%); width:54px;height:54px;border-radius:50%;display:grid;place-items:center;"><div class="frost"></div><div class="knurl"></div><span class="val" style="font-size:10px">1/125</span></div>
+              <div style="position:absolute; right:12px; top:50%; transform:translateY(-50%);"><div class="shutter" style="width:34px;height:34px"></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="tags"><span class="tag good">Most predictable</span><span class="tag">Two rows deep</span></div>
+      </article>
+
+      <!-- 03 HALF MOON -->
+      <article class="card">
+        <div class="cardhead"><span class="n">03</span><h3>Half moon</h3></div>
+        <p>Only the top half of the dial rises above the bottom edge — the rest is understood to be below the screen. Half the coverage of a full circle for the same scale of control.</p>
+        <div class="shots">
+          <div class="phone">
+            <div class="scene"></div>
+            <div class="chrome">
+              <div class="topbar"><div class="pill glass">SETTINGS</div><div class="rail"><div class="rbtn glass">⟲</div><div class="rbtn glass amber">RAW</div></div></div>
+              <div class="reach"></div><div class="reachlab">THUMB ARC</div>
+              <div class="deck">
+                <div class="cluster c-moon" style="height:104px">
+                  <div class="moon">
+                    <span class="arcv" style="transform:translate(-50%,0) rotate(-40deg) translateY(-64px)">1/60</span>
+                    <span class="arcv on" style="transform:translate(-50%,0) translateY(-64px)">1/125</span>
+                    <span class="arcv" style="transform:translate(-50%,0) rotate(40deg) translateY(-64px)">1/250</span>
+                    <div class="hubv"><div class="val">1/125</div><div class="cap">SHUTTER</div></div>
+                  </div>
+                </div>
+                <div class="shutterrow"><div class="prolabel">PRO</div><div class="shutter"></div><div class="thumb"></div></div>
+              </div>
+            </div>
+          </div>
+          <span class="landcap">Landscape</span>
+          <div class="phone land">
+            <div class="scene"></div>
+            <div class="chrome">
+              <div style="position:absolute; right:0; top:50%; transform:translateY(-50%); width:52px; height:112px; border-radius:112px 0 0 112px; background:linear-gradient(to left, rgba(12,11,10,.74), rgba(12,11,10,.5)); backdrop-filter:blur(9px); -webkit-backdrop-filter:blur(9px); box-shadow:inset 0 0 0 .5px rgba(255,255,255,.17); display:grid; place-items:center;">
+                <div style="text-align:center"><div class="val" style="font-size:10px">1/125</div><div class="cap">SHUTTER</div></div>
+              </div>
+              <div style="position:absolute; right:64px; top:50%; transform:translateY(-50%);"><div class="shutter" style="width:34px;height:34px"></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="tags"><span class="tag good">Least coverage</span><span class="tag good">Best in landscape</span></div>
+      </article>
+
+      <!-- 04 BARREL -->
+      <article class="card">
+        <div class="cardhead"><span class="n">04</span><h3>Barrel</h3></div>
+        <p>A knurled barrel spanning the width, values rolling under a lit notch. The one direction whose shape states the gesture outright: drag sideways.</p>
+        <div class="shots">
+          <div class="phone">
+            <div class="scene"></div>
+            <div class="chrome">
+              <div class="topbar"><div class="pill glass">SETTINGS</div><div class="rail"><div class="rbtn glass">⟲</div><div class="rbtn glass amber">RAW</div></div></div>
+              <div class="reach"></div><div class="reachlab">THUMB ARC</div>
+              <div class="deck">
+                <div class="cluster c-barrel" style="height:86px">
+                  <div class="lbl"><span class="cap">SHUTTER</span></div>
+                  <div class="bar">
+                    <div class="vals"><b>1/60</b><b class="on">1/125</b><b>1/250</b></div>
+                    <div class="notch"></div>
+                  </div>
+                </div>
+                <div class="shutterrow"><div class="prolabel">PRO</div><div class="shutter"></div><div class="thumb"></div></div>
+                <div class="filmrow"><b>AMBER</b><b class="on">SLATE</b><b>RUST</b><b>MONO</b></div>
+              </div>
+            </div>
+          </div>
+          <span class="landcap">Landscape</span>
+          <div class="phone land">
+            <div class="scene"></div>
+            <div class="chrome">
+              <div style="position:absolute; right:52px; top:14px; bottom:14px; width:44px; border-radius:9px; overflow:hidden; background:repeating-linear-gradient(to bottom, rgba(0,0,0,.48) 0 1px, transparent 1px 4px), linear-gradient(to right,#121213,#3c3c40 48%,#121213); box-shadow:inset 0 0 0 .5px rgba(255,255,255,.15); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:9px; font-family:var(--mono); font-size:7px;">
+                <b style="color:rgba(242,239,232,.4)">1/60</b><b style="color:var(--tone);font-size:9px">1/125</b><b style="color:rgba(242,239,232,.4)">1/250</b>
+              </div>
+              <div style="position:absolute; right:12px; top:50%; transform:translateY(-50%);"><div class="shutter" style="width:34px;height:34px"></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="tags"><span class="tag good">Gesture is obvious</span><span class="tag">Reads as a picker</span></div>
+      </article>
+
+      <!-- 05 CORNER PIVOT -->
+      <article class="card">
+        <div class="cardhead"><span class="n">05</span><h3>Corner pivot</h3></div>
+        <p>The dial unrolls from the bottom corner nearest your thumb, following the pivot your hand already makes. Mirrors for left-handers.</p>
+        <div class="shots">
+          <div class="phone">
+            <div class="scene"></div>
+            <div class="chrome">
+              <div class="topbar"><div class="pill glass">SETTINGS</div><div class="rail"><div class="rbtn glass">⟲</div><div class="rbtn glass amber">RAW</div></div></div>
+              <div class="reach"></div><div class="reachlab">THUMB ARC</div>
+              <div class="deck">
+                <div class="cluster c-pivot" style="height:104px">
+                  <div class="quad"></div>
+                  <span class="pv" style="right:96px; bottom:34px">1/60</span>
+                  <span class="pv on" style="right:70px; bottom:62px">1/125</span>
+                  <span class="pv" style="right:30px; bottom:80px">1/250</span>
+                  <div class="rd"><div class="val">1/125</div><div class="cap">SHUTTER</div></div>
+                </div>
+                <div class="shutterrow"><div class="prolabel">PRO</div><div class="shutter"></div><div class="thumb"></div></div>
+              </div>
+            </div>
+          </div>
+          <span class="landcap">Landscape</span>
+          <div class="phone land">
+            <div class="scene"></div>
+            <div class="chrome">
+              <div style="position:absolute; right:-24px; bottom:-24px; width:118px; height:118px; border-radius:50%; background:radial-gradient(closest-side, rgba(12,11,10,0) 40%, rgba(12,11,10,.66) 58%, rgba(12,11,10,.82) 100%); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); box-shadow:inset 0 0 0 .5px rgba(255,255,255,.16);"></div>
+              <div style="position:absolute; right:16px; bottom:14px; text-align:right"><div class="val" style="font-size:11px">1/125</div><div class="cap">SHUTTER</div></div>
+              <div style="position:absolute; right:14px; top:16px;"><div class="shutter" style="width:32px;height:32px"></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="tags"><span class="tag good">Truest to the hand</span><span class="tag">Needs handedness</span></div>
+      </article>
+
+      <!-- 06 LADDER -->
+      <article class="card">
+        <div class="cardhead"><span class="n">06</span><h3>Ladder</h3></div>
+        <p>Chips stack up the right edge; the tapped one swings out to the left as a wide plate with a tick scale. Portrait and landscape are nearly the same layout.</p>
+        <div class="shots">
+          <div class="phone">
+            <div class="scene"></div>
+            <div class="chrome">
+              <div class="topbar"><div class="pill glass">SETTINGS</div><div class="rail"><div class="rbtn glass">⟲</div><div class="rbtn glass amber">RAW</div></div></div>
+              <div class="reach"></div><div class="reachlab">THUMB ARC</div>
+              <div class="deck">
+                <div class="cluster c-ladder" style="height:116px">
+                  <div class="wide">
+                    <div><div class="val">1/125</div><div class="cap">SHUTTER</div></div>
+                    <div class="tickbar"><i></i><i></i><i class="on"></i><i></i><i></i></div>
+                  </div>
+                  <div class="stack"><span class="chip dim">400</span><span class="chip dim">5600K</span></div>
+                </div>
+                <div class="shutterrow"><div class="prolabel">PRO</div><div class="shutter"></div><div class="thumb"></div></div>
+              </div>
+            </div>
+          </div>
+          <span class="landcap">Landscape</span>
+          <div class="phone land">
+            <div class="scene"></div>
+            <div class="chrome">
+              <div style="position:absolute; right:54px; top:50%; transform:translateY(-50%); width:110px; height:44px; border-radius:11px; display:flex; align-items:center; justify-content:space-between; padding:0 11px; background:rgba(12,11,10,.6); backdrop-filter:blur(9px); -webkit-backdrop-filter:blur(9px); box-shadow:inset 0 0 0 .5px rgba(255,255,255,.17);">
+                <div><div class="val" style="font-size:11px">1/125</div><div class="cap">SHUTTER</div></div>
+                <div class="tickbar"><i></i><i class="on"></i><i></i></div>
+              </div>
+              <div style="position:absolute; right:12px; top:50%; transform:translateY(-50%);"><div class="shutter" style="width:34px;height:34px"></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="tags"><span class="tag good">Rotates cleanly</span><span class="tag">Right-edge bias</span></div>
+      </article>
+
+      <!-- 07 BEZEL ARC -->
+      <article class="card">
+        <div class="cardhead"><span class="n">07</span><h3>Bezel arc</h3></div>
+        <p>Values sit on the exact arc a thumb sweeps, hugging the bottom bezel. You do not aim at a control so much as run your thumb along the edge.</p>
+        <div class="shots">
+          <div class="phone">
+            <div class="scene"></div>
+            <div class="chrome">
+              <div class="topbar"><div class="pill glass">SETTINGS</div><div class="rail"><div class="rbtn glass">⟲</div><div class="rbtn glass amber">RAW</div></div></div>
+              <div class="reach"></div><div class="reachlab">THUMB ARC</div>
+              <div class="deck">
+                <div class="cluster c-arc" style="height:110px">
+                  <div class="band"></div>
+                  <span class="av" style="left:26px; bottom:44px">1/60</span>
+                  <span class="av on" style="left:50%; transform:translateX(-50%); bottom:76px">1/125</span>
+                  <span class="av" style="right:26px; bottom:44px">1/250</span>
+                  <div class="mid"><div class="cap">SHUTTER</div></div>
+                </div>
+                <div class="shutterrow"><div class="prolabel">PRO</div><div class="shutter"></div><div class="thumb"></div></div>
+              </div>
+            </div>
+          </div>
+          <span class="landcap">Landscape</span>
+          <div class="phone land">
+            <div class="scene"></div>
+            <div class="chrome">
+              <div style="position:absolute; right:-60px; top:50%; transform:translateY(-50%); width:150px; height:150px; border-radius:50%; box-shadow:inset 0 0 0 .5px rgba(255,255,255,.2); -webkit-mask:radial-gradient(closest-side, transparent 76%, #000 78% 96%, transparent 97%); mask:radial-gradient(closest-side, transparent 76%, #000 78% 96%, transparent 97%); background:conic-gradient(from 300deg, rgba(12,11,10,.7) 0 60deg, transparent 60deg); backdrop-filter:blur(7px); -webkit-backdrop-filter:blur(7px);"></div>
+              <span class="av" style="position:absolute; right:20px; top:26px; font-family:var(--mono); font-size:7px; color:rgba(201,194,182,.58)">1/60</span>
+              <span style="position:absolute; right:12px; top:50%; transform:translateY(-50%); font-family:var(--mono); font-size:10px; font-weight:700; color:var(--amber)">1/125</span>
+              <span style="position:absolute; right:20px; bottom:26px; font-family:var(--mono); font-size:7px; color:rgba(201,194,182,.58)">1/250</span>
+              <div style="position:absolute; right:76px; top:50%; transform:translateY(-50%);"><div class="shutter" style="width:34px;height:34px"></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="tags"><span class="tag good">Most ergonomic</span><span class="tag">Unfamiliar</span></div>
+      </article>
+
+      <!-- 08 INLINE -->
+      <article class="card">
+        <div class="cardhead"><span class="n">08</span><h3>Inline</h3></div>
+        <p>No repositioning at all. The tapped chip swells into a dial in the row it already occupied, and its neighbours slide aside to make room.</p>
+        <div class="shots">
+          <div class="phone">
+            <div class="scene"></div>
+            <div class="chrome">
+              <div class="topbar"><div class="pill glass">SETTINGS</div><div class="rail"><div class="rbtn glass">⟲</div><div class="rbtn glass amber">RAW</div></div></div>
+              <div class="reach"></div><div class="reachlab">THUMB ARC</div>
+              <div class="deck">
+                <div class="cluster c-inline" style="height:94px">
+                  <div class="row">
+                    <span class="chip dim">400</span>
+                    <div class="big"><div class="frost"></div><div class="knurl"></div><div class="idx"></div><span class="val">1/125</span></div>
+                    <span class="chip dim">5600K</span>
+                  </div>
+                </div>
+                <div class="shutterrow"><div class="prolabel">PRO</div><div class="shutter"></div><div class="thumb"></div></div>
+                <div class="filmrow"><b>AMBER</b><b class="on">SLATE</b><b>RUST</b><b>MONO</b></div>
+              </div>
+            </div>
+          </div>
+          <span class="landcap">Landscape</span>
+          <div class="phone land">
+            <div class="scene"></div>
+            <div class="chrome">
+              <div style="position:absolute; right:50px; top:0; bottom:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px;">
+                <span class="chip dim" style="font-size:6px">400</span>
+                <div style="width:52px;height:52px;border-radius:50%;position:relative;display:grid;place-items:center;"><div class="frost"></div><div class="knurl"></div><span class="val" style="font-size:10px">1/125</span></div>
+                <span class="chip dim" style="font-size:6px">5600K</span>
+              </div>
+              <div style="position:absolute; right:12px; top:50%; transform:translateY(-50%);"><div class="shutter" style="width:34px;height:34px"></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="tags"><span class="tag good">Simplest to build</span><span class="tag">Least drama</span></div>
+      </article>
+
+      <!-- 09 TRAY -->
+      <article class="card">
+        <div class="cardhead"><span class="n">09</span><h3>Tray</h3></div>
+        <p>A shallow shelf lifts from the bottom edge with the dial seated in it and the other controls along its shoulder. The only one that reads as a piece of hardware you have pulled out.</p>
+        <div class="shots">
+          <div class="phone">
+            <div class="scene"></div>
+            <div class="chrome">
+              <div class="topbar"><div class="pill glass">SETTINGS</div><div class="rail"><div class="rbtn glass">⟲</div><div class="rbtn glass amber">RAW</div></div></div>
+              <div class="reach"></div><div class="reachlab">THUMB ARC</div>
+              <div class="deck">
+                <div class="cluster c-tray" style="height:112px">
+                  <div class="tray">
+                    <div class="shoulder"><span class="chip dim">400</span><span class="cap" style="align-self:center">SHUTTER</span><span class="chip dim">5600K</span></div>
+                    <div class="dial"><div class="frost"></div><div class="knurl"></div><div class="idx"></div><span class="val">1/125</span></div>
+                  </div>
+                </div>
+                <div class="shutterrow"><div class="prolabel">PRO</div><div class="shutter"></div><div class="thumb"></div></div>
+              </div>
+            </div>
+          </div>
+          <span class="landcap">Landscape</span>
+          <div class="phone land">
+            <div class="scene"></div>
+            <div class="chrome">
+              <div style="position:absolute; right:44px; top:6px; bottom:6px; width:96px; border-radius:16px; background:rgba(10,9,8,.6); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px); border:.5px solid rgba(255,255,255,.15); display:grid; place-items:center;">
+                <div style="width:56px;height:56px;border-radius:50%;position:relative;display:grid;place-items:center;"><div class="frost"></div><div class="knurl"></div><span class="val" style="font-size:10px">1/125</span></div>
+              </div>
+              <div style="position:absolute; right:8px; top:50%; transform:translateY(-50%);"><div class="shutter" style="width:30px;height:30px"></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="tags"><span class="tag">Most substantial</span><span class="tag">Covers most</span></div>
+      </article>
+
+      <!-- 10 ORBIT -->
+      <article class="card">
+        <div class="cardhead"><span class="n">10</span><h3>Orbit</h3></div>
+        <p>One dial holds the centre of the cluster and the others circle it as satellites. Tapping a satellite swaps it into the middle, the two trading places.</p>
+        <div class="shots">
+          <div class="phone">
+            <div class="scene"></div>
+            <div class="chrome">
+              <div class="topbar"><div class="pill glass">SETTINGS</div><div class="rail"><div class="rbtn glass">⟲</div><div class="rbtn glass amber">RAW</div></div></div>
+              <div class="reach"></div><div class="reachlab">THUMB ARC</div>
+              <div class="deck">
+                <div class="cluster c-orbit" style="height:108px">
+                  <div class="sat a">400</div>
+                  <div class="sat b">5600</div>
+                  <div class="sat c">EV</div>
+                  <div class="big"><div class="frost"></div><div class="knurl"></div><div class="idx"></div><span class="val">1/125</span></div>
+                </div>
+                <div class="shutterrow"><div class="prolabel">PRO</div><div class="shutter"></div><div class="thumb"></div></div>
+              </div>
+            </div>
+          </div>
+          <span class="landcap">Landscape</span>
+          <div class="phone land">
+            <div class="scene"></div>
+            <div class="chrome">
+              <div style="position:absolute; right:46px; top:50%; transform:translateY(-50%); width:56px;height:56px;border-radius:50%;display:grid;place-items:center;"><div class="frost"></div><div class="knurl"></div><span class="val" style="font-size:10px">1/125</span></div>
+              <div class="sat" style="position:absolute; right:110px; top:26px;">400</div>
+              <div class="sat" style="position:absolute; right:110px; bottom:26px;">5600</div>
+              <div style="position:absolute; right:8px; top:50%; transform:translateY(-50%);"><div class="shutter" style="width:30px;height:30px"></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="tags"><span class="tag">Holds four</span><span class="tag">Busiest</span></div>
+      </article>
+
+    </div>
+  </section>
+
+  <hr class="rule" />
+
+  <!-- ================= ROTATION ================= -->
+  <section class="section">
+    <div class="section-head">
+      <h2>Turning the body</h2>
+      <p>The demo runs on a loop. The body turns; the cluster travels with the shutter to the short edge, and every engraved value counter-rotates so it never ends up sideways.</p>
+    </div>
+
+    <div class="rotwrap">
+      <div class="stage">
+        <div class="rotor">
+          <div class="phone" style="width:150px">
+            <div class="scene"></div>
+            <div class="chrome">
+              <div class="topbar"><div class="pill glass" style="font-size:5px">SETTINGS</div></div>
+              <div class="deck" style="padding-bottom:8px">
+                <div class="cluster" style="height:70px; position:relative">
+                  <div style="position:absolute; left:50%; bottom:6px; transform:translateX(-50%); width:56px;height:56px;border-radius:50%;display:grid;place-items:center;">
+                    <div class="frost"></div><div class="knurl"></div>
+                    <div class="counter"><span class="val" style="font-size:10px">1/125</span></div>
+                  </div>
+                </div>
+                <div class="shutterrow" style="padding:0 14px"><div class="prolabel" style="width:16px;font-size:7px">PRO</div><div class="shutter" style="width:30px;height:30px"></div><div class="thumb" style="width:16px;height:16px"></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="rotnotes">
+        <div class="rotnote">
+          <h4>The chrome turns, the picture does not</h4>
+          <p>The preview never rotates — a camera's finder shows the world the right way up whichever way you hold the body. Only the controls move.</p>
+        </div>
+        <div class="rotnote">
+          <h4>Values counter-rotate</h4>
+          <p>Each engraved number spins the opposite way at the same rate, so it stays readable through the whole transition rather than arriving upright at the end.</p>
+        </div>
+        <div class="rotnote">
+          <h4>420ms, one spring</h4>
+          <p>Migration and counter-rotation run on a single spring so the cluster arrives as one object. Two timings would make it look like parts falling into place.</p>
+        </div>
+        <div class="rotnote">
+          <h4>An open dial stays open</h4>
+          <p>Rotating mid-adjustment keeps the control live and the value unchanged. Losing your place because you turned the phone would be its own small betrayal.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <hr class="rule" />
+
+  <section class="section">
+    <div class="section-head">
+      <h2>If you want my read</h2>
+      <p>You asked for ten to choose from, so these are only leanings.</p>
+    </div>
+
+    <div class="rec">
+      <div class="n">03</div>
+      <div>
+        <h4>Half moon is the one I would build</h4>
+        <p>It gives the largest control for the least covered picture, because half the dial is understood to continue below the screen. It is also the only one that rotates into landscape without redrawing — the same half-disc simply attaches to the right edge instead of the bottom.</p>
+      </div>
+    </div>
+    <div class="rec">
+      <div class="n">04</div>
+      <div>
+        <h4>Barrel if the gesture worries you most</h4>
+        <p>The dials that failed did so invisibly. A knurled barrel is the only shape here that says "drag me sideways" without a label, which is worth a lot when the last control's problem was that nobody could see why it did not respond.</p>
+      </div>
+    </div>
+    <div class="rec">
+      <div class="n">07</div>
+      <div>
+        <h4>Bezel arc is the interesting risk</h4>
+        <p>Putting the values on the exact path a thumb sweeps is the most ergonomically correct answer and the least familiar one. Worth prototyping before committing — it either feels obvious in the hand or not at all.</p>
+      </div>
+    </div>
+    <div class="rec">
+      <div class="n">09</div>
+      <div>
+        <h4>Tray is the one I would avoid</h4>
+        <p>It is the closest thing here to the bottom sheet you asked me to get rid of. Handsome, but it covers a third of the frame to show one number.</p>
+      </div>
+    </div>
+  </section>
+
+  <p class="foot">
+    All ten use the app's tokens from <span style="font-family:var(--mono);font-size:12px">Theme.swift</span> — they differ in geometry and gesture, not palette. The dashed
+    arc on each phone is a 280pt sweep struck from the shutter: everything inside it is reachable without
+    shifting grip. The scene behind the glass is drawn, not photographed. Nothing here is built —
+    give me a number and I will build that one.
+  </p>
+
+</div>
