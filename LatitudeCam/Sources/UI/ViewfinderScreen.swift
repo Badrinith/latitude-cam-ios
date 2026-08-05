@@ -200,31 +200,29 @@ struct ViewfinderScreen: View {
         .animation(.easeInOut(duration: 0.2), value: app.lastSaveMessage)
     }
 
+    /// The corner instruments. Unlike the barrels these are glyphs in round
+    /// buttons, so they turn in place — a round button is the same shape at every
+    /// angle, and only what is printed on it needs to come back upright.
+    ///
+    /// The exposure readouts that used to sit up here are gone: the chips above
+    /// the shutter show the same three values and are now the way to change them,
+    /// so keeping a second copy at arm's reach was two of everything.
     private var chrome: some View {
         VStack(spacing: 0) {
-            // Settings pill on the left, exposure readouts centred.
-            ZStack {
-                hud
-
-                HStack {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 8) {
                     Button { app.go(.settings) } label: {
                         Text("SETTINGS")
                             .font(.mono(10, .semibold))
                             .kerning(0.5)
                             .foregroundStyle(Color.white.opacity(0.75))
+                            .rotationEffect(orientation.angle)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 6)
                             .glass(radius: 16)
                     }
                     .buttonStyle(.plain)
-                    Spacer()
-                }
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 8)
 
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 8) {
                     LiveHistogramView(
                         frames: app.cameraManager.frames,
                         style: histogramStyle
@@ -240,6 +238,7 @@ struct ViewfinderScreen: View {
                             Image(systemName: "arrow.triangle.2.circlepath.camera")
                                 .font(.system(size: 13, weight: .medium))
                                 .foregroundStyle(app.usingFrontCamera ? Accent.amber : Tone.primary)
+                                .rotationEffect(orientation.angle)
                         }
                     }
                     .buttonStyle(.plain)
@@ -249,6 +248,7 @@ struct ViewfinderScreen: View {
                             Text(aspect)
                                 .font(.mono(9, .semibold))
                                 .foregroundStyle(Tone.primary)
+                                .rotationEffect(orientation.angle)
                         }
                     }
                     .buttonStyle(.plain)
@@ -261,6 +261,7 @@ struct ViewfinderScreen: View {
                             Text("RAW")
                                 .font(.mono(8, .semibold))
                                 .foregroundStyle(app.proRAW ? Accent.amber : Tone.quaternary)
+                                .rotationEffect(orientation.angle)
                         }
                     }
                     .buttonStyle(.plain)
@@ -299,64 +300,88 @@ struct ViewfinderScreen: View {
     /// lettering alone was not enough — a barrel you drag sideways is the wrong
     /// shape entirely once sideways has become up. The release does not move; a
     /// shutter you have to hunt for is worse than one held at an odd angle.
-    private var deck: some View {
-        Group {
-            if orientation.edge == .bottom {
-                VStack(spacing: 0) {
-                    controlCluster
-                    shutterRow
-                    filmSelector.padding(.top, 14)
-                }
-                .padding(.bottom, 18)
-                .background { deckShade }
-            } else {
-                GeometryReader { geo in
-                    ZStack {
-                        VStack(spacing: 0) {
-                            Spacer(minLength: 0)
-                            shutterRow.padding(.bottom, 18)
-                        }
-                        .background(alignment: .bottom) {
-                            deckShade.frame(height: 150)
-                        }
+    private static let clusterBand: CGFloat = 118
+    private static let filmBand: CGFloat = 76
+    private static let shutterBand: CGFloat = 88
+    private static let bandInset: CGFloat = 12
 
-                        HStack(spacing: 0) {
-                            if orientation.edge == .trailing { Spacer(minLength: 0) }
-                            turnedControls(along: geo.size.height)
-                            if orientation.edge == .leading { Spacer(minLength: 0) }
-                        }
-                    }
-                }
+    /// One view tree in every orientation.
+    ///
+    /// The first attempt branched on orientation and built two different trees.
+    /// SwiftUI cannot interpolate between two trees, so it swapped them — which
+    /// is exactly the jump that was reported. Here the blocks are laid out at a
+    /// constant size and only their rotation and centre change, and both of those
+    /// animate. Nothing resizes, so there is nothing left to snap.
+    private var deck: some View {
+        GeometryReader { geo in
+            let size = geo.size
+            ZStack(alignment: .topLeading) {
+                deckShade
+                    .frame(height: 190)
+                    .frame(maxHeight: .infinity, alignment: .bottom)
+                    .opacity(orientation.edge == .bottom ? 1 : 0)
+
+                band(BarrelCluster(), thickness: Self.clusterBand,
+                     centre: clusterCentre(in: size), length: size.width)
+
+                band(filmSelector, thickness: Self.filmBand,
+                     centre: filmCentre(in: size), length: size.width)
+
+                // Fixed. A shutter you have to hunt for is worse than one held at
+                // an odd angle, so it keeps its place whichever way the body turns.
+                shutterRow
+                    .frame(width: size.width, height: Self.shutterBand)
+                    .position(
+                        x: size.width / 2,
+                        y: size.height - Self.bandInset - Self.filmBand - Self.shutterBand / 2
+                    )
             }
         }
-        .animation(.spring(response: 0.44, dampingFraction: 0.8), value: orientation.edge)
     }
 
-    /// Thickness of the control band once it is stood on its side.
-    private static let controlBand: CGFloat = 168
+    /// Laid out along the screen's width in every orientation, then turned about
+    /// its own centre. Keeping the frame constant is what makes the move
+    /// animatable — a block that also resized would snap however it was eased.
+    private func band<C: View>(
+        _ content: C, thickness: CGFloat, centre: CGPoint, length: CGFloat
+    ) -> some View {
+        content
+            .frame(width: length, height: thickness)
+            .background {
+                deckShade.opacity(orientation.edge == .bottom ? 0 : 1)
+            }
+            .rotationEffect(orientation.angle)
+            .position(centre)
+    }
 
-    /// Laid out along the long axis, then turned. The second frame gives the
-    /// rotated block its real footprint — without it the layout still reserves
-    /// the pre-rotation size and the controls sit off the edge.
-    private func turnedControls(along length: CGFloat) -> some View {
-        VStack(spacing: 14) {
-            controlCluster
-            filmSelector
+    private func filmCentre(in size: CGSize) -> CGPoint {
+        switch orientation.edge {
+        case .bottom:
+            return CGPoint(x: size.width / 2, y: size.height - Self.bandInset - Self.filmBand / 2)
+        case .leading:
+            return CGPoint(x: Self.bandInset + Self.filmBand / 2, y: size.height / 2)
+        case .trailing:
+            return CGPoint(x: size.width - Self.bandInset - Self.filmBand / 2, y: size.height / 2)
         }
-        .frame(width: length, height: Self.controlBand)
-        .background {
-            LinearGradient(
-                colors: [.clear, Color.black.opacity(0.72)],
-                startPoint: .top, endPoint: .bottom
+    }
+
+    private func clusterCentre(in size: CGSize) -> CGPoint {
+        switch orientation.edge {
+        case .bottom:
+            // Above the release, with the film barrel below it — the portrait
+            // arrangement, unchanged.
+            return CGPoint(
+                x: size.width / 2,
+                y: size.height - Self.bandInset - Self.filmBand
+                    - Self.shutterBand - Self.clusterBand / 2
             )
-            .allowsHitTesting(false)
+        case .leading:
+            return CGPoint(x: Self.bandInset + Self.filmBand + Self.clusterBand / 2,
+                           y: size.height / 2)
+        case .trailing:
+            return CGPoint(x: size.width - Self.bandInset - Self.filmBand - Self.clusterBand / 2,
+                           y: size.height / 2)
         }
-        .rotationEffect(orientation.angle)
-        .frame(width: Self.controlBand, height: length)
-    }
-
-    private var controlCluster: some View {
-        BarrelCluster().padding(.bottom, 12)
     }
 
     private var filmSelector: some View {

@@ -235,12 +235,17 @@ public final class CameraManager: NSObject, ObservableObject {
     private func orient(_ connection: AVCaptureConnection?, front: Bool) {
         guard let connection else { return }
 
-        // The front sensor is mounted the opposite way round, so portrait is 270°
-        // there against 90° on the back. Using 90 for both is what left the selfie
-        // a half-turn out. The list is a fallback chain rather than a single
-        // guarded assignment: skipping rotation entirely, which is what the old
-        // `if supported` did, leaves the frame sideways with nothing to say why.
-        for angle in [front ? 270.0 : 90.0, 90.0, 270.0, 0.0]
+        // Back is 90 and known good. The front sensor is mounted differently and
+        // has been bracketed rather than reasoned about: at 90 the frame came out
+        // turned one way, at 270 turned the other. Those two differ by half a
+        // circle, so the answer lies between them — 0 or 180 — and 180 is the one
+        // that corresponds to a sensor mounted the other way up.
+        //
+        // The fallback chain matters as much as the value. The original code set
+        // the angle only `if isVideoRotationAngleSupported`, with no else, so a
+        // refused angle meant no rotation at all and a sideways frame with nothing
+        // to indicate why.
+        for angle in [front ? 180.0 : 90.0, 90.0, 270.0, 0.0]
         where connection.isVideoRotationAngleSupported(angle) {
             connection.videoRotationAngle = angle
             break
