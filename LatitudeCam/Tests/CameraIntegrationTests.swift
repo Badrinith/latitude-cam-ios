@@ -37,7 +37,7 @@ final class CameraSettingsTests: XCTestCase {
     func testDefaultSettings() {
         let manager = CameraManager()
         let s = manager.currentSettings
-        XCTAssertEqual(s.filmID, "amber")
+        XCTAssertEqual(s.filmID, "neutral")
         XCTAssertEqual(s.iso, 100)
         XCTAssertEqual(s.shutterDenominator, 60)
     }
@@ -421,5 +421,74 @@ final class CameraCaptureTests: XCTestCase {
     func testStatusStartsIdle() {
         let manager = CameraManager()
         XCTAssertEqual(manager.status, .idle)
+    }
+}
+
+// MARK: - Neutral stock
+
+final class NeutralFilmTests: XCTestCase {
+
+    /// Neutral has to be genuinely inert, not merely subtle — it is the default,
+    /// and a camera that quietly tints every frame is lying about what it saw.
+    func testNeutralIsTheIdentityMatrix() {
+        let (r, g, b) = CameraManager.filmVectors("neutral")
+        XCTAssertEqual(r.x, 1, accuracy: 0.0001)
+        XCTAssertEqual(r.y, 0, accuracy: 0.0001)
+        XCTAssertEqual(r.z, 0, accuracy: 0.0001)
+        XCTAssertEqual(g.x, 0, accuracy: 0.0001)
+        XCTAssertEqual(g.y, 1, accuracy: 0.0001)
+        XCTAssertEqual(g.z, 0, accuracy: 0.0001)
+        XCTAssertEqual(b.x, 0, accuracy: 0.0001)
+        XCTAssertEqual(b.y, 0, accuracy: 0.0001)
+        XCTAssertEqual(b.z, 1, accuracy: 0.0001)
+    }
+
+    func testNeutralIsTheDefaultAndComesFirst() {
+        XCTAssertEqual(FilmPreset.all.first?.id, "neutral")
+        XCTAssertEqual(AppState.defaultControls.filmID, "neutral")
+    }
+}
+
+// MARK: - Focus and metering
+
+final class FocusAndMeteringTests: XCTestCase {
+
+    @MainActor
+    func testFocusIndexRoundTripsThroughEveryStop() {
+        let app = AppState()
+        XCTAssertEqual(app.focusIndex, 0, "AF is index 0")
+        XCTAssertEqual(app.focusLabel, "AF")
+
+        for stop in 1...AppState.focusStops.count {
+            app.focusIndex = stop
+            XCTAssertFalse(app.autoFocus)
+            XCTAssertEqual(app.focusIndex, stop, "stop \(stop) did not survive the round trip")
+            XCTAssertEqual(app.focusLabel, AppState.focusStops[stop - 1].label)
+        }
+
+        app.focusIndex = 0
+        XCTAssertTrue(app.autoFocus)
+    }
+
+    @MainActor
+    func testFocusAndMeteringReachTheRenderPipeline() {
+        let app = AppState()
+        app.focusIndex = 4
+        XCTAssertFalse(app.cameraManager.currentSettings.autoFocus)
+        XCTAssertEqual(app.cameraManager.currentSettings.lensPosition,
+                       AppState.focusStops[3].position, accuracy: 0.0001)
+
+        app.meteringIndex = 1
+        XCTAssertEqual(app.metering, "SPOT")
+        XCTAssertEqual(app.cameraManager.currentSettings.metering, "SPOT")
+
+        app.pointOfInterest = CGPoint(x: 0.25, y: 0.75)
+        XCTAssertEqual(app.cameraManager.currentSettings.pointOfInterest.x, 0.25, accuracy: 0.0001)
+    }
+
+    @MainActor
+    func testMeteringModesAreDistinct() {
+        XCTAssertEqual(Set(AppState.meteringModes).count, AppState.meteringModes.count)
+        XCTAssertTrue(AppState.meteringModes.contains("LOCK"))
     }
 }

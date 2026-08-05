@@ -33,7 +33,7 @@ public final class FilmPreviewBuffer: ObservableObject {
 /// Everything the render pipeline needs for one frame. A value type so it can be
 /// copied out from under the lock and used without further synchronisation.
 public struct RenderSettings: Equatable {
-    public var filmID: String = "amber"
+    public var filmID: String = "neutral"
     /// 0…1 blend between the untouched frame and the full film look.
     public var intensity: Double = 0.8
     /// Exposure compensation in stops.
@@ -53,6 +53,14 @@ public struct RenderSettings: Equatable {
     /// Either dial on its A position hands the whole exposure back to the camera,
     /// the way a Fuji body behaves with its dials on A.
     public var autoExposure = true
+    public var autoFocus = true
+    /// 0 is as close as the lens goes, 1 is infinity. Only read when focus is manual.
+    public var lensPosition: Double = 1.0
+    /// MATRIX · SPOT · LOCK.
+    public var metering = "MATRIX"
+    /// Normalised sensor coordinates the meter and the lens work from, moved by
+    /// tapping the viewfinder.
+    public var pointOfInterest = CGPoint(x: 0.5, y: 0.5)
 
     public init() {}
 }
@@ -154,12 +162,20 @@ public final class CameraManager: NSObject, ObservableObject {
         let exposureChanged = new.iso != _settings.iso
             || new.shutterDenominator != _settings.shutterDenominator
             || new.autoExposure != _settings.autoExposure
+            || new.metering != _settings.metering
+        let focusChanged = new.autoFocus != _settings.autoFocus
+            || new.lensPosition != _settings.lensPosition
+            || new.metering != _settings.metering
+            || new.pointOfInterest != _settings.pointOfInterest
         _settings = new
         settingsLock.unlock()
 
-        if exposureChanged {
+        if exposureChanged || focusChanged {
             cameraQueue.async { [weak self] in
-                self?.applyDeviceExposure(new)
+                // Point of interest before exposure mode: a lock must freeze the
+                // reading taken at the new point, not the old one.
+                if focusChanged { self?.applyDeviceFocus(new) }
+                if exposureChanged { self?.applyDeviceExposure(new) }
             }
         }
         persist(new)
@@ -312,6 +328,7 @@ public final class CameraManager: NSObject, ObservableObject {
 
             self.videoDevice = next
             self.isFrontCamera = target == .front
+            self.applyDeviceFocus(self.settings)
             self.applyDeviceExposure(self.settings)
             DispatchQueue.main.async { completion(target) }
         }
@@ -386,16 +403,68 @@ public final class CameraManager: NSObject, ObservableObject {
         self.videoOutput = output
         self.photoOutput = photoOutput
 
+        applyDeviceFocus(settings)
         applyDeviceExposure(settings)
 
         session.startRunning()
         setStatus(.running)
     }
 
+    /// Focus, and where the meter reads from.
+    ///
+    /// iOS has no selectable metering pattern — what it has is a point the sensor
+    /// meters around. So Matrix reads from the centre, Spot reads from wherever
+    /// the viewfinder was last tapped, and Lock freezes what is already set.
+    private func applyDeviceFocus(_ s: RenderSettings) {
+        guard let device = videoDevice else { return }
+        do {
+            try device.lockForConfiguration()
+            defer { device.unlockForConfiguration() }
+
+            if device.isFocusPointOfInterestSupported {
+                device.focusPointOfInterest = s.pointOfInterest
+            }
+            if s.autoFocus {
+                if device.isFocusModeSupported(.continuousAutoFocus) {
+                    device.focusMode = .continuousAutoFocus
+                } else if device.isFocusModeSupported(.autoFocus) {
+                    device.focusMode = .autoFocus
+                }
+            } else if device.isLockingFocusWithCustomLensPositionSupported {
+                device.setFocusModeLocked(
+                    lensPosition: Float(min(max(s.lensPosition, 0), 1)), completionHandler: nil
+                )
+            }
+
+            if device.isExposurePointOfInterestSupported {
+                device.exposurePointOfInterest =
+                    s.metering == "SPOT" ? s.pointOfInterest : CGPoint(x: 0.5, y: 0.5)
+            }
+        } catch {
+            // A device that refuses configuration keeps whatever it had; the
+            // pipeline is unaffected either way.
+        }
+    }
+
     /// Drive the real sensor where the hardware allows it, so ISO and shutter are
     /// genuine exposure changes rather than a brightness curve.
     private func applyDeviceExposure(_ s: RenderSettings) {
         guard let device = videoDevice else { return }
+
+        // Lock outranks both auto and manual: it holds the reading already taken,
+        // which is the whole point of an AE lock.
+        if s.metering == "LOCK" {
+            guard device.isExposureModeSupported(.locked) else { return }
+            do {
+                try device.lockForConfiguration()
+                defer { device.unlockForConfiguration() }
+                device.exposureMode = .locked
+                usingDeviceExposure = true
+            } catch {
+                usingDeviceExposure = false
+            }
+            return
+        }
 
         if s.autoExposure {
             guard device.isExposureModeSupported(.continuousAutoExposure) else { return }
@@ -721,7 +790,7 @@ extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate {
         }
     }
 
-    static let previewFilmIDs = ["amber", "slate", "rust", "mono"]
+    static let previewFilmIDs = ["neutral", "amber", "slate", "rust", "mono"]
 
     public func captureOutput(
         _ output: AVCaptureOutput,
@@ -833,6 +902,12 @@ extension CameraManager {
     /// Matches the multipliers in FilmProfiles.swift exactly.
     static func filmVectors(_ id: String) -> (CIVector, CIVector, CIVector) {
         switch id {
+        case "neutral":
+            // Identity. Intensity has nothing to blend towards, so the stock is
+            // inert at any setting — which is the point of it.
+            return (CIVector(x: 1, y: 0, z: 0, w: 0),
+                    CIVector(x: 0, y: 1, z: 0, w: 0),
+                    CIVector(x: 0, y: 0, z: 1, w: 0))
         case "slate":
             return (CIVector(x: 0.8, y: 0, z: 0, w: 0),
                     CIVector(x: 0, y: 0.8, z: 0, w: 0),

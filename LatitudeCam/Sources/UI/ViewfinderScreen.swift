@@ -163,16 +163,43 @@ struct ViewfinderScreen: View {
     @AppStorage(Pref.histogramStyle) private var histogramStyle = "Luma"
 
     @StateObject private var orientation = DeviceOrientation()
+    @State private var reticle: CGPoint?
+    @State private var lastPreviewSize: CGSize?
 
     var body: some View {
         ZStack {
             Ink.base.ignoresSafeArea()
 
             CameraPreview(frames: app.cameraManager.frames)
+                .contentShape(Rectangle())
+                .gesture(
+                    // SPOT metering has to read from somewhere, and the only
+                    // honest answer is wherever you pointed.
+                    DragGesture(minimumDistance: 0).onEnded { value in
+                        meter(at: value.location)
+                    }
+                )
 
             AspectMask(aspect: aspect)
 
             CompositionGrid(style: gridStyle).ignoresSafeArea()
+
+            GeometryReader { geo in
+                Color.clear
+                    .onAppear { lastPreviewSize = geo.size }
+                    .onChange(of: geo.size) { _, size in lastPreviewSize = size }
+            }
+            .allowsHitTesting(false)
+
+            if let reticle {
+                Rectangle()
+                    .strokeBorder(Accent.amber, lineWidth: 1)
+                    .frame(width: 66, height: 66)
+                    .position(reticle)
+                    .allowsHitTesting(false)
+                    .transition(.scale(scale: 1.35).combined(with: .opacity))
+                    .zIndex(3)
+            }
 
             chrome
 
@@ -211,18 +238,6 @@ struct ViewfinderScreen: View {
         VStack(spacing: 0) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 8) {
-                    Button { app.go(.settings) } label: {
-                        Text("SETTINGS")
-                            .font(.mono(10, .semibold))
-                            .kerning(0.5)
-                            .foregroundStyle(Color.white.opacity(0.75))
-                            .rotationEffect(orientation.angle)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .glass(radius: 16)
-                    }
-                    .buttonStyle(.plain)
-
                     LiveHistogramView(
                         frames: app.cameraManager.frames,
                         style: histogramStyle
@@ -233,6 +248,16 @@ struct ViewfinderScreen: View {
                 Spacer()
 
                 VStack(spacing: 8) {
+                    Button { app.go(.settings) } label: {
+                        optionLabel {
+                            Image(systemName: "gearshape")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(Tone.primary)
+                                .rotationEffect(orientation.angle)
+                        }
+                    }
+                    .buttonStyle(.plain)
+
                     Button { app.flipCamera() } label: {
                         optionLabel {
                             Image(systemName: "arrow.triangle.2.circlepath.camera")
@@ -266,20 +291,6 @@ struct ViewfinderScreen: View {
                     }
                     .buttonStyle(.plain)
 
-                    Button {
-                        Haptics.toggle()
-                        app.focusPeaking.toggle()
-                    } label: {
-                        optionLabel {
-                            Circle()
-                                .strokeBorder(
-                                    app.focusPeaking ? Accent.amber : Tone.quaternary,
-                                    lineWidth: 1.5
-                                )
-                                .frame(width: 12, height: 12)
-                        }
-                    }
-                    .buttonStyle(.plain)
                 }
             }
             .padding(.horizontal, 16)
@@ -420,6 +431,26 @@ struct ViewfinderScreen: View {
             Haptics.shutter()
         } else {
             Haptics.blocked()
+        }
+    }
+
+    /// Normalised sensor coordinates. The preview is rotated 90° into portrait,
+    /// so the screen's x is the sensor's y — swapping them here is what makes the
+    /// reticle land where the thumb did.
+    private func meter(at point: CGPoint) {
+        guard let size = lastPreviewSize, size.width > 1, size.height > 1 else { return }
+        let normalised = CGPoint(
+            x: min(max(point.y / size.height, 0), 1),
+            y: min(max(1 - point.x / size.width, 0), 1)
+        )
+        Haptics.tap()
+        app.pointOfInterest = normalised
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+            reticle = point
+        }
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(1.4))
+            withAnimation(.easeOut(duration: 0.3)) { reticle = nil }
         }
     }
 

@@ -334,14 +334,24 @@ struct BarrelCluster: View {
         let chip: String
     }
 
-    private var controls: [Control] {
+    /// Two rows of three. Six on one row shrank the type past reading, and a
+    /// scroller hides controls behind a gesture you have to discover.
+    private var rows: [[Control]] {
         [
-            .init(id: "shutter", label: "SHUTTER", chip: app.shutterLabel),
-            .init(id: "iso", label: "ISO", chip: app.isoLabel),
-            .init(id: "wb", label: "WHITE BALANCE", chip: app.kelvinLabel),
-            .init(id: "ev", label: "EXPOSURE", chip: app.exposureLabel)
+            [
+                .init(id: "shutter", label: "SHUTTER", chip: app.shutterLabel),
+                .init(id: "iso", label: "ISO", chip: app.isoLabel),
+                .init(id: "wb", label: "WHITE BALANCE", chip: app.kelvinLabel)
+            ],
+            [
+                .init(id: "ev", label: "EXPOSURE", chip: app.exposureLabel),
+                .init(id: "focus", label: "FOCUS", chip: app.focusLabel),
+                .init(id: "metering", label: "METERING", chip: app.metering)
+            ]
         ]
     }
+
+    private var controls: [Control] { rows.flatMap { $0 } }
 
     var body: some View {
         VStack(spacing: 8) {
@@ -410,6 +420,17 @@ struct BarrelCluster: View {
                 values: AppState.whiteBalanceLabels,
                 index: binding(get: { app.whiteBalanceIndex }, set: { app.whiteBalanceIndex = $0 })
             )
+        case "focus":
+            Barrel(
+                values: AppState.focusLabels,
+                index: binding(get: { app.focusIndex }, set: { app.focusIndex = $0 }),
+                hasAuto: true
+            )
+        case "metering":
+            Barrel(
+                values: AppState.meteringModes,
+                index: binding(get: { app.meteringIndex }, set: { app.meteringIndex = $0 })
+            )
         default:
             Barrel(
                 values: AppState.exposureLabels,
@@ -429,8 +450,46 @@ struct BarrelCluster: View {
     // MARK: Collapsed
 
     private var chips: some View {
+        VStack(spacing: 6) {
+            ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
+                HStack(spacing: 6) {
+                    chipRow(row)
+                    if index == 1 { peakingChip }
+                }
+            }
+        }
+    }
+
+    /// A toggle, not a scale — it opens nothing, so it reads as a switch rather
+    /// than as a sixth thing to turn.
+    private var peakingChip: some View {
+        Button {
+            Haptics.toggle()
+            app.focusPeaking.toggle()
+        } label: {
+            Image(systemName: "camera.filters")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(app.focusPeaking ? Ink.base : Tone.secondary)
+                .frame(width: 34)
+                .padding(.vertical, 6)
+                .background {
+                    if app.focusPeaking {
+                        Capsule().fill(Accent.amber)
+                    } else {
+                        Capsule().fill(.ultraThinMaterial)
+                            .overlay { Capsule().fill(Color.black.opacity(0.2)) }
+                            .overlay { Capsule().strokeBorder(Tone.hairline, lineWidth: 0.5) }
+                    }
+                }
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Focus peaking")
+    }
+
+    private func chipRow(_ row: [Control]) -> some View {
         HStack(spacing: 6) {
-            ForEach(controls) { control in
+            ForEach(row) { control in
                 Button { open(control.id) } label: {
                     Text(control.chip)
                         .font(.mono(10, .medium))

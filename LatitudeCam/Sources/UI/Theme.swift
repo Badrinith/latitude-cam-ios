@@ -47,6 +47,7 @@ enum Accent {
 }
 
 enum FilmSwatch {
+    static let neutral = Color(hex: 0x8C8C8C)
     static let amber = Color(hex: 0x8A7A63)
     static let slate = Color(hex: 0x6B6A63)
     static let rust = Color(hex: 0x9C3F2E)
@@ -77,6 +78,9 @@ struct FilmPreset: Identifiable, Hashable {
     let swatch: Color
 
     static let all: [FilmPreset] = [
+        // First and default. A camera should show you the scene before it shows
+        // you an opinion about it — a look is something you reach for.
+        .init(id: "neutral", name: "Neutral", blurb: "Straight capture, no cast", swatch: FilmSwatch.neutral),
         .init(id: "amber", name: "Amber Stock", blurb: "Warm, soft highlights", swatch: FilmSwatch.amber),
         .init(id: "slate", name: "Slate", blurb: "Cool, muted neutral", swatch: FilmSwatch.slate),
         .init(id: "rust", name: "Rust", blurb: "Deep reds, punchy", swatch: FilmSwatch.rust),
@@ -92,6 +96,7 @@ struct FilmPreset: Identifiable, Hashable {
     /// what the frame will look like, which it cannot do if a stock is invisible.
     var engraved: Color {
         switch id {
+        case "neutral": return Color(hex: 0xD9D7D3)
         case "amber": return Color(hex: 0xE3BA83)
         case "slate": return Color(hex: 0xA6B2B6)
         case "rust":  return Color(hex: 0xDE7455)
@@ -254,6 +259,12 @@ final class AppState: ObservableObject {
     @Published var whiteBalance: Double = 0.58 { didSet { syncCamera() } }
     @Published var exposureComp: Double = 0.5 { didSet { syncCamera() } }
     @Published var focusPeaking = true { didSet { syncCamera() } }
+    @Published var autoFocus = true { didSet { syncCamera() } }
+    /// Position on the focus ladder: index 0 is AF, the rest are distances.
+    @Published var focus: Double = 1.0 { didSet { syncCamera() } }
+    @Published var metering = "MATRIX" { didSet { syncCamera() } }
+    /// Where the meter reads and the lens focuses, set by tapping the viewfinder.
+    @Published var pointOfInterest = CGPoint(x: 0.5, y: 0.5) { didSet { syncCamera() } }
     @Published var proRAW = false
     /// Either dial on A. Kept as one flag because AVFoundation's continuous auto
     /// mode governs shutter and ISO together — there is no half-auto.
@@ -270,6 +281,15 @@ final class AppState: ObservableObject {
     static let whiteBalanceStops = [2500, 3200, 4000, 5000, 5600, 6500, 7500]
     /// 11 half-stop positions across ±2.5 EV.
     static let evDetents = 11
+    /// Marked distances rather than a continuous ring: a manual focus you can
+    /// return to is worth more than one you can place anywhere.
+    static let focusStops: [(label: String, position: Double)] = [
+        ("0.1m", 0.00), ("0.2m", 0.14), ("0.3m", 0.28), ("0.5m", 0.44),
+        ("1m", 0.60), ("2m", 0.74), ("5m", 0.86), ("∞", 1.00)
+    ]
+    static let meteringModes = ["MATRIX", "SPOT", "LOCK"]
+
+    static var focusLabels: [String] { ["AF"] + focusStops.map(\.label) }
 
     /// A leads both scales, as it does on an X-series or an M body: turn past the
     /// slowest speed and the camera takes the exposure back.
@@ -293,6 +313,33 @@ final class AppState: ObservableObject {
     var evValue: Double {
         let index = min(Self.evDetents - 1, max(0, Int(exposureComp * Double(Self.evDetents))))
         return -2.5 + Double(index) * 0.5
+    }
+
+    /// Dial index 0 is AF; the stops follow.
+    var focusIndex: Int {
+        get {
+            guard !autoFocus else { return 0 }
+            let nearest = Self.focusStops.enumerated().min {
+                abs($0.element.position - focus) < abs($1.element.position - focus)
+            }
+            return (nearest?.offset ?? Self.focusStops.count - 1) + 1
+        }
+        set {
+            if newValue <= 0 { autoFocus = true }
+            else {
+                autoFocus = false
+                focus = Self.focusStops[min(newValue - 1, Self.focusStops.count - 1)].position
+            }
+        }
+    }
+
+    var meteringIndex: Int {
+        get { Self.meteringModes.firstIndex(of: metering) ?? 0 }
+        set { metering = Self.meteringModes[min(max(newValue, 0), Self.meteringModes.count - 1)] }
+    }
+
+    var focusLabel: String {
+        autoFocus ? "AF" : (Self.focusStops.first { abs($0.position - focus) < 0.01 }?.label ?? "MF")
     }
 
     var shutterLabel: String { autoExposure ? "AUTO" : "1/\(shutterValue)" }
@@ -377,6 +424,10 @@ final class AppState: ObservableObject {
         s.focusPeaking = focusPeaking
         s.peakingColorName = Pref.string(Pref.peakingColor, default: "Amber")
         s.autoExposure = autoExposure
+        s.autoFocus = autoFocus
+        s.lensPosition = focus
+        s.metering = metering
+        s.pointOfInterest = pointOfInterest
         cameraManager.apply(s)
     }
 
@@ -562,7 +613,7 @@ final class AppState: ObservableObject {
     }
 
     static let defaultControls = ControlSnapshot(
-        filmID: "amber", intensity: 0.8,
+        filmID: "neutral", intensity: 0.8,
         grain: false, halation: false, vignette: false,
         shutter: 0.36, iso: 0.50, whiteBalance: 0.64, exposureComp: 0.5,
         focusPeaking: true, autoExposure: true
