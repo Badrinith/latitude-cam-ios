@@ -595,15 +595,15 @@ struct LensSelector: View {
     var body: some View {
         // One lens is not a choice, so it does not get a control.
         if camera.lenses.count > 1 {
-            HStack(spacing: 4) {
+            HStack(spacing: 2) {
                 ForEach(camera.lenses) { lens in
                     let on = lens.id == selected
                     Button { onSelect(lens) } label: {
                         Text(lens.label)
-                            .font(.mono(on ? 11 : 9.5, on ? .bold : .medium))
+                            .font(.mono(on ? 9.5 : 8.5, on ? .bold : .medium))
                             .foregroundStyle(on ? Ink.base : Tone.primary)
                             .rotationEffect(rotation)
-                            .frame(width: on ? 40 : 34, height: on ? 34 : 30)
+                            .frame(width: on ? 32 : 27, height: on ? 32 : 27)
                             .background {
                                 Circle().fill(on ? AnyShapeStyle(Accent.amber)
                                                  : AnyShapeStyle(Color.white.opacity(0.10)))
@@ -614,8 +614,8 @@ struct LensSelector: View {
                     .accessibilityLabel("\(lens.label) lens")
                 }
             }
-            .padding(.horizontal, 6)
-            .padding(.vertical, 4)
+            .padding(.horizontal, 4)
+            .padding(.vertical, 3)
             .background {
                 Capsule().fill(.ultraThinMaterial)
                     .overlay { Capsule().fill(Color.black.opacity(0.24)) }

@@ -314,7 +314,6 @@ struct ViewfinderScreen: View {
     private static let clusterBand: CGFloat = 118
     private static let filmBand: CGFloat = 76
     private static let shutterBand: CGFloat = 88
-    private static let lensBand: CGFloat = 42
     private static let bandInset: CGFloat = 12
 
     /// One view tree in every orientation.
@@ -338,20 +337,6 @@ struct ViewfinderScreen: View {
                          centre: clusterCentre(in: size), length: size.width)
                         .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .bottom)))
                 }
-
-                // Always on screen: which lens you are looking through is not an
-                // advanced setting, it is what the picture is.
-                band(
-                    LensSelector(
-                        camera: app.cameraManager,
-                        selected: app.lensID,
-                        rotation: orientation.angle,
-                        onSelect: { app.selectLens($0) }
-                    ),
-                    thickness: Self.lensBand,
-                    centre: lensCentre(in: size),
-                    length: size.width
-                )
 
                 band(filmSelector, thickness: Self.filmBand,
                      centre: filmCentre(in: size), length: size.width)
@@ -394,23 +379,6 @@ struct ViewfinderScreen: View {
         }
     }
 
-    private func lensCentre(in size: CGSize) -> CGPoint {
-        switch orientation.edge {
-        case .bottom:
-            return CGPoint(
-                x: size.width / 2,
-                y: size.height - Self.bandInset - Self.filmBand
-                    - Self.shutterBand - Self.lensBand / 2
-            )
-        case .leading:
-            return CGPoint(x: Self.bandInset + Self.filmBand + Self.lensBand / 2,
-                           y: size.height / 2)
-        case .trailing:
-            return CGPoint(x: size.width - Self.bandInset - Self.filmBand - Self.lensBand / 2,
-                           y: size.height / 2)
-        }
-    }
-
     private func clusterCentre(in size: CGSize) -> CGPoint {
         switch orientation.edge {
         case .bottom:
@@ -419,17 +387,14 @@ struct ViewfinderScreen: View {
             return CGPoint(
                 x: size.width / 2,
                 y: size.height - Self.bandInset - Self.filmBand
-                    - Self.shutterBand - Self.lensBand - Self.clusterBand / 2
+                    - Self.shutterBand - Self.clusterBand / 2
             )
         case .leading:
-            return CGPoint(x: Self.bandInset + Self.filmBand + Self.lensBand + Self.clusterBand / 2,
+            return CGPoint(x: Self.bandInset + Self.filmBand + Self.clusterBand / 2,
                            y: size.height / 2)
         case .trailing:
-            return CGPoint(
-                x: size.width - Self.bandInset - Self.filmBand
-                    - Self.lensBand - Self.clusterBand / 2,
-                y: size.height / 2
-            )
+            return CGPoint(x: size.width - Self.bandInset - Self.filmBand - Self.clusterBand / 2,
+                           y: size.height / 2)
         }
     }
 
@@ -440,43 +405,59 @@ struct ViewfinderScreen: View {
         )
     }
 
+    /// The release is centred in its own layer so nothing beside it can shift it.
+    /// A shutter that moves when a lens is added is a shutter you have to look for.
     private var shutterRow: some View {
-        HStack {
-            Button {
-                Haptics.toggle()
-                withAnimation(.spring(response: 0.34, dampingFraction: 0.84)) {
-                    app.proMode.toggle()
-                }
-            } label: {
-                Text("PRO")
-                    .font(.mono(11, .bold))
-                    .kerning(0.8)
-                    .foregroundStyle(app.proMode ? Ink.base : Tone.secondary)
-                    .rotationEffect(orientation.angle)
-                    .frame(width: 40, height: 28)
-                    .background {
-                        if app.proMode {
-                            Capsule().fill(Accent.amber)
-                        } else {
-                            Capsule().fill(.ultraThinMaterial)
-                                .overlay { Capsule().fill(Color.black.opacity(0.2)) }
-                                .overlay { Capsule().strokeBorder(Tone.hairline, lineWidth: 0.5) }
-                        }
-                    }
-                    .contentShape(Capsule())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Pro controls")
-
-            Spacer()
+        ZStack {
             ShutterButton { fire() }
-            Spacer()
-            Button { app.go(.library) } label: {
-                LibraryThumbnail(gallery: app.gallery)
+
+            HStack(spacing: 8) {
+                proButton
+
+                LensSelector(
+                    camera: app.cameraManager,
+                    selected: app.lensID,
+                    rotation: orientation.angle,
+                    onSelect: { app.selectLens($0) }
+                )
+
+                Spacer(minLength: 0)
+
+                Button { app.go(.library) } label: {
+                    LibraryThumbnail(gallery: app.gallery)
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
+            .padding(.horizontal, 20)
         }
-        .padding(.horizontal, 30)
+    }
+
+    private var proButton: some View {
+        Button {
+            Haptics.toggle()
+            withAnimation(.spring(response: 0.34, dampingFraction: 0.84)) {
+                app.proMode.toggle()
+            }
+        } label: {
+            Text("PRO")
+                .font(.mono(11, .bold))
+                .kerning(0.8)
+                .foregroundStyle(app.proMode ? Ink.base : Tone.secondary)
+                .rotationEffect(orientation.angle)
+                .frame(width: 40, height: 28)
+                .background {
+                    if app.proMode {
+                        Capsule().fill(Accent.amber)
+                    } else {
+                        Capsule().fill(.ultraThinMaterial)
+                            .overlay { Capsule().fill(Color.black.opacity(0.2)) }
+                            .overlay { Capsule().strokeBorder(Tone.hairline, lineWidth: 0.5) }
+                    }
+                }
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Pro controls")
     }
 
     private var deckShade: some View {

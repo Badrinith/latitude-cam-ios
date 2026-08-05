@@ -1,0 +1,341 @@
+<title>Latitude Cam — Five Shutter Releases</title>
+
+<style>
+  :root {
+    --ink-base:#0D0D0D; --ink-raised:#161616;
+    --tone:#F2EFE8; --amber:#D98A52; --amber-deep:#8A5A34;
+    --page-bg:#100F0D; --page-panel:#191714; --page-rule:rgba(242,239,232,.12);
+    --page-text:#E7E2D8; --page-dim:rgba(231,226,216,.60); --page-faint:rgba(231,226,216,.38);
+    --display: ui-serif, "New York", Georgia, serif;
+    --body: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, monospace;
+    --measure: 66ch;
+  }
+  @media (prefers-color-scheme: light) {
+    :root { --page-bg:#E9E5DC; --page-panel:#F5F2EB; --page-rule:rgba(28,24,20,.14);
+            --page-text:#1E1A16; --page-dim:rgba(30,26,22,.64); --page-faint:rgba(30,26,22,.44); }
+  }
+  :root[data-theme="light"] { --page-bg:#E9E5DC; --page-panel:#F5F2EB; --page-rule:rgba(28,24,20,.14);
+            --page-text:#1E1A16; --page-dim:rgba(30,26,22,.64); --page-faint:rgba(30,26,22,.44); }
+  :root[data-theme="dark"] { --page-bg:#100F0D; --page-panel:#191714; --page-rule:rgba(242,239,232,.12);
+            --page-text:#E7E2D8; --page-dim:rgba(231,226,216,.60); --page-faint:rgba(231,226,216,.38); }
+
+  body { background:var(--page-bg); color:var(--page-text); font-family:var(--body); line-height:1.55; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:1180px; margin:0 auto; padding:clamp(26px,5vw,60px) clamp(16px,4vw,38px) 90px; display:flex; flex-direction:column; gap:clamp(38px,6vw,68px); }
+
+  .eyebrow { font-family:var(--mono); font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:var(--amber); display:flex; gap:12px; flex-wrap:wrap; }
+  .eyebrow span { color:var(--page-faint); }
+  h1 { font-family:var(--display); font-weight:500; font-size:clamp(32px,5.6vw,58px); line-height:1.03; letter-spacing:-.02em; margin:0; text-wrap:balance; }
+  h1 em { font-style:italic; color:var(--amber); }
+  h2 { font-family:var(--display); font-weight:500; font-size:clamp(22px,2.7vw,30px); letter-spacing:-.012em; margin:0; text-wrap:balance; }
+  .standfirst { font-size:clamp(15.5px,1.5vw,18px); color:var(--page-dim); max-width:var(--measure); text-wrap:pretty; }
+  .masthead { display:flex; flex-direction:column; gap:16px; }
+  .section { display:flex; flex-direction:column; gap:22px; }
+  .section-head { display:flex; flex-direction:column; gap:8px; }
+  .section-head p { margin:0; color:var(--page-dim); max-width:var(--measure); text-wrap:pretty; }
+  hr.rule { height:1px; background:var(--page-rule); border:0; margin:0; }
+
+  /* ---------- the stage each release sits on ---------- */
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:clamp(20px,2.6vw,32px); }
+
+  .card { display:flex; flex-direction:column; gap:14px; }
+  .cardhead { display:flex; align-items:baseline; gap:9px; }
+  .cardhead .n { font-family:var(--mono); font-size:10px; color:var(--amber); letter-spacing:.12em; }
+  .cardhead h3 { margin:0; font-size:16.5px; font-weight:650; letter-spacing:-.01em; }
+  .card > p { margin:0; font-size:13px; color:var(--page-dim); text-wrap:pretty; }
+
+  .stage {
+    position:relative; height:210px; border-radius:14px; overflow:hidden;
+    display:grid; place-items:center;
+    background:
+      radial-gradient(58% 40% at 66% 18%, rgba(255,240,214,.34), transparent 62%),
+      linear-gradient(191deg,#3c3025 0%,#241d18 46%,#14100d 100%);
+    border:1px solid var(--page-rule);
+    cursor:pointer;
+  }
+  .stage::after {
+    content:"PRESS"; position:absolute; bottom:9px; left:0; right:0; text-align:center;
+    font-family:var(--mono); font-size:7.5px; letter-spacing:.24em; color:rgba(255,255,255,.3);
+  }
+
+  .btn { position:relative; width:92px; height:92px; }
+  .btn * { pointer-events:none; }
+
+  /* pressed state driven by :active on the stage */
+  .stage:active .press { transform:scale(.93); }
+  .press { transition:transform 140ms cubic-bezier(.3,.7,.3,1); will-change:transform; }
+
+  /* ============ 01 CABLE RELEASE ============ */
+  .cable .ring1 {
+    position:absolute; inset:0; border-radius:50%;
+    background:conic-gradient(from 0deg,#3a3a3d,#101012,#43434a,#131316,#3a3a3d);
+    box-shadow:inset 0 0 0 .5px rgba(255,255,255,.18), 0 8px 22px rgba(0,0,0,.5);
+  }
+  .cable .knurl {
+    position:absolute; inset:0; border-radius:50%;
+    background:repeating-conic-gradient(from 0deg, rgba(255,255,255,.22) 0 .6deg, transparent .6deg 3.4deg);
+    -webkit-mask:radial-gradient(closest-side, transparent 78%, #000 80% 99%, transparent 100%);
+    mask:radial-gradient(closest-side, transparent 78%, #000 80% 99%, transparent 100%);
+  }
+  .cable .ring2 {
+    position:absolute; inset:15px; border-radius:50%;
+    background:linear-gradient(160deg,#e8e5de,#a9a49a 55%,#6f6a62);
+    box-shadow:inset 0 -2px 5px rgba(0,0,0,.4), inset 0 2px 3px rgba(255,255,255,.6);
+  }
+  .cable .socket {
+    position:absolute; inset:35px; border-radius:50%;
+    background:radial-gradient(circle at 50% 35%, #2a2823, #0b0a09 70%);
+    box-shadow:inset 0 2px 5px rgba(0,0,0,.9), 0 1px 0 rgba(255,255,255,.28);
+  }
+  .cable .thread {
+    position:absolute; inset:35px; border-radius:50%;
+    background:repeating-linear-gradient(to bottom, rgba(255,255,255,.16) 0 1px, transparent 1px 4px);
+    -webkit-mask:radial-gradient(closest-side, #000 62%, transparent 64%);
+    mask:radial-gradient(closest-side, #000 62%, transparent 64%);
+  }
+
+  /* ============ 02 SOFT RELEASE ============ */
+  .soft .collar {
+    position:absolute; inset:6px; border-radius:50%;
+    background:conic-gradient(from 210deg,#2b2b2e,#0f0f11,#33333a,#111114,#2b2b2e);
+    box-shadow:inset 0 0 0 .5px rgba(255,255,255,.16), 0 8px 20px rgba(0,0,0,.5);
+  }
+  .soft .dish {
+    position:absolute; inset:16px; border-radius:50%;
+    background:
+      radial-gradient(circle at 50% 118%, rgba(255,255,255,.55), transparent 52%),
+      radial-gradient(circle at 50% 22%, #c98d55, #8a5a34 62%, #56361f);
+    box-shadow:inset 0 6px 12px rgba(0,0,0,.55), inset 0 -3px 6px rgba(255,214,170,.45);
+  }
+  .soft .gleam {
+    position:absolute; left:28%; top:24%; width:34%; height:20%;
+    border-radius:50%; background:rgba(255,244,228,.5); filter:blur(3px);
+  }
+
+  /* ============ 03 IRIS ============ */
+  .iris .body {
+    position:absolute; inset:0; border-radius:50%;
+    background:radial-gradient(circle at 50% 30%, #26262a, #0d0d0f 72%);
+    box-shadow:inset 0 0 0 .5px rgba(255,255,255,.18), 0 8px 22px rgba(0,0,0,.5);
+  }
+  .iris .blades { position:absolute; inset:12px; border-radius:50%; overflow:hidden; background:#f2efe8; }
+  .iris .blade {
+    position:absolute; left:50%; top:50%; width:96px; height:96px;
+    background:linear-gradient(150deg,#3a3a3f,#1a1a1d);
+    box-shadow:0 0 0 .5px rgba(255,255,255,.14);
+    transform-origin:0 0;
+    transition:transform 180ms cubic-bezier(.3,.7,.3,1);
+  }
+  /* six blades, each rotated around the rim; open by default */
+  .iris .blade:nth-child(1) { transform:rotate(0deg)   translate(30px,-6px); }
+  .iris .blade:nth-child(2) { transform:rotate(60deg)  translate(30px,-6px); }
+  .iris .blade:nth-child(3) { transform:rotate(120deg) translate(30px,-6px); }
+  .iris .blade:nth-child(4) { transform:rotate(180deg) translate(30px,-6px); }
+  .iris .blade:nth-child(5) { transform:rotate(240deg) translate(30px,-6px); }
+  .iris .blade:nth-child(6) { transform:rotate(300deg) translate(30px,-6px); }
+  .stage:active .iris .blade:nth-child(1) { transform:rotate(0deg)   translate(6px,-6px); }
+  .stage:active .iris .blade:nth-child(2) { transform:rotate(60deg)  translate(6px,-6px); }
+  .stage:active .iris .blade:nth-child(3) { transform:rotate(120deg) translate(6px,-6px); }
+  .stage:active .iris .blade:nth-child(4) { transform:rotate(180deg) translate(6px,-6px); }
+  .stage:active .iris .blade:nth-child(5) { transform:rotate(240deg) translate(6px,-6px); }
+  .stage:active .iris .blade:nth-child(6) { transform:rotate(300deg) translate(6px,-6px); }
+
+  /* ============ 04 METER HALO ============ */
+  .halo .track {
+    position:absolute; inset:0; border-radius:50%;
+    background:conic-gradient(from 135deg, rgba(255,255,255,.13) 0 270deg, transparent 270deg);
+    -webkit-mask:radial-gradient(closest-side, transparent 86%, #000 88% 99%, transparent 100%);
+    mask:radial-gradient(closest-side, transparent 86%, #000 88% 99%, transparent 100%);
+  }
+  .halo .fill {
+    position:absolute; inset:0; border-radius:50%;
+    background:conic-gradient(from 135deg, var(--amber) 0 158deg, transparent 158deg);
+    -webkit-mask:radial-gradient(closest-side, transparent 86%, #000 88% 99%, transparent 100%);
+    mask:radial-gradient(closest-side, transparent 86%, #000 88% 99%, transparent 100%);
+    transition:background 200ms ease;
+  }
+  .stage:active .halo .fill { background:conic-gradient(from 135deg, var(--amber) 0 232deg, transparent 232deg); }
+  .halo .core {
+    position:absolute; inset:13px; border-radius:50%;
+    background:radial-gradient(circle at 50% 32%, #ffffff, #ded9d0 68%, #b9b3a8);
+    box-shadow:inset 0 -3px 7px rgba(0,0,0,.22), 0 6px 16px rgba(0,0,0,.45);
+  }
+  .halo .ev {
+    position:absolute; inset:0; display:grid; place-items:center;
+    font-family:var(--mono); font-size:11px; font-weight:700; color:#3a352d;
+  }
+
+  /* ============ 05 FRAME COUNTER ============ */
+  .counter .barrel {
+    position:absolute; inset:0; border-radius:50%;
+    background:conic-gradient(from 0deg,#33332f,#121211,#3d3d37,#141413,#33332f);
+    box-shadow:inset 0 0 0 .5px rgba(255,255,255,.18), 0 8px 22px rgba(0,0,0,.5);
+  }
+  .counter .ticks {
+    position:absolute; inset:0; border-radius:50%;
+    background:repeating-conic-gradient(from 0deg, rgba(255,255,255,.3) 0 .8deg, transparent .8deg 9deg);
+    -webkit-mask:radial-gradient(closest-side, transparent 74%, #000 76% 92%, transparent 94%);
+    mask:radial-gradient(closest-side, transparent 74%, #000 76% 92%, transparent 94%);
+  }
+  .counter .win {
+    position:absolute; top:4px; left:50%; transform:translateX(-50%);
+    padding:2px 7px; border-radius:3px; background:#0a0a0b;
+    box-shadow:inset 0 1px 3px rgba(0,0,0,.9), inset 0 0 0 .5px rgba(255,255,255,.14);
+    font-family:var(--mono); font-size:8px; font-weight:700; color:var(--amber);
+  }
+  .counter .core {
+    position:absolute; inset:17px; border-radius:50%;
+    background:radial-gradient(circle at 50% 30%, #f6f3ec, #cfc9bf 66%, #9d978c);
+    box-shadow:inset 0 -3px 7px rgba(0,0,0,.24), 0 6px 16px rgba(0,0,0,.45);
+  }
+
+  /* ---------- notes ---------- */
+  .tags { display:flex; flex-wrap:wrap; gap:5px; }
+  .tag { font-family:var(--mono); font-size:8.5px; letter-spacing:.09em; text-transform:uppercase; padding:3px 7px; border-radius:3px; border:1px solid var(--page-rule); color:var(--page-faint); }
+  .tag.good { color:var(--amber); border-color:rgba(217,138,82,.4); }
+
+  .rec { display:grid; grid-template-columns:34px minmax(0,1fr); gap:14px; padding:17px 2px; border-bottom:1px solid var(--page-rule); align-items:start; }
+  .rec:first-of-type { border-top:1px solid var(--page-rule); }
+  .rec .n { font-family:var(--mono); font-size:10.5px; color:var(--amber); padding-top:3px; letter-spacing:.1em; }
+  .rec h4 { margin:0 0 3px; font-size:15px; font-weight:650; }
+  .rec p { margin:0; font-size:13.5px; color:var(--page-dim); max-width:var(--measure); text-wrap:pretty; }
+
+  .foot { font-size:13px; color:var(--page-faint); border-top:1px solid var(--page-rule); padding-top:18px; max-width:var(--measure); text-wrap:pretty; }
+  @media (prefers-reduced-motion: reduce) { .press, .iris .blade, .halo .fill { transition:none; } }
+  :focus-visible { outline:2px solid var(--amber); outline-offset:3px; border-radius:6px; }
+</style>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <div class="eyebrow">Latitude Cam <span>/</span> Shutter release <span>/</span> Five to pick from</div>
+    <h1>Five ways to make the release <em>feel like a release</em>.</h1>
+    <p class="standfirst">
+      The current button is a white disc in a ring — correct, and indistinguishable from every other
+      camera app. These five each borrow from a real release: a threaded cable socket, a brass soft
+      release, an iris that closes as you press, a rim that doubles as the meter, and a frame counter.
+      All are 88pt with the same hit target and the same haptic. Press any of them to see the state
+      change.
+    </p>
+  </header>
+
+  <hr class="rule" />
+
+  <section class="section">
+    <div class="grid">
+
+      <!-- 01 -->
+      <article class="card">
+        <div class="cardhead"><span class="n">01</span><h3>Cable release</h3></div>
+        <p>A machined collar around a threaded socket — the fitting a cable release screws into. The chrome plunger sits proud of the black knurled rim and dips when pressed.</p>
+        <div class="stage" tabindex="0">
+          <div class="btn cable press">
+            <div class="ring1"></div><div class="knurl"></div>
+            <div class="ring2"></div><div class="socket"></div><div class="thread"></div>
+          </div>
+        </div>
+        <div class="tags"><span class="tag good">Most camera-like</span><span class="tag">Busy at 88pt</span></div>
+      </article>
+
+      <!-- 02 -->
+      <article class="card">
+        <div class="cardhead"><span class="n">02</span><h3>Soft release</h3></div>
+        <p>The concave brass button people screw onto a Leica so the shutter falls under the pad of the finger. Amber where every other control is amber, and the only one that is warm rather than white.</p>
+        <div class="stage" tabindex="0">
+          <div class="btn soft press">
+            <div class="collar"></div><div class="dish"></div><div class="gleam"></div>
+          </div>
+        </div>
+        <div class="tags"><span class="tag good">On-brand</span><span class="tag">Reads as a toggle</span></div>
+      </article>
+
+      <!-- 03 -->
+      <article class="card">
+        <div class="cardhead"><span class="n">03</span><h3>Iris</h3></div>
+        <p>Six blades close through the press and spring open again. The one direction where the button performs the thing it triggers rather than depicting it.</p>
+        <div class="stage" tabindex="0">
+          <div class="btn iris press">
+            <div class="body"></div>
+            <div class="blades">
+              <div class="blade"></div><div class="blade"></div><div class="blade"></div>
+              <div class="blade"></div><div class="blade"></div><div class="blade"></div>
+            </div>
+          </div>
+        </div>
+        <div class="tags"><span class="tag good">Most memorable</span><span class="tag">Costs a frame budget</span></div>
+      </article>
+
+      <!-- 04 -->
+      <article class="card">
+        <div class="cardhead"><span class="n">04</span><h3>Meter halo</h3></div>
+        <p>A plain white core with the meter reading drawn around it as an arc. The ring is already there; this makes it carry the exposure rather than nothing.</p>
+        <div class="stage" tabindex="0">
+          <div class="btn halo press">
+            <div class="track"></div><div class="fill"></div>
+            <div class="core"></div><div class="ev">0.0</div>
+          </div>
+        </div>
+        <div class="tags"><span class="tag good">Does real work</span><span class="tag">Least ornamental</span></div>
+      </article>
+
+      <!-- 05 -->
+      <article class="card">
+        <div class="cardhead"><span class="n">05</span><h3>Frame counter</h3></div>
+        <p>A milled counter dial with a window showing how many frames you have shot on this stock. Turns one notch per exposure, so the release keeps a running total the way a film back does.</p>
+        <div class="stage" tabindex="0">
+          <div class="btn counter press">
+            <div class="barrel"></div><div class="ticks"></div>
+            <div class="core"></div>
+            <div class="win">26</div>
+          </div>
+        </div>
+        <div class="tags"><span class="tag">Narrative</span><span class="tag">Window is small</span></div>
+      </article>
+
+    </div>
+  </section>
+
+  <hr class="rule" />
+
+  <section class="section">
+    <div class="section-head">
+      <h2>If you want my read</h2>
+    </div>
+
+    <div class="rec">
+      <div class="n">04</div>
+      <div>
+        <h4>Meter halo is the one I would build</h4>
+        <p>It is the only one that makes the release carry information it does not carry today. The ring already exists and shows nothing; putting the meter on it means the exposure is readable without looking away from the frame — and it stays legible at 88pt, which the busier options do not.</p>
+      </div>
+    </div>
+    <div class="rec">
+      <div class="n">03</div>
+      <div>
+        <h4>Iris if you want people to remember it</h4>
+        <p>The only direction where the button performs the thing it triggers. It is also the only one with a per-frame animation cost on the hot path, so it wants measuring against the preview before committing.</p>
+      </div>
+    </div>
+    <div class="rec">
+      <div class="n">02</div>
+      <div>
+        <h4>Soft release is the safest departure</h4>
+        <p>Warm where everything else is warm, and the shape genuinely invites a thumb. My reservation is that a coloured filled circle reads as a state — people may look for it to be "on".</p>
+      </div>
+    </div>
+    <div class="rec">
+      <div class="n">01</div>
+      <div>
+        <h4>Cable release is the most literal, and the most crowded</h4>
+        <p>Four concentric rings in 88 points. Handsome at this size on a page, tight on a phone, and the threading detail will be invisible at the size it actually ships.</p>
+      </div>
+    </div>
+  </section>
+
+  <p class="foot">
+    Drawn with the app's own tokens. Each is 88pt with the same hit target and the same haptic — a
+    heavy thump on release, a second lighter beat 55ms later at Strong. Nothing here is built: give me
+    a number and I will build that one.
+  </p>
+
+</div>
