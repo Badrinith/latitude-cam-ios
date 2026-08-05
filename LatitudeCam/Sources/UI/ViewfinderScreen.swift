@@ -85,6 +85,66 @@ struct CameraStatusPill: View {
     }
 }
 
+// MARK: - Meter readout
+//
+// Signed deviation from the metering target, with the verdict spelled out. Its
+// own leaf so the 4Hz republish does not rebuild the screen around it.
+
+struct MeterReadout: View {
+    let frames: FrameBuffer
+    var rotation: Angle
+
+    @StateObject private var meter = HistogramSampler(bins: 32, samplesPerSecond: 4)
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text(deviation)
+                .font(.mono(13, .bold))
+                .foregroundStyle(verdictColor)
+                .contentTransition(.numericText())
+            Text(verdict)
+                .font(.mono(8, .semibold))
+                .kerning(1.2)
+                .foregroundStyle(verdictColor.opacity(0.8))
+        }
+        .rotationEffect(rotation)
+        .padding(.horizontal, 11)
+        .padding(.vertical, 6)
+        .glass(radius: 14)
+        .onAppear { meter.follow(frames) }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Exposure")
+        .accessibilityValue(spoken)
+    }
+
+    private var stops: Double { meter.data.deviationStops }
+
+    private var deviation: String {
+        meter.data.hasData ? String(format: "%+.1f", stops) : "—"
+    }
+
+    private var verdict: String {
+        guard meter.data.hasData else { return "METER" }
+        if meter.data.isWellExposed { return "GOOD" }
+        return stops < 0 ? "UNDER" : "OVER"
+    }
+
+    /// Severity, not decoration: amber is what "selected" looks like everywhere
+    /// else here, so a drift worth acting on gets its own red.
+    private var verdictColor: Color {
+        guard meter.data.hasData else { return Tone.quaternary }
+        if meter.data.isWellExposed { return Color(hex: 0x6FBF8F) }
+        return abs(stops) > 1.5 ? Color(hex: 0xE2685A) : Color(hex: 0xE0A44E)
+    }
+
+    private var spoken: String {
+        guard meter.data.hasData else { return "Metering" }
+        return meter.data.isWellExposed
+            ? "Good"
+            : String(format: "%@ by %.1f stops", stops < 0 ? "Under" : "Over", abs(stops))
+    }
+}
+
 // MARK: - Live histogram
 //
 // Owns its sampler so the 5Hz republish stays inside this leaf. Hanging the
@@ -108,24 +168,12 @@ struct LiveHistogramView: View {
                 }
             }
             .frame(width: 84, height: 30)
-
-            Text(sampler.data.hasData ? sampler.data.exposure.uppercased() : "—")
-                .font(.mono(8, .semibold))
-                .foregroundStyle(verdictColor)
         }
         .padding(.horizontal, 6)
         .padding(.vertical, 5)
         .frame(width: 96, alignment: .leading)
         .glass(radius: 8)
         .onAppear { sampler.follow(frames) }
-    }
-
-    private var verdictColor: Color {
-        guard sampler.data.hasData else { return Tone.quaternary }
-        switch sampler.data.exposure {
-        case "Under", "Over": return Accent.amber
-        default:              return Tone.secondary
-        }
     }
 
     private func draw(
@@ -236,6 +284,14 @@ struct ViewfinderScreen: View {
     /// so keeping a second copy at arm's reach was two of everything.
     private var chrome: some View {
         VStack(spacing: 0) {
+            ZStack {
+                MeterReadout(
+                    frames: app.cameraManager.frames,
+                    rotation: orientation.angle
+                )
+            }
+            .padding(.top, 8)
+
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 8) {
                     LiveHistogramView(
@@ -410,7 +466,7 @@ struct ViewfinderScreen: View {
     /// A shutter that moves when a lens is added is a shutter you have to look for.
     private var shutterRow: some View {
         ZStack {
-            ShutterButton(frames: app.cameraManager.frames) { fire() }
+            ShutterButton { fire() }
 
             HStack(spacing: 10) {
                 Button { app.go(.library) } label: {

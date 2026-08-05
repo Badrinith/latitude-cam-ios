@@ -575,21 +575,15 @@ struct ToggleRow: View {
 // trips. Paired with the heaviest haptic in the app, the press is legible
 // without looking away from the frame.
 
-/// A leaf iris that closes and reopens on every exposure, with the meter reading
-/// in its opening.
+/// A leaf iris that closes and reopens on every exposure.
 ///
-/// The blades do the thing the button triggers rather than depicting it, and the
-/// aperture is the one place on screen already looking at the light, so the
-/// deviation belongs there — you read the exposure without looking away from the
-/// frame or from the control you are about to press.
-///
-/// Observes the frame buffer, so this must stay a small leaf: it republishes four
-/// times a second and anything larger holding it would rebuild at that rate.
+/// The blades do the thing the button triggers rather than depicting it. The
+/// meter reading used to sit in the opening; at 76pt across, with blades taking
+/// the outer third, there was never enough clear aperture to set two lines of
+/// type in. It lives at the top of the screen now, where it has room.
 struct ShutterButton: View {
-    var frames: FrameBuffer
     var action: () -> Void
 
-    @StateObject private var meter = HistogramSampler(bins: 32, samplesPerSecond: 4)
     /// 0 fully open, 1 fully closed.
     @State private var closure: CGFloat = 0
     @State private var pressed = false
@@ -607,7 +601,6 @@ struct ShutterButton: View {
             ZStack {
                 core
                 blades
-                readout
             }
             .frame(width: size, height: size)
             .overlay {
@@ -617,9 +610,7 @@ struct ShutterButton: View {
             .contentShape(Circle())
         }
         .buttonStyle(.plain)
-        .onAppear { meter.follow(frames) }
         .accessibilityLabel("Take photo")
-        .accessibilityValue(spokenExposure)
     }
 
     // MARK: Parts
@@ -663,52 +654,6 @@ struct ShutterButton: View {
         let open = size * 0.60
         let shut = size * 0.04
         return open + (shut - open) * closure
-    }
-
-    private var readout: some View {
-        VStack(spacing: 0) {
-            Text(deviationText)
-                .font(.mono(15, .bold))
-                .foregroundStyle(verdictColor)
-                .contentTransition(.numericText())
-            Text(verdictWord)
-                .font(.mono(6, .semibold))
-                .kerning(1.1)
-                .foregroundStyle(verdictColor.opacity(0.75))
-        }
-        // Hidden behind the blades while they are shut, so the actuation reads as
-        // the shutter passing rather than as the number blinking out.
-        .opacity(1 - Double(closure))
-    }
-
-    // MARK: Meter
-
-    private var stops: Double { meter.data.deviationStops }
-
-    private var deviationText: String {
-        guard meter.data.hasData else { return "—" }
-        return String(format: "%+.1f", stops)
-    }
-
-    private var verdictWord: String {
-        guard meter.data.hasData else { return "METER" }
-        if meter.data.isWellExposed { return "GOOD" }
-        return stops < 0 ? "UNDER" : "OVER"
-    }
-
-    /// Severity, not decoration: amber is the app's accent and would read as
-    /// "selected", so a drift worth acting on gets its own red.
-    private var verdictColor: Color {
-        guard meter.data.hasData else { return Color(hex: 0x8A857C) }
-        if meter.data.isWellExposed { return Color(hex: 0x2E7D4F) }
-        return abs(stops) > 1.5 ? Color(hex: 0xC2402F) : Color(hex: 0xB0702F)
-    }
-
-    private var spokenExposure: String {
-        guard meter.data.hasData else { return "Metering" }
-        return meter.data.isWellExposed
-            ? "Exposure good"
-            : String(format: "%@ by %.1f stops", stops < 0 ? "Under" : "Over", abs(stops))
     }
 
     // MARK: Actuation

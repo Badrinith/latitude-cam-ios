@@ -1,0 +1,314 @@
+<title>Latitude Cam — Ten Film Looks</title>
+
+<style>
+  :root {
+    --amber:#D98A52;
+    --page-bg:#100F0D; --page-panel:#191714; --page-rule:rgba(242,239,232,.12);
+    --page-text:#E7E2D8; --page-dim:rgba(231,226,216,.60); --page-faint:rgba(231,226,216,.38);
+    --display: ui-serif, "New York", Georgia, serif;
+    --body: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, monospace;
+    --measure: 66ch;
+  }
+  @media (prefers-color-scheme: light) {
+    :root { --page-bg:#E9E5DC; --page-panel:#F5F2EB; --page-rule:rgba(28,24,20,.14);
+            --page-text:#1E1A16; --page-dim:rgba(30,26,22,.64); --page-faint:rgba(30,26,22,.44); }
+  }
+  :root[data-theme="light"] { --page-bg:#E9E5DC; --page-panel:#F5F2EB; --page-rule:rgba(28,24,20,.14);
+            --page-text:#1E1A16; --page-dim:rgba(30,26,22,.64); --page-faint:rgba(30,26,22,.44); }
+  :root[data-theme="dark"] { --page-bg:#100F0D; --page-panel:#191714; --page-rule:rgba(242,239,232,.12);
+            --page-text:#E7E2D8; --page-dim:rgba(231,226,216,.60); --page-faint:rgba(231,226,216,.38); }
+
+  body { background:var(--page-bg); color:var(--page-text); font-family:var(--body); line-height:1.55; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:1240px; margin:0 auto; padding:clamp(26px,5vw,60px) clamp(16px,4vw,38px) 90px; display:flex; flex-direction:column; gap:clamp(38px,6vw,66px); }
+
+  .eyebrow { font-family:var(--mono); font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:var(--amber); display:flex; gap:12px; flex-wrap:wrap; }
+  .eyebrow span { color:var(--page-faint); }
+  h1 { font-family:var(--display); font-weight:500; font-size:clamp(32px,5.6vw,58px); line-height:1.03; letter-spacing:-.02em; margin:0; text-wrap:balance; }
+  h1 em { font-style:italic; color:var(--amber); }
+  h2 { font-family:var(--display); font-weight:500; font-size:clamp(21px,2.5vw,27px); letter-spacing:-.012em; margin:0; }
+  .standfirst { font-size:clamp(15.5px,1.5vw,18px); color:var(--page-dim); max-width:var(--measure); text-wrap:pretty; }
+  .masthead { display:flex; flex-direction:column; gap:16px; }
+  .section { display:flex; flex-direction:column; gap:18px; }
+  .section-head { display:flex; flex-direction:column; gap:6px; }
+  .section-head p { margin:0; color:var(--page-dim); max-width:var(--measure); text-wrap:pretty; font-size:14px; }
+  hr.rule { height:1px; background:var(--page-rule); border:0; margin:0; }
+
+  .cat {
+    font-family:var(--mono); font-size:10px; letter-spacing:.2em; text-transform:uppercase;
+    color:var(--amber); display:flex; align-items:center; gap:12px;
+  }
+  .cat::after { content:""; flex:1; height:1px; background:var(--page-rule); }
+
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(232px,1fr)); gap:clamp(14px,2vw,22px); }
+
+  .look { display:flex; flex-direction:column; gap:9px; }
+  .frame {
+    position:relative; aspect-ratio:3/2; border-radius:8px; overflow:hidden;
+    border:1px solid var(--page-rule); background:#111;
+  }
+  /* The scene: a drawn interior with a window, a warm lamp, skin-toned mass and
+     foliage — enough colour families that a matrix has somewhere to show itself. */
+  .scene { position:absolute; inset:0; }
+  .scene .sky   { position:absolute; left:52%; top:6%; width:42%; height:44%;
+                  background:linear-gradient(#cfe6f2,#eef6f8); }
+  .scene .hill  { position:absolute; left:52%; top:34%; width:42%; height:16%;
+                  background:linear-gradient(#4e7043,#2f4a2b); }
+  .scene .mull  { position:absolute; left:52%; top:6%; width:42%; height:44%;
+                  background:
+                    linear-gradient(to right, transparent 47%, #241a12 47% 53%, transparent 53%),
+                    linear-gradient(to bottom, transparent 46%, #241a12 46% 51%, transparent 51%); }
+  .scene .wall  { position:absolute; inset:0;
+                  background:linear-gradient(200deg,#6b5a47 0%,#3a2f26 52%,#191410 100%); z-index:-1; }
+  .scene .lamp  { position:absolute; left:8%; top:12%; width:26%; height:34%;
+                  border-radius:50%; background:radial-gradient(circle,#ffd9a0,#e0a14e 55%,transparent 72%); }
+  .scene .skin  { position:absolute; left:14%; bottom:-6%; width:38%; height:56%;
+                  border-radius:48% 48% 12% 12%; background:linear-gradient(160deg,#e0b192,#a9714f); }
+  .scene .cloth { position:absolute; left:8%; bottom:-14%; width:52%; height:34%;
+                  border-radius:44% 40% 8% 8%; background:linear-gradient(160deg,#9c3f2e,#4a1c14); }
+  .scene .leaf  { position:absolute; right:4%; bottom:-8%; width:30%; height:42%;
+                  border-radius:60% 20% 50% 30%; background:linear-gradient(150deg,#5d8a3f,#25381c); }
+
+  .look h3 { margin:0; font-size:15px; font-weight:650; letter-spacing:-.01em; }
+  .look .meta { display:flex; align-items:baseline; gap:8px; }
+  .look .ref { font-family:var(--mono); font-size:8.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--page-faint); }
+  .look p { margin:0; font-size:12.5px; color:var(--page-dim); text-wrap:pretty; }
+  .look code {
+    font-family:var(--mono); font-size:9.5px; color:var(--page-faint);
+    background:var(--page-panel); border:1px solid var(--page-rule);
+    border-radius:4px; padding:5px 7px; display:block; overflow-x:auto; white-space:nowrap;
+  }
+
+  .rec { display:grid; grid-template-columns:34px minmax(0,1fr); gap:14px; padding:16px 2px; border-bottom:1px solid var(--page-rule); align-items:start; }
+  .rec:first-of-type { border-top:1px solid var(--page-rule); }
+  .rec .n { font-family:var(--mono); font-size:10.5px; color:var(--amber); padding-top:3px; }
+  .rec h4 { margin:0 0 3px; font-size:15px; font-weight:650; }
+  .rec p { margin:0; font-size:13.5px; color:var(--page-dim); max-width:var(--measure); text-wrap:pretty; }
+
+  .foot { font-size:13px; color:var(--page-faint); border-top:1px solid var(--page-rule); padding-top:18px; max-width:var(--measure); text-wrap:pretty; }
+  svg.defs { position:absolute; width:0; height:0; }
+</style>
+
+<svg class="defs" aria-hidden="true">
+  <defs>
+    <!-- Reversal -->
+    <filter id="f-vermilion" color-interpolation-filters="sRGB">
+      <feColorMatrix type="matrix" values="1.34 -0.16 -0.10 0 0  -0.12 1.26 -0.08 0 0  -0.08 -0.14 1.14 0 0  0 0 0 1 0"/>
+      <feComponentTransfer><feFuncR type="gamma" exponent="0.88"/><feFuncG type="gamma" exponent="0.88"/><feFuncB type="gamma" exponent="0.90"/></feComponentTransfer>
+    </filter>
+    <filter id="f-meridian" color-interpolation-filters="sRGB">
+      <feColorMatrix type="matrix" values="1.12 -0.06 -0.04 0 0  -0.04 1.10 -0.04 0 0  -0.04 -0.06 1.12 0 0  0 0 0 1 0"/>
+      <feComponentTransfer><feFuncR type="gamma" exponent="0.95"/><feFuncG type="gamma" exponent="0.95"/><feFuncB type="gamma" exponent="0.95"/></feComponentTransfer>
+    </filter>
+    <filter id="f-porcelain" color-interpolation-filters="sRGB">
+      <feColorMatrix type="matrix" values="1.06 0.04 0.00 0 0  0.02 1.02 0.02 0 0  0.00 0.02 1.04 0 0  0 0 0 1 0"/>
+      <feComponentTransfer><feFuncR type="gamma" exponent="1.06"/><feFuncG type="gamma" exponent="1.05"/><feFuncB type="gamma" exponent="1.02"/></feComponentTransfer>
+    </filter>
+
+    <!-- Print -->
+    <filter id="f-amber" color-interpolation-filters="sRGB">
+      <feColorMatrix type="matrix" values="1.20 0 0 0 0  0 0.90 0 0 0  0 0 0.80 0 0  0 0 0 1 0"/>
+      <feComponentTransfer><feFuncR type="gamma" exponent="1.04"/><feFuncG type="gamma" exponent="1.04"/><feFuncB type="gamma" exponent="1.08"/></feComponentTransfer>
+    </filter>
+    <filter id="f-harbour" color-interpolation-filters="sRGB">
+      <feColorMatrix type="matrix" values="0.92 0.04 0.02 0 0  0.02 0.98 0.04 0 0  0.04 0.08 1.14 0 0  0 0 0 1 0"/>
+      <feComponentTransfer><feFuncR type="gamma" exponent="1.08"/><feFuncG type="gamma" exponent="1.06"/><feFuncB type="gamma" exponent="1.00"/></feComponentTransfer>
+    </filter>
+    <filter id="f-ledger" color-interpolation-filters="sRGB">
+      <feColorMatrix type="matrix" values="0.86 0.08 0.04 0 0.04  0.06 0.86 0.06 0 0.04  0.04 0.08 0.88 0 0.05  0 0 0 1 0"/>
+      <feComponentTransfer><feFuncR type="gamma" exponent="1.14"/><feFuncG type="gamma" exponent="1.14"/><feFuncB type="gamma" exponent="1.12"/></feComponentTransfer>
+    </filter>
+
+    <!-- Monochrome -->
+    <filter id="f-mono" color-interpolation-filters="sRGB">
+      <feColorMatrix type="matrix" values="0.299 0.587 0.114 0 0  0.299 0.587 0.114 0 0  0.299 0.587 0.114 0 0  0 0 0 1 0"/>
+      <feComponentTransfer><feFuncR type="gamma" exponent="0.82"/><feFuncG type="gamma" exponent="0.82"/><feFuncB type="gamma" exponent="0.82"/></feComponentTransfer>
+    </filter>
+    <filter id="f-ash" color-interpolation-filters="sRGB">
+      <feColorMatrix type="matrix" values="0.24 0.68 0.08 0 0  0.24 0.68 0.08 0 0  0.24 0.68 0.08 0 0  0 0 0 1 0"/>
+      <feComponentTransfer><feFuncR type="gamma" exponent="1.05"/><feFuncG type="gamma" exponent="1.05"/><feFuncB type="gamma" exponent="1.05"/></feComponentTransfer>
+    </filter>
+
+    <!-- Signature -->
+    <filter id="f-slate" color-interpolation-filters="sRGB">
+      <feColorMatrix type="matrix" values="0.80 0 0 0 0  0 0.80 0 0 0  0 0 1.20 0 0  0 0 0 1 0"/>
+    </filter>
+    <filter id="f-rust" color-interpolation-filters="sRGB">
+      <feColorMatrix type="matrix" values="1.30 0 0 0 0  0 1.10 0 0 0  0 0 0.60 0 0  0 0 0 1 0"/>
+    </filter>
+
+    <filter id="f-none" color-interpolation-filters="sRGB">
+      <feColorMatrix type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 1 0"/>
+    </filter>
+  </defs>
+</svg>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <div class="eyebrow">Latitude Cam <span>/</span> Film looks <span>/</span> Ten to pick from</div>
+    <h1>Ten stocks, in <em>four families</em>.</h1>
+    <p class="standfirst">
+      Not ten unrelated presets. Reversal films are saturated and contrasty because a slide is the
+      final object; print films are flat and forgiving because a negative is only the middle of the
+      process. Grouping them that way is what makes a set navigable — you reach for a family first
+      and a stock second. Every frame below is the same drawn scene under the real matrix each look
+      would ship with, so the differences are the ones you would actually get.
+    </p>
+  </header>
+
+  <hr class="rule" />
+
+  <!-- ============ REVERSAL ============ -->
+  <section class="section">
+    <div class="section-head">
+      <div class="cat">Reversal · 3 stocks</div>
+      <p>Slide film. Saturated, contrasty, unforgiving of exposure — the frame is the finished thing.</p>
+    </div>
+
+    <div class="grid">
+      <article class="look">
+        <div class="frame"><div class="scene" style="filter:url(#f-vermilion)"><div class="wall"></div><div class="sky"></div><div class="hill"></div><div class="mull"></div><div class="lamp"></div><div class="leaf"></div><div class="cloth"></div><div class="skin"></div></div></div>
+        <div class="meta"><h3>Vermilion</h3><span class="ref">Landscape</span></div>
+        <p>Reds and greens pushed hard, shadows closed down. Punishing on skin, magnificent on anything that isn't.</p>
+        <code>R 1.34 −0.16 −0.10 · γ 0.88</code>
+      </article>
+
+      <article class="look">
+        <div class="frame"><div class="scene" style="filter:url(#f-meridian)"><div class="wall"></div><div class="sky"></div><div class="hill"></div><div class="mull"></div><div class="lamp"></div><div class="leaf"></div><div class="cloth"></div><div class="skin"></div></div></div>
+        <div class="meta"><h3>Meridian</h3><span class="ref">General</span></div>
+        <p>The everyday chrome. Lifted saturation across all three channels evenly, so nothing shifts hue — just more of what is there.</p>
+        <code>R 1.12 −0.06 −0.04 · γ 0.95</code>
+      </article>
+
+      <article class="look">
+        <div class="frame"><div class="scene" style="filter:url(#f-porcelain)"><div class="wall"></div><div class="sky"></div><div class="hill"></div><div class="mull"></div><div class="lamp"></div><div class="leaf"></div><div class="cloth"></div><div class="skin"></div></div></div>
+        <div class="meta"><h3>Porcelain</h3><span class="ref">Portrait</span></div>
+        <p>Chrome saturation with the contrast taken back out. Warm channels bleed very slightly into each other, which is what keeps skin from going waxy.</p>
+        <code>R 1.06 0.04 0.00 · γ 1.06</code>
+      </article>
+    </div>
+  </section>
+
+  <!-- ============ PRINT ============ -->
+  <section class="section">
+    <div class="section-head">
+      <div class="cat">Print · 3 stocks</div>
+      <p>Negative film. Wide latitude, soft shoulders, forgiving — a negative is the middle of the process, not the end of it.</p>
+    </div>
+
+    <div class="grid">
+      <article class="look">
+        <div class="frame"><div class="scene" style="filter:url(#f-amber)"><div class="wall"></div><div class="sky"></div><div class="hill"></div><div class="mull"></div><div class="lamp"></div><div class="leaf"></div><div class="cloth"></div><div class="skin"></div></div></div>
+        <div class="meta"><h3>Amber</h3><span class="ref">Ships today</span></div>
+        <p>Warm highlights, cool nothing. The app's existing stock, unchanged — it already belongs to this family.</p>
+        <code>R 1.20 · G 0.90 · B 0.80</code>
+      </article>
+
+      <article class="look">
+        <div class="frame"><div class="scene" style="filter:url(#f-harbour)"><div class="wall"></div><div class="sky"></div><div class="hill"></div><div class="mull"></div><div class="lamp"></div><div class="leaf"></div><div class="cloth"></div><div class="skin"></div></div></div>
+        <div class="meta"><h3>Harbour</h3><span class="ref">Overcast</span></div>
+        <p>Cyan in the shadows, greens held back. The look people chase for flat northern light, where a warm stock turns everything to mud.</p>
+        <code>B 0.04 0.08 1.14 · γ 1.08</code>
+      </article>
+
+      <article class="look">
+        <div class="frame"><div class="scene" style="filter:url(#f-ledger)"><div class="wall"></div><div class="sky"></div><div class="hill"></div><div class="mull"></div><div class="lamp"></div><div class="leaf"></div><div class="cloth"></div><div class="skin"></div></div></div>
+        <div class="meta"><h3>Ledger</h3><span class="ref">Cine</span></div>
+        <p>Deliberately flat, with the blacks lifted off zero. Built to be graded afterwards rather than looked at straight — the only stock here that is a starting point.</p>
+        <code>lift +0.04 · γ 1.14</code>
+      </article>
+    </div>
+  </section>
+
+  <!-- ============ MONOCHROME ============ -->
+  <section class="section">
+    <div class="section-head">
+      <div class="cat">Monochrome · 2 stocks</div>
+      <p>Two, not one. The whole argument in black and white is which colours become which greys, and one set of weights cannot answer it twice.</p>
+    </div>
+
+    <div class="grid">
+      <article class="look">
+        <div class="frame"><div class="scene" style="filter:url(#f-mono)"><div class="wall"></div><div class="sky"></div><div class="hill"></div><div class="mull"></div><div class="lamp"></div><div class="leaf"></div><div class="cloth"></div><div class="skin"></div></div></div>
+        <div class="meta"><h3>Mono</h3><span class="ref">Ships today · Street</span></div>
+        <p>Luma weights with the curve pulled hard. Deep blacks, blown highlights, no apology — the existing stock.</p>
+        <code>0.299 0.587 0.114 · γ 0.82</code>
+      </article>
+
+      <article class="look">
+        <div class="frame"><div class="scene" style="filter:url(#f-ash)"><div class="wall"></div><div class="sky"></div><div class="hill"></div><div class="mull"></div><div class="lamp"></div><div class="leaf"></div><div class="cloth"></div><div class="skin"></div></div></div>
+        <div class="meta"><h3>Ash</h3><span class="ref">Portrait · Detail</span></div>
+        <p>Green-weighted rather than luma-weighted, which is what a panchromatic emulsion actually does: skin lightens, red fabric darkens, foliage separates from sky.</p>
+        <code>0.24 0.68 0.08 · γ 1.05</code>
+      </article>
+    </div>
+  </section>
+
+  <!-- ============ SIGNATURE ============ -->
+  <section class="section">
+    <div class="section-head">
+      <div class="cat">Signature · 2 looks</div>
+      <p>Not emulations of anything. Channel gains chosen for effect — the app's own colour, kept apart from the stocks so the distinction stays honest.</p>
+    </div>
+
+    <div class="grid">
+      <article class="look">
+        <div class="frame"><div class="scene" style="filter:url(#f-slate)"><div class="wall"></div><div class="sky"></div><div class="hill"></div><div class="mull"></div><div class="lamp"></div><div class="leaf"></div><div class="cloth"></div><div class="skin"></div></div></div>
+        <div class="meta"><h3>Slate</h3><span class="ref">Ships today</span></div>
+        <p>Blue lifted, red and green held down. Cool and muted.</p>
+        <code>R 0.80 · G 0.80 · B 1.20</code>
+      </article>
+
+      <article class="look">
+        <div class="frame"><div class="scene" style="filter:url(#f-rust)"><div class="wall"></div><div class="sky"></div><div class="hill"></div><div class="mull"></div><div class="lamp"></div><div class="leaf"></div><div class="cloth"></div><div class="skin"></div></div></div>
+        <div class="meta"><h3>Rust</h3><span class="ref">Ships today</span></div>
+        <p>Red hard up, blue cut away. The most aggressive thing in the set.</p>
+        <code>R 1.30 · G 1.10 · B 0.60</code>
+      </article>
+    </div>
+  </section>
+
+  <hr class="rule" />
+
+  <section class="section">
+    <div class="section-head"><h2>What this changes in the build</h2></div>
+
+    <div class="rec">
+      <div class="n">01</div>
+      <div>
+        <h4>Six new stocks, four kept</h4>
+        <p>Amber, Slate, Rust and Mono stay exactly as they are and get sorted into families. Vermilion, Meridian, Porcelain, Harbour, Ledger and Ash are new. Neutral remains outside the set as the default — it is the absence of a look, not one of them.</p>
+      </div>
+    </div>
+    <div class="rec">
+      <div class="n">02</div>
+      <div>
+        <h4>The matrix alone will not carry six of them</h4>
+        <p>Vermilion, Porcelain, Ledger, Mono and Ash all depend on a tone curve as much as on channel gains, and `filmVectors` is a 3×3 with no curve. Either the profile grows a gamma term, or those six arrive as approximations of themselves. I would add the curve.</p>
+      </div>
+    </div>
+    <div class="rec">
+      <div class="n">03</div>
+      <div>
+        <h4>Eleven stocks will not fit one barrel</h4>
+        <p>At 96pt per name the film barrel already spans four. Eleven means either a much longer roll to drag through, or the family becomes the first choice and the stock the second — which is the argument for grouping them in the first place.</p>
+      </div>
+    </div>
+    <div class="rec">
+      <div class="n">04</div>
+      <div>
+        <h4>Names are original</h4>
+        <p>Every stock here is named for what it does, not for what it resembles. The reference labels — Landscape, Portrait, Overcast, Cine — say what each is for without borrowing anyone's trademark.</p>
+      </div>
+    </div>
+  </section>
+
+  <p class="foot">
+    Each frame is the same drawn scene through the actual matrix the look would ship with, applied via
+    feColorMatrix in sRGB — the same maths CIColorMatrix runs, so these are previews rather than
+    impressions. The scene is drawn, not photographed. Nothing is built: tell me which stocks you want
+    and whether the profile should gain a tone curve.
+  </p>
+
+</div>
