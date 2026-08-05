@@ -1,0 +1,531 @@
+<title>Latitude Cam — Ten Dial Arcs</title>
+
+<style>
+  :root {
+    --amber:#D98A52; --amber-deep:#8A5A34; --brass:#C9A227;
+    --page-bg:#100F0D; --page-panel:#191714; --page-rule:rgba(242,239,232,.12);
+    --page-text:#E7E2D8; --page-dim:rgba(231,226,216,.60); --page-faint:rgba(231,226,216,.38);
+    --display: ui-serif, "New York", Georgia, serif;
+    --body: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, monospace;
+    --measure: 66ch;
+  }
+  @media (prefers-color-scheme: light) {
+    :root { --page-bg:#E9E5DC; --page-panel:#F5F2EB; --page-rule:rgba(28,24,20,.14);
+            --page-text:#1E1A16; --page-dim:rgba(30,26,22,.64); --page-faint:rgba(30,26,22,.44); }
+  }
+  :root[data-theme="light"] { --page-bg:#E9E5DC; --page-panel:#F5F2EB; --page-rule:rgba(28,24,20,.14);
+            --page-text:#1E1A16; --page-dim:rgba(30,26,22,.64); --page-faint:rgba(30,26,22,.44); }
+  :root[data-theme="dark"] { --page-bg:#100F0D; --page-panel:#191714; --page-rule:rgba(242,239,232,.12);
+            --page-text:#E7E2D8; --page-dim:rgba(231,226,216,.60); --page-faint:rgba(231,226,216,.38); }
+
+  body { background:var(--page-bg); color:var(--page-text); font-family:var(--body); line-height:1.55; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:1280px; margin:0 auto; padding:clamp(26px,5vw,60px) clamp(16px,4vw,38px) 90px; display:flex; flex-direction:column; gap:clamp(38px,6vw,66px); }
+
+  .eyebrow { font-family:var(--mono); font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:var(--amber); display:flex; gap:12px; flex-wrap:wrap; }
+  .eyebrow span { color:var(--page-faint); }
+  h1 { font-family:var(--display); font-weight:500; font-size:clamp(32px,5.6vw,58px); line-height:1.03; letter-spacing:-.02em; margin:0; text-wrap:balance; }
+  h1 em { font-style:italic; color:var(--amber); }
+  h2 { font-family:var(--display); font-weight:500; font-size:clamp(21px,2.5vw,28px); margin:0; }
+  .standfirst { font-size:clamp(15.5px,1.5vw,18px); color:var(--page-dim); max-width:var(--measure); text-wrap:pretty; }
+  .masthead { display:flex; flex-direction:column; gap:16px; }
+  .section { display:flex; flex-direction:column; gap:22px; }
+  .section-head { display:flex; flex-direction:column; gap:8px; }
+  .section-head p { margin:0; color:var(--page-dim); max-width:var(--measure); text-wrap:pretty; }
+  hr.rule { height:1px; background:var(--page-rule); border:0; margin:0; }
+
+  .constraints { display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:1px; background:var(--page-rule); border:1px solid var(--page-rule); border-radius:4px; overflow:hidden; }
+  .constraints > div { background:var(--page-panel); padding:15px 16px; display:flex; flex-direction:column; gap:4px; }
+  .constraints dt { font-family:var(--mono); font-size:8.5px; letter-spacing:.15em; text-transform:uppercase; color:var(--page-faint); }
+  .constraints dd { margin:0; font-size:13.5px; color:var(--page-dim); line-height:1.45; }
+
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(262px,1fr)); gap:clamp(20px,2.6vw,30px); }
+  .card { display:flex; flex-direction:column; gap:12px; }
+  .cardhead { display:flex; align-items:baseline; gap:9px; flex-wrap:wrap; }
+  .cardhead .n { font-family:var(--mono); font-size:10px; color:var(--amber); letter-spacing:.12em; }
+  .cardhead h3 { margin:0; font-size:16.5px; font-weight:650; letter-spacing:-.01em; }
+  .cardhead .where { font-family:var(--mono); font-size:8px; letter-spacing:.14em; text-transform:uppercase; color:var(--page-faint); }
+  .card > p { margin:0; font-size:13px; color:var(--page-dim); text-wrap:pretty; }
+
+  .phone {
+    width:250px; aspect-ratio:250/476; border-radius:32px; background:#0D0D0D;
+    position:relative; overflow:hidden; flex:none; color:#F2EFE8; margin:0 auto;
+    box-shadow:0 0 0 1.2px rgba(255,255,255,.09), 0 0 0 6px #0a0a0a, 0 16px 38px rgba(0,0,0,.5);
+  }
+  .scene { position:absolute; inset:0;
+    background:
+      radial-gradient(56% 32% at 68% 18%, rgba(255,240,214,.9), transparent 62%),
+      radial-gradient(112% 74% at 71% 14%, rgba(226,171,110,.46), transparent 58%),
+      linear-gradient(191deg,#4a3b2e 0%,#2b221b 42%,#14100d 100%); }
+  .scene::after { content:""; position:absolute; left:-12%; bottom:-8%; width:78%; height:38%;
+    border-radius:50% 46% 38% 54%; background:rgba(9,7,6,.72); filter:blur(8px); }
+  .editbg { position:absolute; inset:0; background:#0D0D0D; }
+  .editshot { position:absolute; left:14px; right:14px; top:40px; aspect-ratio:3/2; border-radius:10px;
+    background:linear-gradient(200deg,#6b5a47,#3a2f26 52%,#191410); }
+
+  .deck { position:absolute; left:0; right:0; bottom:0; }
+  .shutter { width:52px; height:52px; border-radius:50%; margin:0 auto;
+    background:radial-gradient(circle at 50% 32%,#fff,#dcd7ce); box-shadow:0 0 0 2px rgba(255,255,255,.85); }
+  .cap { text-align:center; font-family:var(--mono); font-size:6.5px; letter-spacing:.22em; color:var(--amber); padding-top:5px; }
+  .grp { text-align:center; font-family:var(--mono); font-size:6.5px; letter-spacing:.2em; color:rgba(242,239,232,.45); }
+
+  /* ============================================================
+     THE DIAL
+     A large circle whose centre sits below the screen: only the
+     crown shows. Values ride the rim — placed at the top and
+     rotated about a point R below, so each swings down the arc
+     exactly as engraving on a real dial does. The scale enters
+     at the bottom left, crests under the index, and leaves at
+     the bottom right.
+     ============================================================ */
+  .dial { position:relative; height:126px; overflow:hidden; }
+
+  .dial .rim {
+    position:absolute; left:50%; top:6px; transform:translateX(-50%);
+    width:calc(var(--r) * 2px); height:calc(var(--r) * 2px); border-radius:50%;
+    background:
+      conic-gradient(from 200deg, #35353A 0deg, #16161A 40deg, #43434A 90deg, #1A1A1E 140deg, #35353A 180deg);
+    box-shadow:inset 0 0 0 .5px rgba(255,255,255,.2), 0 -6px 20px rgba(0,0,0,.55) inset;
+  }
+  .dial .knurl {
+    position:absolute; left:50%; top:6px; transform:translateX(-50%);
+    width:calc(var(--r) * 2px); height:calc(var(--r) * 2px); border-radius:50%;
+    background:repeating-conic-gradient(from 0deg, rgba(255,255,255,.20) 0 .45deg, transparent .45deg 2.6deg);
+    -webkit-mask:radial-gradient(closest-side, transparent 90%, #000 92%, #000 100%);
+    mask:radial-gradient(closest-side, transparent 90%, #000 92%, #000 100%);
+  }
+  .dial .face {
+    position:absolute; left:50%; top:calc(6px + 14px); transform:translateX(-50%);
+    width:calc(var(--r) * 2px - 28px); height:calc(var(--r) * 2px - 28px); border-radius:50%;
+    background:radial-gradient(circle at 50% 18%, #2B2B2F, #131316 70%);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.14);
+  }
+
+  /* a value on the rim */
+  .dial .v {
+    position:absolute; left:50%; top:16px;
+    font-family:var(--mono); font-size:11px; white-space:nowrap;
+    color:rgba(201,194,182,.62);
+    transform-origin:50% calc(var(--r) * 1px - 10px);
+    transform:translateX(-50%) rotate(var(--a));
+  }
+  .dial .v.on { color:#F2EFE8; font-weight:700; font-size:13.5px; }
+
+  /* the index — fixed, at twelve, outside the rim */
+  .dial .idx {
+    position:absolute; left:50%; top:0; transform:translateX(-50%);
+    width:0; height:0; border-left:5px solid transparent; border-right:5px solid transparent;
+    border-top:7px solid var(--amber); z-index:3;
+    filter:drop-shadow(0 1px 2px rgba(0,0,0,.7));
+  }
+  .dial .fade { position:absolute; inset:0; pointer-events:none;
+    background:linear-gradient(to right, #0D0D0D 0%, rgba(13,13,13,0) 22%, rgba(13,13,13,0) 78%, #0D0D0D 100%); }
+  .dial.overscene .fade { background:linear-gradient(to right, rgba(13,13,13,.9) 0%, rgba(13,13,13,0) 24%, rgba(13,13,13,0) 76%, rgba(13,13,13,.9) 100%); }
+
+  /* --- variants --- */
+  .dial.upright .v > i { display:inline-block; font-style:normal; transform:rotate(calc(var(--a) * -1)); }
+  .dial.ticked .ticks {
+    position:absolute; left:50%; top:6px; transform:translateX(-50%);
+    width:calc(var(--r) * 2px); height:calc(var(--r) * 2px); border-radius:50%;
+    background:repeating-conic-gradient(from -60deg, rgba(255,255,255,.5) 0 .5deg, transparent .5deg 6deg);
+    -webkit-mask:radial-gradient(closest-side, transparent 87%, #000 89% 95%, transparent 96%);
+    mask:radial-gradient(closest-side, transparent 87%, #000 89% 95%, transparent 96%);
+  }
+  .dial.glassrim .rim {
+    background:linear-gradient(to bottom, rgba(12,11,10,.62), rgba(12,11,10,.24));
+    backdrop-filter:blur(7px); -webkit-backdrop-filter:blur(7px);
+    box-shadow:inset 0 0 0 .5px rgba(255,255,255,.26);
+  }
+  .dial.glassrim .face { display:none; }
+  .dial.glassrim .v { color:rgba(255,255,255,.7); text-shadow:0 1px 3px rgba(0,0,0,.85); }
+  .dial.glassrim .v.on { color:#fff; }
+  .dial.inset .rim {
+    box-shadow:inset 0 6px 12px rgba(0,0,0,.9), inset 0 0 0 .5px rgba(255,255,255,.14);
+    background:linear-gradient(to bottom,#111113,#26262A 60%,#0C0C0E);
+  }
+  .dial.brassrim .rim {
+    background:conic-gradient(from 200deg,#8A6F1E,#3E320F 40deg,#C9A227 90deg,#4A3B12 140deg,#8A6F1E 180deg);
+  }
+  .dial.brassrim .v.on { color:#F6E4B0; }
+
+  /* twin arcs */
+  .dial.twin .rim2 {
+    position:absolute; left:50%; top:44px; transform:translateX(-50%);
+    width:calc(var(--r) * 2px - 76px); height:calc(var(--r) * 2px - 76px); border-radius:50%;
+    background:conic-gradient(from 200deg,#2B2B30,#141417 40deg,#3A3A40 90deg,#161619 140deg,#2B2B30 180deg);
+    box-shadow:inset 0 0 0 .5px rgba(255,255,255,.16);
+  }
+  .dial.twin .w {
+    position:absolute; left:50%; top:52px; font-family:var(--mono); font-size:8.5px; white-space:nowrap;
+    color:rgba(201,194,182,.55);
+    transform-origin:50% calc(var(--r) * 1px - 48px);
+    transform:translateX(-50%) rotate(var(--a));
+  }
+  .dial.twin .w.on { color:var(--amber); font-weight:700; }
+
+  .editrow { padding:0 18px 8px; }
+  .editrow .lbl { font-family:var(--mono); font-size:7px; letter-spacing:.1em; color:rgba(242,239,232,.5); padding-bottom:2px; }
+  .editrow .lbl.on { color:var(--amber); }
+
+  .chips { display:flex; gap:5px; justify-content:center; padding-top:7px; }
+  .chip { font-family:var(--mono); font-size:7.5px; padding:4px 8px; border-radius:20px;
+    background:rgba(255,255,255,.08); color:rgba(242,239,232,.75); }
+  .chip.on { background:var(--amber); color:#0D0D0D; font-weight:700; }
+
+  .tags { display:flex; flex-wrap:wrap; gap:5px; }
+  .tag { font-family:var(--mono); font-size:8.5px; letter-spacing:.09em; text-transform:uppercase; padding:3px 7px; border-radius:3px; border:1px solid var(--page-rule); color:var(--page-faint); }
+  .tag.good { color:var(--amber); border-color:rgba(217,138,82,.4); }
+
+  .rec { display:grid; grid-template-columns:34px minmax(0,1fr); gap:14px; padding:16px 2px; border-bottom:1px solid var(--page-rule); align-items:start; }
+  .rec:first-of-type { border-top:1px solid var(--page-rule); }
+  .rec .n { font-family:var(--mono); font-size:10.5px; color:var(--amber); padding-top:3px; }
+  .rec h4 { margin:0 0 3px; font-size:15px; font-weight:650; }
+  .rec p { margin:0; font-size:13.5px; color:var(--page-dim); max-width:var(--measure); text-wrap:pretty; }
+
+  .foot { font-size:13px; color:var(--page-faint); border-top:1px solid var(--page-rule); padding-top:18px; max-width:var(--measure); text-wrap:pretty; }
+  :focus-visible { outline:2px solid var(--amber); outline-offset:3px; }
+</style>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <div class="eyebrow">Latitude Cam <span>/</span> Dial arcs <span>/</span> Ten to pick from</div>
+    <h1>A dial set into the body, showing <em>only its crown</em>.</h1>
+    <p class="standfirst">
+      A large wheel whose centre is below the screen: the scale enters at the bottom left, climbs the
+      arc, crests under a fixed index, and leaves at the bottom right. Values ride the rim — each is
+      placed at the top and rotated about a point below, so it swings down the curve the way
+      engraving on a real dial does. Radius is the whole variable: a tight wheel shows three values
+      steeply, a wide one shows seven in a gentle bow.
+    </p>
+  </header>
+
+  <div class="constraints">
+    <div><dt>Everywhere</dt><dd>Bottom-left in, over the crown, bottom-right out.</dd></div>
+    <div><dt>Everywhere</dt><dd>Index fixed at twelve; the wheel turns under it.</dd></div>
+    <div><dt>Everywhere</dt><dd>Same drag, detent and haptic as the barrel it replaces.</dd></div>
+    <div><dt>Varies</dt><dd>Radius, rim material, and whether the type turns with the wheel.</dd></div>
+  </div>
+
+  <hr class="rule" />
+
+  <section class="section">
+    <div class="section-head">
+      <h2>The ten</h2>
+      <p>Shown on the screen each suits, with the release drawn at scale.</p>
+    </div>
+
+    <div class="grid">
+
+      <!-- 01 -->
+      <article class="card">
+        <div class="cardhead"><span class="n">01</span><h3>Standard wheel</h3><span class="where">Film selector</span></div>
+        <p>Radius 190. Five stocks on the arc, the live one flat under the index and the outer two leaning well over. Type turns with the wheel, as engraving does.</p>
+        <div class="phone">
+          <div class="scene"></div>
+          <div class="deck">
+            <div class="shutter"></div>
+            <div style="height:10px"></div>
+            <div class="dial overscene" style="--r:190">
+              <div class="rim"></div><div class="knurl"></div><div class="face"></div>
+              <span class="v" style="--a:-52deg">AMBER</span>
+              <span class="v" style="--a:-26deg">VERMILION</span>
+              <span class="v on" style="--a:0deg">MERIDIAN</span>
+              <span class="v" style="--a:26deg">PORCELAIN</span>
+              <span class="v" style="--a:52deg">HARBOUR</span>
+              <div class="fade"></div><div class="idx"></div>
+            </div>
+            <div class="cap">REVERSAL · GENERAL</div>
+            <div style="height:10px"></div>
+          </div>
+        </div>
+        <div class="tags"><span class="tag good">Most dial-like</span><span class="tag">126pt tall</span></div>
+      </article>
+
+      <!-- 02 -->
+      <article class="card">
+        <div class="cardhead"><span class="n">02</span><h3>Upright type</h3><span class="where">Film selector</span></div>
+        <p>The same wheel, but each value counter-rotates to stay level. You lose the engraved feel and gain names that read at the edges rather than lying on their side.</p>
+        <div class="phone">
+          <div class="scene"></div>
+          <div class="deck">
+            <div class="shutter"></div>
+            <div style="height:10px"></div>
+            <div class="dial upright overscene" style="--r:190">
+              <div class="rim"></div><div class="knurl"></div><div class="face"></div>
+              <span class="v" style="--a:-52deg"><i>AMBER</i></span>
+              <span class="v" style="--a:-26deg"><i>VERMILION</i></span>
+              <span class="v on" style="--a:0deg"><i>MERIDIAN</i></span>
+              <span class="v" style="--a:26deg"><i>PORCELAIN</i></span>
+              <span class="v" style="--a:52deg"><i>HARBOUR</i></span>
+              <div class="fade"></div><div class="idx"></div>
+            </div>
+            <div class="cap">REVERSAL · GENERAL</div>
+            <div style="height:10px"></div>
+          </div>
+        </div>
+        <div class="tags"><span class="tag good">Most legible</span><span class="tag">Least physical</span></div>
+      </article>
+
+      <!-- 03 -->
+      <article class="card">
+        <div class="cardhead"><span class="n">03</span><h3>Wide wheel</h3><span class="where">Film selector</span></div>
+        <p>Radius 300. A gentle bow rather than a hill — seven stocks visible and the arc barely leaves the horizontal. Shortest of the wheels for the number it shows.</p>
+        <div class="phone">
+          <div class="scene"></div>
+          <div class="deck">
+            <div class="shutter"></div>
+            <div style="height:10px"></div>
+            <div class="dial overscene" style="--r:300; height:96px">
+              <div class="rim"></div><div class="knurl"></div><div class="face"></div>
+              <span class="v" style="--a:-44deg">NEUTRAL</span>
+              <span class="v" style="--a:-22deg">VERMILION</span>
+              <span class="v on" style="--a:0deg">MERIDIAN</span>
+              <span class="v" style="--a:22deg">PORCELAIN</span>
+              <span class="v" style="--a:44deg">AMBER</span>
+              <div class="fade"></div><div class="idx"></div>
+            </div>
+            <div class="cap">REVERSAL · GENERAL</div>
+            <div style="height:10px"></div>
+          </div>
+        </div>
+        <div class="tags"><span class="tag good">Shortest</span><span class="tag">Barely reads as a wheel</span></div>
+      </article>
+
+      <!-- 04 -->
+      <article class="card">
+        <div class="cardhead"><span class="n">04</span><h3>Tight wheel</h3><span class="where">Pro controls</span></div>
+        <p>Radius 120. Steep, three values, and the shortest travel between stops — which is what a shutter or ISO ladder wants when you already know where you are going.</p>
+        <div class="phone">
+          <div class="scene"></div>
+          <div class="deck">
+            <div class="grp">SHUTTER</div>
+            <div class="dial overscene" style="--r:120; height:104px">
+              <div class="rim"></div><div class="knurl"></div><div class="face"></div>
+              <span class="v" style="--a:-46deg">1/60</span>
+              <span class="v on" style="--a:0deg">1/125</span>
+              <span class="v" style="--a:46deg">1/250</span>
+              <div class="fade"></div><div class="idx"></div>
+            </div>
+            <div class="chips"><span class="chip on">1/125</span><span class="chip">ISO A</span><span class="chip">5600K</span></div>
+            <div style="height:10px"></div>
+            <div class="shutter"></div>
+            <div style="height:12px"></div>
+          </div>
+        </div>
+        <div class="tags"><span class="tag good">Fastest turn</span><span class="tag">Three values</span></div>
+      </article>
+
+      <!-- 05 -->
+      <article class="card">
+        <div class="cardhead"><span class="n">05</span><h3>Ticked rim</h3><span class="where">Pro controls</span></div>
+        <p>Graduations between the numbers, as on a real speed dial. The ticks carry the motion when the numbers are too far apart to show it — you see the wheel turn between stops.</p>
+        <div class="phone">
+          <div class="scene"></div>
+          <div class="deck">
+            <div class="grp">ISO</div>
+            <div class="dial ticked overscene" style="--r:150; height:112px">
+              <div class="rim"></div><div class="ticks"></div><div class="face"></div>
+              <span class="v" style="--a:-42deg">200</span>
+              <span class="v on" style="--a:0deg">400</span>
+              <span class="v" style="--a:42deg">800</span>
+              <div class="fade"></div><div class="idx"></div>
+            </div>
+            <div class="chips"><span class="chip">1/125</span><span class="chip on">ISO 400</span><span class="chip">5600K</span></div>
+            <div style="height:10px"></div>
+            <div class="shutter"></div>
+            <div style="height:12px"></div>
+          </div>
+        </div>
+        <div class="tags"><span class="tag good">Shows the turn</span><span class="tag">Busiest rim</span></div>
+      </article>
+
+      <!-- 06 -->
+      <article class="card">
+        <div class="cardhead"><span class="n">06</span><h3>Twin wheels</h3><span class="where">Film, two-tier</span></div>
+        <p>Two concentric rims on one axis — family on the outer, stocks on the inner. One wheel inside another is exactly how a shutter dial carries an ISO collar.</p>
+        <div class="phone">
+          <div class="scene"></div>
+          <div class="deck">
+            <div class="shutter"></div>
+            <div style="height:10px"></div>
+            <div class="dial twin overscene" style="--r:200; height:132px">
+              <div class="rim"></div><div class="knurl"></div>
+              <span class="v" style="--a:-40deg">PRINT</span>
+              <span class="v on" style="--a:0deg">REVERSAL</span>
+              <span class="v" style="--a:40deg">MONO</span>
+              <div class="rim2"></div>
+              <span class="w" style="--a:-34deg">VERMILION</span>
+              <span class="w on" style="--a:0deg">MERIDIAN</span>
+              <span class="w" style="--a:34deg">PORCELAIN</span>
+              <div class="fade"></div><div class="idx"></div>
+            </div>
+            <div class="cap">GENERAL</div>
+            <div style="height:8px"></div>
+          </div>
+        </div>
+        <div class="tags"><span class="tag good">Fits what ships</span><span class="tag">Tallest</span></div>
+      </article>
+
+      <!-- 07 -->
+      <article class="card">
+        <div class="cardhead"><span class="n">07</span><h3>Glass wheel</h3><span class="where">Film selector</span></div>
+        <p>The rim is frosted rather than milled, so the scene carries on through the arc. The only one that does not put a slab of metal across the bottom of the picture.</p>
+        <div class="phone">
+          <div class="scene"></div>
+          <div class="deck">
+            <div class="shutter"></div>
+            <div style="height:10px"></div>
+            <div class="dial glassrim overscene" style="--r:190">
+              <div class="rim"></div>
+              <span class="v" style="--a:-52deg">AMBER</span>
+              <span class="v" style="--a:-26deg">VERMILION</span>
+              <span class="v on" style="--a:0deg">MERIDIAN</span>
+              <span class="v" style="--a:26deg">PORCELAIN</span>
+              <span class="v" style="--a:52deg">HARBOUR</span>
+              <div class="idx"></div>
+            </div>
+            <div class="cap">REVERSAL · GENERAL</div>
+            <div style="height:10px"></div>
+          </div>
+        </div>
+        <div class="tags"><span class="tag good">Covers least</span><span class="tag">Legibility rides the scene</span></div>
+      </article>
+
+      <!-- 08 -->
+      <article class="card">
+        <div class="cardhead"><span class="n">08</span><h3>Sunken wheel</h3><span class="where">Pro controls</span></div>
+        <p>Set into the body rather than sitting on it: a shadowed groove at the top edge and the crown emerging from it. The most convincing that the wheel continues below the screen.</p>
+        <div class="phone">
+          <div class="scene"></div>
+          <div class="deck">
+            <div class="grp">WHITE BALANCE</div>
+            <div class="dial inset overscene" style="--r:160; height:112px">
+              <div class="rim"></div><div class="knurl"></div><div class="face"></div>
+              <span class="v" style="--a:-42deg">5000K</span>
+              <span class="v on" style="--a:0deg">5600K</span>
+              <span class="v" style="--a:42deg">6500K</span>
+              <div class="fade"></div><div class="idx"></div>
+            </div>
+            <div class="chips"><span class="chip">1/125</span><span class="chip">ISO A</span><span class="chip on">5600K</span></div>
+            <div style="height:10px"></div>
+            <div class="shutter"></div>
+            <div style="height:12px"></div>
+          </div>
+        </div>
+        <div class="tags"><span class="tag good">Most convincingly set in</span><span class="tag">Darkest</span></div>
+      </article>
+
+      <!-- 09 -->
+      <article class="card">
+        <div class="cardhead"><span class="n">09</span><h3>Brass wheel</h3><span class="where">Film selector</span></div>
+        <p>The same geometry in worn brass rather than blackened steel — the film side of the camera reading warm, the exposure side cool. Material as the thing that tells them apart.</p>
+        <div class="phone">
+          <div class="scene"></div>
+          <div class="deck">
+            <div class="shutter"></div>
+            <div style="height:10px"></div>
+            <div class="dial brassrim overscene" style="--r:190">
+              <div class="rim"></div><div class="knurl"></div><div class="face"></div>
+              <span class="v" style="--a:-52deg">AMBER</span>
+              <span class="v" style="--a:-26deg">VERMILION</span>
+              <span class="v on" style="--a:0deg">MERIDIAN</span>
+              <span class="v" style="--a:26deg">PORCELAIN</span>
+              <span class="v" style="--a:52deg">HARBOUR</span>
+              <div class="fade"></div><div class="idx"></div>
+            </div>
+            <div class="cap">REVERSAL · GENERAL</div>
+            <div style="height:10px"></div>
+          </div>
+        </div>
+        <div class="tags"><span class="tag">Distinct by material</span><span class="tag">Second metal to justify</span></div>
+      </article>
+
+      <!-- 10 -->
+      <article class="card">
+        <div class="cardhead"><span class="n">10</span><h3>Micro wheels</h3><span class="where">Edit screen</span></div>
+        <p>The editor's stack, each row a shallow crown. Large radius keeps them short enough that three fit, and the label above carries the name the rim has no room for.</p>
+        <div class="phone">
+          <div class="editbg"></div>
+          <div class="editshot"></div>
+          <div class="deck">
+            <div class="editrow"><div class="lbl">EXPOSURE</div>
+              <div class="dial" style="--r:260; height:52px">
+                <div class="rim"></div><div class="knurl"></div><div class="face"></div>
+                <span class="v" style="--a:-26deg">+0.0</span>
+                <span class="v on" style="--a:0deg">+0.3</span>
+                <span class="v" style="--a:26deg">+0.7</span>
+                <div class="fade"></div><div class="idx"></div>
+              </div>
+            </div>
+            <div class="editrow"><div class="lbl on">HIGHLIGHTS</div>
+              <div class="dial" style="--r:260; height:52px">
+                <div class="rim"></div><div class="knurl"></div><div class="face"></div>
+                <span class="v" style="--a:-26deg">−40</span>
+                <span class="v on" style="--a:0deg">−28</span>
+                <span class="v" style="--a:26deg">−10</span>
+                <div class="fade"></div><div class="idx"></div>
+              </div>
+            </div>
+            <div class="editrow"><div class="lbl">SHADOWS</div>
+              <div class="dial" style="--r:260; height:52px">
+                <div class="rim"></div><div class="knurl"></div><div class="face"></div>
+                <span class="v" style="--a:-26deg">+10</span>
+                <span class="v on" style="--a:0deg">+30</span>
+                <span class="v" style="--a:26deg">+50</span>
+                <div class="fade"></div><div class="idx"></div>
+              </div>
+            </div>
+            <div class="cap" style="color:rgba(242,239,232,.35)">LIGHT · 2 OF 5</div>
+            <div style="height:10px"></div>
+          </div>
+        </div>
+        <div class="tags"><span class="tag good">Fits the stack</span><span class="tag">Flattest arc</span></div>
+      </article>
+
+    </div>
+  </section>
+
+  <hr class="rule" />
+
+  <section class="section">
+    <div class="section-head"><h2>If you want my read</h2></div>
+
+    <div class="rec">
+      <div class="n">01</div>
+      <div>
+        <h4>One wheel, four radii, is what I would build</h4>
+        <p>Standard, Wide, Tight and Micro are not four components — they are one wheel given a different radius. Radius is the only thing that has to change between the film selector, the pro cluster and the editor's rows, and building it once means every control in the app stays the same object at four sizes.</p>
+      </div>
+    </div>
+    <div class="rec">
+      <div class="n">02</div>
+      <div>
+        <h4>Upright type is the decision to make first</h4>
+        <p>Engraved type is what makes it read as a real dial, and it is also what makes VERMILION lie on its side at the edge of the arc. Numbers survive the rotation; long names do not. My inclination is engraved for the pro controls, upright for the film selector — but that is a split worth seeing on device before committing to it.</p>
+      </div>
+    </div>
+    <div class="rec">
+      <div class="n">05</div>
+      <div>
+        <h4>Ticks earn their place</h4>
+        <p>Between two stops the numbers barely move, so without graduations the wheel looks static until it snaps. The ticks are what make the turn visible, and they cost nothing but a mask.</p>
+      </div>
+    </div>
+    <div class="rec">
+      <div class="n">06</div>
+      <div>
+        <h4>Twin wheels are handsome and the tallest thing here</h4>
+        <p>Concentric rims are exactly how a shutter dial carries an ISO collar, and it maps onto the two-tier selector that already ships. At 132pt it also takes more of the frame than anything else on this page, directly above the release.</p>
+      </div>
+    </div>
+  </section>
+
+  <p class="foot">
+    Each wheel is a circle whose centre sits below the screen; values are placed at the crown and
+    rotated about a point at the radius, so they travel the arc rather than being drawn along one.
+    The release is at scale in every frame so what each covers can be judged. Nothing is built —
+    give me a number, and say whether the type should turn with the wheel or stay upright.
+  </p>
+
+</div>
