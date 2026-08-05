@@ -368,7 +368,7 @@ struct ViewfinderScreen: View {
     /// shape entirely once sideways has become up. The release does not move; a
     /// shutter you have to hunt for is worse than one held at an odd angle.
     private static let clusterBand: CGFloat = 118
-    private static let filmBand: CGFloat = 76
+    private static let filmBand: CGFloat = 106
     private static let shutterBand: CGFloat = 80
     private static let bandInset: CGFloat = 12
 
@@ -456,10 +456,7 @@ struct ViewfinderScreen: View {
     }
 
     private var filmSelector: some View {
-        FilmBarrel(
-            selection: $app.selectedFilm,
-            onOpenDetail: { app.go(.filmSim) }
-        )
+        FilmTwoTier(onOpenDetail: { app.go(.filmSim) })
     }
 
     /// The release is centred in its own layer so nothing beside it can shift it.

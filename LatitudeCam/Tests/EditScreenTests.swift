@@ -247,3 +247,96 @@ final class PhotoEditorRenderTests: XCTestCase {
         }
     }
 }
+
+// MARK: - The extended editor
+
+final class EditControlRangeTests: XCTestCase {
+
+    /// Every control has to be neutral at its centre, or opening the editor would
+    /// silently change a photo nobody asked to change.
+    @MainActor
+    func testEveryControlIsNeutralAtCentre() {
+        let e = PhotoEditor()
+        XCTAssertEqual(e.exposureEV, 0, accuracy: 0.0001)
+        XCTAssertEqual(e.highlightValue, 0, accuracy: 0.0001)
+        XCTAssertEqual(e.shadowValue, 0, accuracy: 0.0001)
+        XCTAssertEqual(e.blackPointValue, 0, accuracy: 0.0001)
+        XCTAssertEqual(e.vibranceValue, 0, accuracy: 0.0001)
+        XCTAssertEqual(e.tintValue, 0, accuracy: 0.0001)
+        XCTAssertEqual(e.structureValue, 0, accuracy: 0.0001)
+        XCTAssertEqual(e.sharpenValue, 0, accuracy: 0.0001)
+        XCTAssertEqual(e.saturationValue, 1, accuracy: 0.0001)
+        XCTAssertEqual(e.kelvinValue, 6000, accuracy: 1)
+    }
+
+    @MainActor
+    func testControlsAreSignedAroundCentre() {
+        let e = PhotoEditor()
+        e.highlights = 1;  XCTAssertLessThan(e.highlightValue, 0, "up the slider recovers highlights")
+        e.highlights = 0;  XCTAssertGreaterThan(e.highlightValue, 0)
+        e.shadows = 1;     XCTAssertGreaterThan(e.shadowValue, 0, "up the slider opens shadows")
+        e.blackPoint = 1;  XCTAssertGreaterThan(e.blackPointValue, 0, "up lifts the black point")
+        e.tint = 1;        XCTAssertGreaterThan(e.tintValue, 0)
+        e.tint = 0;        XCTAssertLessThan(e.tintValue, 0)
+    }
+
+    @MainActor
+    func testResetReturnsEveryControlToNeutral() {
+        let e = PhotoEditor()
+        e.exposure = 0.9; e.contrast = 0.1; e.highlights = 0.2; e.shadows = 0.8
+        e.blackPoint = 0.3; e.saturation = 0.7; e.vibrance = 0.9; e.temperature = 0.2
+        e.tint = 0.8; e.structure = 0.9; e.sharpen = 0.7
+        e.reset()
+
+        for value in [e.exposure, e.contrast, e.highlights, e.shadows, e.blackPoint,
+                      e.saturation, e.vibrance, e.temperature, e.tint,
+                      e.structure, e.sharpen] {
+            XCTAssertEqual(value, 0.5, accuracy: 0.0001)
+        }
+    }
+
+    /// Structure and sharpen are different tools, not two names for one — a
+    /// wide radius works on regions and a narrow one on edges.
+    @MainActor
+    func testStructureAndSharpenAreIndependent() {
+        let e = PhotoEditor()
+        e.structure = 1
+        XCTAssertGreaterThan(e.structureValue, 0)
+        XCTAssertEqual(e.sharpenValue, 0, accuracy: 0.0001)
+    }
+}
+
+// MARK: - The shelf, in the library
+
+@MainActor
+final class LibraryCategoryTests: XCTestCase {
+
+    /// Twelve chips in a fixed row ran off the screen with no way to reach the
+    /// ones past the edge. Families keep it to five.
+    func testCategoriesStayFewEnoughToFit() {
+        let categories = ["All"] + AppState.filmFamilies
+        XCTAssertEqual(categories.count, 6)
+        XCTAssertLessThan(categories.count, FilmPreset.all.count,
+                          "categorising by stock is what overflowed")
+    }
+
+    func testEveryStockBelongsToACategory() {
+        let families = Set(AppState.filmFamilies)
+        for preset in FilmPreset.all {
+            XCTAssertTrue(families.contains(preset.family),
+                          "\(preset.id) would be unreachable in the library")
+        }
+    }
+
+    func testAllIsTheOnlyCategoryHoldingEveryStock() {
+        for family in AppState.filmFamilies {
+            XCTAssertLessThan(AppState.stocks(in: family).count, FilmPreset.all.count)
+        }
+    }
+
+    /// The grid copy has to be much smaller than the roll copy, or the thumbnail
+    /// is not doing anything.
+    func testGridCopyIsSubstantiallySmallerThanTheRollCopy() {
+        XCTAssertLessThan(PhotoGallery.gridEdge, PhotoGallery.inMemoryEdge / 2)
+    }
+}

@@ -157,31 +157,52 @@ private struct LibraryGrid: View {
 
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 6), count: 3)
 
+    /// Families, not stocks. Twelve chips in a fixed HStack ran off the right of
+    /// the screen with no way to reach the ones past the edge — which is what
+    /// "the gallery is out of frame" was. Five fit, and a family is the useful
+    /// question anyway: you look for the black and white ones, not for Ash.
+    private static var categories: [String] { ["All"] + AppState.filmFamilies }
+
+    private func family(of photo: PhotoGallery.Photo) -> String {
+        FilmPreset.all.first { $0.id == photo.filmID }?.family ?? "Signature"
+    }
+
     private var filtered: [PhotoGallery.Photo] {
         guard filter != "All" else { return gallery.photos }
-        return gallery.photos.filter { $0.filmID == filter.lowercased() }
+        return gallery.photos.filter { family(of: $0) == filter }
+    }
+
+    private func count(_ category: String) -> Int {
+        category == "All" ? gallery.photos.count
+                          : gallery.photos.filter { family(of: $0) == category }.count
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 8) {
-                ForEach(["All"] + FilmPreset.all.map(\.shortName), id: \.self) { name in
-                    FilterChip(title: name, isActive: filter == name) {
-                        Haptics.detent()
-                        withAnimation(.snappy(duration: 0.2)) { filter = name }
+            // Scrolls as well as fits, so a sixth family later cannot put a chip
+            // out of reach again.
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(Self.categories, id: \.self) { name in
+                        FilterChip(title: "\(name) \(count(name))", isActive: filter == name) {
+                            Haptics.detent()
+                            withAnimation(.snappy(duration: 0.2)) { filter = name }
+                        }
+                        .opacity(count(name) == 0 && name != "All" ? 0.4 : 1)
                     }
                 }
+                .padding(.horizontal, 1)
             }
             .padding(.bottom, 14)
 
             if filtered.isEmpty {
                 VStack(spacing: 8) {
-                    Text(gallery.photos.isEmpty ? "No shots yet" : "Nothing in this simulation")
+                    Text(gallery.photos.isEmpty ? "No shots yet" : "Nothing in \(filter)")
                         .font(.ui(15, .semibold))
                         .foregroundStyle(Tone.secondary)
                     Text(gallery.photos.isEmpty
                          ? "Tap the shutter in the viewfinder to start a roll."
-                         : "Try another filter.")
+                         : "No frames on this shelf yet.")
                         .font(.ui(12))
                         .foregroundStyle(Tone.tertiary)
                 }
@@ -204,7 +225,7 @@ private struct LibraryGrid: View {
                             Color.clear
                                 .aspectRatio(1, contentMode: .fit)
                                 .overlay {
-                                    Image(uiImage: photo.image)
+                                    Image(uiImage: photo.thumb)
                                         .resizable()
                                         .scaledToFill()
                                 }
@@ -330,7 +351,7 @@ struct EditScreen: View {
 
     private var tabBar: some View {
         HStack(spacing: 22) {
-            ForEach(["Light", "Color", "Film", "Crop"], id: \.self) { name in
+            ForEach(["Light", "Color", "Detail", "Film", "Crop"], id: \.self) { name in
                 Button {
                     Haptics.tap()
                     withAnimation(.snappy(duration: 0.2)) { tab = name }
@@ -354,46 +375,110 @@ struct EditScreen: View {
     private var panel: some View {
         switch tab {
         case "Light":
-            VStack(spacing: 16) {
-                SliderRow(
-                    label: "Exposure",
-                    value: String(format: "%+.1f EV", editor.exposureEV),
-                    position: $editor.exposure,
-                    bipolar: true
-                )
-                SliderRow(
-                    label: "Contrast",
-                    value: String(format: "%.2f", editor.contrastValue),
-                    position: $editor.contrast,
-                    bipolar: true
-                )
+            ScrollView(showsIndicators: false) {
+                VStack(spacing: 15) {
+                    SliderRow(
+                        label: "Exposure",
+                        value: String(format: "%+.1f EV", editor.exposureEV),
+                        position: $editor.exposure,
+                        bipolar: true
+                    )
+                    SliderRow(
+                        label: "Contrast",
+                        value: String(format: "%.2f", editor.contrastValue),
+                        position: $editor.contrast,
+                        bipolar: true
+                    )
+                    SliderRow(
+                        label: "Highlights",
+                        value: String(format: "%+.0f", editor.highlightValue * 100),
+                        position: $editor.highlights,
+                        bipolar: true
+                    )
+                    SliderRow(
+                        label: "Shadows",
+                        value: String(format: "%+.0f", editor.shadowValue * 100),
+                        position: $editor.shadows,
+                        bipolar: true
+                    )
+                    SliderRow(
+                        label: "Black Point",
+                        value: String(format: "%+.0f", editor.blackPointValue * 500),
+                        position: $editor.blackPoint,
+                        bipolar: true
+                    )
+                }
+                .padding(.bottom, 4)
             }
+            .frame(maxHeight: 178)
 
         case "Color":
-            VStack(spacing: 16) {
+            ScrollView(showsIndicators: false) {
+                VStack(spacing: 15) {
+                    SliderRow(
+                        label: "Temperature",
+                        value: "\(Int(editor.kelvinValue))K",
+                        position: $editor.temperature,
+                        temperatureTrack: true
+                    )
+                    SliderRow(
+                        label: "Tint",
+                        value: String(format: "%+.0f", editor.tintValue),
+                        position: $editor.tint,
+                        bipolar: true
+                    )
+                    SliderRow(
+                        label: "Saturation",
+                        value: String(format: "%.2f", editor.saturationValue),
+                        position: $editor.saturation,
+                        bipolar: true
+                    )
+                    SliderRow(
+                        label: "Vibrance",
+                        value: String(format: "%+.0f", editor.vibranceValue * 100),
+                        position: $editor.vibrance,
+                        bipolar: true
+                    )
+                }
+                .padding(.bottom, 4)
+            }
+            .frame(maxHeight: 178)
+
+        case "Detail":
+            VStack(spacing: 15) {
                 SliderRow(
-                    label: "Saturation",
-                    value: String(format: "%.2f", editor.saturationValue),
-                    position: $editor.saturation,
+                    label: "Structure",
+                    value: String(format: "%+.0f", editor.structureValue * 100),
+                    position: $editor.structure,
                     bipolar: true
                 )
                 SliderRow(
-                    label: "Temperature",
-                    value: "\(Int(editor.kelvinValue))K",
-                    position: $editor.temperature,
-                    temperatureTrack: true
+                    label: "Sharpen",
+                    value: String(format: "%.0f", max(0, editor.sharpenValue) * 100),
+                    position: $editor.sharpen,
+                    bipolar: true
                 )
+                Text("STRUCTURE WORKS ON REGIONS · SHARPEN ON EDGES")
+                    .font(.mono(7, .medium))
+                    .kerning(0.6)
+                    .foregroundStyle(Tone.quaternary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
 
         case "Film":
             VStack(alignment: .leading, spacing: 16) {
-                HStack(spacing: 8) {
-                    ForEach(FilmPreset.all) { preset in
-                        Chip(title: preset.shortName, isActive: preset.id == editor.filmID) {
-                            Haptics.detent()
-                            withAnimation(.snappy(duration: 0.2)) { editor.filmID = preset.id }
+                // Eleven stocks will not sit in a fixed row any more than they sat
+                // in a barrel.
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(FilmPreset.all) { preset in
+                            Chip(title: preset.name, isActive: preset.id == editor.filmID) {
+                                Haptics.detent()
+                                withAnimation(.snappy(duration: 0.2)) { editor.filmID = preset.id }
+                            }
                         }
                     }
+                    .padding(.horizontal, 1)
                 }
                 SliderRow(
                     label: "Intensity",
@@ -446,8 +531,15 @@ final class PhotoEditor: ObservableObject {
     // for the bipolar ones.
     @Published var exposure: Double = 0.5 { didSet { scheduleRender() } }
     @Published var contrast: Double = 0.5 { didSet { scheduleRender() } }
+    @Published var highlights: Double = 0.5 { didSet { scheduleRender() } }
+    @Published var shadows: Double = 0.5 { didSet { scheduleRender() } }
+    @Published var blackPoint: Double = 0.5 { didSet { scheduleRender() } }
     @Published var saturation: Double = 0.5 { didSet { scheduleRender() } }
+    @Published var vibrance: Double = 0.5 { didSet { scheduleRender() } }
     @Published var temperature: Double = 0.5 { didSet { scheduleRender() } }
+    @Published var tint: Double = 0.5 { didSet { scheduleRender() } }
+    @Published var structure: Double = 0.5 { didSet { scheduleRender() } }
+    @Published var sharpen: Double = 0.5 { didSet { scheduleRender() } }
     @Published var filmID: String = "amber" { didSet { scheduleRender() } }
     @Published var intensity: Double = 0 { didSet { scheduleRender() } }
     @Published var grain = false { didSet { scheduleRender() } }
@@ -462,6 +554,16 @@ final class PhotoEditor: ObservableObject {
     var contrastValue: Double { 0.5 + contrast }
     var saturationValue: Double { saturation * 2 }
     var kelvinValue: Double { ((3000 + temperature * 6000) / 100).rounded() * 100 }
+    /// Green ↔ magenta, the axis white balance alone cannot reach.
+    var tintValue: Double { (tint - 0.5) * 150 }
+    /// Recovery is signed: negative pulls highlights down, positive opens shadows.
+    var highlightValue: Double { (0.5 - highlights) * 2 }
+    var shadowValue: Double { (shadows - 0.5) * 2 }
+    var blackPointValue: Double { (blackPoint - 0.5) * 0.18 }
+    var vibranceValue: Double { (vibrance - 0.5) * 2 }
+    /// Large-radius unsharp mask: local contrast rather than edge definition.
+    var structureValue: Double { (structure - 0.5) * 2 }
+    var sharpenValue: Double { (sharpen - 0.5) * 2 }
 
     private var source: CIImage?
     private var sourceScale: CGFloat = 1
@@ -491,8 +593,15 @@ final class PhotoEditor: ObservableObject {
     func reset() {
         exposure = 0.5
         contrast = 0.5
+        highlights = 0.5
+        shadows = 0.5
+        blackPoint = 0.5
         saturation = 0.5
+        vibrance = 0.5
         temperature = 0.5
+        tint = 0.5
+        structure = 0.5
+        sharpen = 0.5
         intensity = 0
         grain = false
         halation = false
@@ -507,7 +616,10 @@ final class PhotoEditor: ObservableObject {
     private var params: Params {
         Params(
             ev: exposureEV, contrast: contrastValue, saturation: saturationValue,
-            kelvin: kelvinValue, filmID: filmID, intensity: intensity,
+            kelvin: kelvinValue, tint: tintValue,
+            highlights: highlightValue, shadows: shadowValue, blackPoint: blackPointValue,
+            vibrance: vibranceValue, structure: structureValue, sharpen: sharpenValue,
+            filmID: filmID, intensity: intensity,
             grain: grain, halation: halation, vignette: vignette,
             crop: crop, quarterTurns: quarterTurns
         )
@@ -543,6 +655,15 @@ final class PhotoEditor: ObservableObject {
         var contrast: Double
         var saturation: Double
         var kelvin: Double
+        // Neutral by default: a Params that does not mention a control means that
+        // control makes no change, so a caller can name only what it is testing.
+        var tint: Double = 0
+        var highlights: Double = 0
+        var shadows: Double = 0
+        var blackPoint: Double = 0
+        var vibrance: Double = 0
+        var structure: Double = 0
+        var sharpen: Double = 0
         var filmID: String
         var intensity: Double
         var grain: Bool
@@ -565,15 +686,45 @@ final class PhotoEditor: ObservableObject {
             image = image.applyingFilter("CIExposureAdjust", parameters: [kCIInputEVKey: params.ev])
         }
 
+        // Tone recovery before global contrast: pulling highlights back after
+        // stretching them has less left to recover.
+        if abs(params.highlights) > 0.001 || abs(params.shadows) > 0.001 {
+            image = image.applyingFilter("CIHighlightShadowAdjust", parameters: [
+                "inputHighlightAmount": 1 + params.highlights,
+                "inputShadowAmount": params.shadows,
+                kCIInputRadiusKey: 12.0
+            ])
+        }
+
         image = image.applyingFilter("CIColorControls", parameters: [
             kCIInputContrastKey: params.contrast,
             kCIInputSaturationKey: params.saturation
         ])
 
+        // Black point as a bias, which is what "crush" and "lift" actually are —
+        // moving where zero sits rather than bending the curve around it.
+        if abs(params.blackPoint) > 0.001 {
+            let b = CGFloat(params.blackPoint)
+            image = image.applyingFilter("CIColorMatrix", parameters: [
+                "inputBiasVector": CIVector(x: b, y: b, z: b, w: 0)
+            ])
+        }
+
         image = image.applyingFilter("CITemperatureAndTint", parameters: [
-            "inputNeutral": CIVector(x: CGFloat(params.kelvin), y: 0),
+            // Tint is the second component: the green–magenta axis, which white
+            // balance on its own cannot reach.
+            "inputNeutral": CIVector(x: CGFloat(params.kelvin), y: CGFloat(params.tint)),
             "inputTargetNeutral": CIVector(x: 6500, y: 0)
         ])
+
+        // Vibrance after saturation, and separate from it: it leans on the
+        // channels furthest from grey, which is what leaves skin alone while
+        // everything around it lifts.
+        if abs(params.vibrance) > 0.001 {
+            image = image.applyingFilter("CIVibrance", parameters: [
+                kCIInputAmountKey: params.vibrance
+            ])
+        }
 
         // Same matrices the live viewfinder uses, so a look chosen while shooting
         // reproduces exactly here.
@@ -608,6 +759,23 @@ final class PhotoEditor: ObservableObject {
                 .applyingFilter("CIOverlayBlendMode", parameters: [
                     kCIInputBackgroundImageKey: image
                 ])
+        }
+
+        // Detail last, so it sharpens the picture that was actually made rather
+        // than one the later stages then move underneath it.
+        if abs(params.structure) > 0.001 {
+            // A wide radius is what separates local contrast from sharpening:
+            // it works on regions, not edges.
+            image = image.applyingFilter("CIUnsharpMask", parameters: [
+                kCIInputRadiusKey: 12.0,
+                kCIInputIntensityKey: params.structure * 0.8
+            ])
+        }
+
+        if params.sharpen > 0.001 {
+            image = image.applyingFilter("CISharpenLuminance", parameters: [
+                kCIInputSharpnessKey: params.sharpen * 1.2
+            ])
         }
 
         image = crop(image, to: params.crop)

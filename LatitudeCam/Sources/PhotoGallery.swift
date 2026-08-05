@@ -13,7 +13,12 @@ public final class PhotoGallery: ObservableObject {
 
     public struct Photo: Identifiable, Equatable {
         public let id: String
+        /// Full roll copy — what the editor works from.
         public let image: UIImage
+        /// Grid copy. A three-column cell is about 360px on a Pro Max; handing it
+        /// a 2048px image means downsampling a megapixel per cell on every scroll
+        /// tick, for a picture the size of a postage stamp.
+        public let thumb: UIImage
         public let filmID: String
         public let iso: Int
         public let shutterDenominator: Int
@@ -46,6 +51,7 @@ public final class PhotoGallery: ObservableObject {
         let photo = Photo(
             id: id,
             image: image,
+            thumb: Self.downscaled(image, maxEdge: Self.gridEdge),
             filmID: filmID,
             iso: iso,
             shutterDenominator: shutterDenominator,
@@ -86,7 +92,9 @@ public final class PhotoGallery: ObservableObject {
     /// live on disk and in Apple Photos. Holding full 48MP frames here cost about
     /// 190MB each, which is what emptied the grid: a few shots in, allocations
     /// started failing and later captures had nothing left to render into.
-    static let inMemoryEdge: CGFloat = 2048
+    static let inMemoryEdge: CGFloat = 1280
+    /// Long edge of the grid copy.
+    static let gridEdge: CGFloat = 420
 
     /// Decoded straight to the size we need. UIImage(contentsOfFile:) would
     /// materialise the whole frame first, which is the cost being avoided.
@@ -130,12 +138,14 @@ public final class PhotoGallery: ObservableObject {
         let loaded: [Photo] = urls
             .filter { $0.pathExtension.lowercased() == "jpg" }
             .compactMap { url in
-                guard let image = Self.thumbnail(at: url, maxEdge: Self.inMemoryEdge) else { return nil }
+                guard let image = Self.thumbnail(at: url, maxEdge: Self.inMemoryEdge),
+                      let thumb = Self.thumbnail(at: url, maxEdge: Self.gridEdge) else { return nil }
                 let id = url.deletingPathExtension().lastPathComponent
                 let meta = Self.parseID(id)
                 return Photo(
                     id: id,
                     image: image,
+                    thumb: thumb,
                     filmID: meta.filmID,
                     iso: meta.iso,
                     shutterDenominator: meta.shutter,

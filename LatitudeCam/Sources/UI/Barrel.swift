@@ -261,35 +261,41 @@ struct Barrel: View {
 
 // MARK: - Film selector
 //
-// Below the shutter, where it cannot cover the picture. The 340pt knob arc this
-// replaces sat over the lower third of every frame.
+// Two tiers, because eleven names will not fit one roll. VERMILION needs more
+// width than a segment of an eleven-stop barrel can give it, and no tracking
+// fixes that — so the family narrows the field first and the stock barrel only
+// ever holds the two or three names in it.
+//
+// It also scales. A twelfth stock joins a family; it does not lengthen the roll.
 
-struct FilmBarrel: View {
-    @Binding var selection: FilmPreset
-    var presets: [FilmPreset] = FilmPreset.all
+struct FilmTwoTier: View {
+    @EnvironmentObject var app: AppState
     var onOpenDetail: () -> Void
-
-    private var index: Binding<Int> {
-        Binding(
-            get: { presets.firstIndex(of: selection) ?? 0 },
-            set: { selection = presets[min(max($0, 0), presets.count - 1)] }
-        )
-    }
 
     var body: some View {
         VStack(spacing: 5) {
+            // Upper tier: the shelf.
             Barrel(
-                values: presets.map { $0.name.uppercased() },
-                index: index,
-                height: 44,
-                // Tighter than the 96 four stocks could afford. Eleven names have
-                // to be reachable without a drag that outlasts the moment.
-                pitch: 78,
-                pointsPerStop: 46,
+                values: AppState.filmFamilies.map { $0.uppercased() },
+                index: Binding(get: { app.familyIndex }, set: { app.familyIndex = $0 }),
+                height: 26,
+                pitch: 108,
+                pointsPerStop: 52,
+                radius: 6
+            )
+            .opacity(0.82)
+
+            // Lower tier: what is on it. Tinted with each stock's own colour, so
+            // the barrel shows what the frame will look like and not only what it
+            // is called.
+            Barrel(
+                values: stocks.map { $0.name.uppercased() },
+                index: Binding(get: { app.stockIndex }, set: { app.stockIndex = $0 }),
+                height: 42,
+                pitch: 104,
+                pointsPerStop: 50,
                 radius: 9,
-                // Each stock engraved in its own colour, so the barrel shows what
-                // the frame will look like rather than only what it is called.
-                tints: presets.map(\.engraved)
+                tints: stocks.map(\.engraved)
             )
             .overlay(alignment: .top) {
                 Triangle()
@@ -298,36 +304,21 @@ struct FilmBarrel: View {
                     .offset(y: -3)
             }
 
-            // The swatch is the one thing the engraving cannot say.
-            HStack(spacing: 6) {
-                Circle()
-                    .fill(selection.engraved)
-                    .frame(width: 7, height: 7)
-                    .overlay { Circle().strokeBorder(Color.white.opacity(0.25), lineWidth: 0.5) }
-                // Family first: it is what tells you why this stock behaves as it
-                // does, and it is the thing eleven names would otherwise lose.
-                if selection.family != "None" {
-                    Text(selection.family.uppercased())
-                        .font(.mono(7, .semibold))
-                        .kerning(0.9)
-                        .foregroundStyle(Accent.amber.opacity(0.85))
-                    Text("·")
-                        .font(.mono(7, .medium))
-                        .foregroundStyle(Tone.quaternary)
+            Text(app.selectedFilm.blurb.uppercased())
+                .font(.mono(7, .medium))
+                .kerning(0.9)
+                .foregroundStyle(Tone.quaternary)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    Haptics.tap()
+                    onOpenDetail()
                 }
-                Text(selection.blurb.uppercased())
-                    .font(.mono(7, .medium))
-                    .kerning(0.8)
-                    .foregroundStyle(Tone.quaternary)
-            }
-            .contentShape(Rectangle())
-            .onTapGesture {
-                Haptics.tap()
-                onOpenDetail()
-            }
         }
         .padding(.horizontal, 18)
+        .animation(.spring(response: 0.3, dampingFraction: 0.82), value: app.selectedFilm.family)
     }
+
+    private var stocks: [FilmPreset] { AppState.stocks(in: app.selectedFilm.family) }
 }
 
 // MARK: - Pro cluster

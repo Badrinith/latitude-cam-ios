@@ -1,8 +1,8 @@
 # Latitude Cam — Session Handoff
 
 **Date:** 5 Aug 2026
-**Branch:** `feat/camera-pipeline-dials-splash` — 30 commits, **all local, nothing pushed to `origin`**
-**Tests:** 245 passing
+**Branch:** `feat/camera-pipeline-dials-splash` — 31 commits, **all local, nothing pushed to `origin`**
+**Tests:** 253 passing
 **Device:** iPhone 17 Pro Max, UDID `854CD202-7808-597B-A70F-6A6628AED263` (build installed and current)
 
 ---
@@ -27,6 +27,9 @@
 | Shutter is a six-blade iris carrying the meter reading | The aperture is already looking at the light; exposure reads without leaving the frame |
 | Metering target is 118 (18% grey through sRGB), not 128 | Metering to mid-scale reads a third of a stop hot |
 | 11 stocks in 4 families; curves only on the 6 new ones | The 4 originals are pinned to per-pixel references in `FilmProfiles.swift` |
+| Film selector is two-tier: family barrel, then stock barrel | 11 long names will not fit one roll; a 12th joins a family rather than lengthening it |
+| Library filters by family, not stock | 12 chips in a fixed HStack ran off-screen — that was "out of frame" |
+| Gallery holds a 420pt grid copy beside the 1280pt roll copy | A 3-column cell is ~360px; downsampling a megapixel per cell per scroll tick |
 
 ## Architecture
 
@@ -42,13 +45,13 @@ CameraManager
 AppState  ──syncCamera()──▶  RenderSettings  ──apply()──▶  CameraManager
    proMode · autoExposure · autoFocus · metering · pointOfInterest
 
-PhotoGallery   2048pt in memory, full-res on disk, CGImageSourceCreateThumbnail on load
+PhotoGallery   1280pt roll copy + 420pt grid copy in memory, CGImageSourceCreateThumbnail on load
 PhotoExporter  paired asset (.photo + .alternatePhoto), falls back to two assets
 ```
 
 **UI files:** `Barrel.swift` (Barrel · FilmBarrel · BarrelCluster · DeviceOrientation), `ViewfinderScreen.swift` (single view tree; blocks positioned by `clusterCentre`/`filmCentre`, constant size, rotation + position animate).
 
-**Layout:** pro cluster · shutter row · film barrel. Shutter row is `PRO · lens selector · [release] · roll`, release centred in its own layer so nothing beside it shifts it. Cluster gated on pro mode. Landscape moves the two control bands to the ground-facing edge; the shutter does not move.
+**Layout:** pro cluster · shutter row · two-tier film selector. Shutter row is `PRO · lens selector · [release] · roll`, release centred in its own layer so nothing beside it shifts it. Cluster gated on pro mode. Landscape moves the two control bands to the ground-facing edge; the shutter does not move.
 
 ## Code state
 

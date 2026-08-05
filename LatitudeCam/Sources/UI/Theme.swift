@@ -94,7 +94,7 @@ struct FilmPreset: Identifiable, Hashable {
         // First and default. A camera should show you the scene before it shows
         // you an opinion about it — a look is something you reach for. Outside
         // the families: it is the absence of one, not one of them.
-        .init(id: "neutral", name: "Neutral", blurb: "Straight capture", swatch: FilmSwatch.neutral, family: "None"),
+        .init(id: "neutral", name: "Neutral", blurb: "Straight capture", swatch: FilmSwatch.neutral, family: "Neutral"),
 
         .init(id: "vermilion", name: "Vermilion", blurb: "Landscape", swatch: FilmSwatch.vermilion, family: "Reversal"),
         .init(id: "meridian", name: "Meridian", blurb: "General", swatch: FilmSwatch.meridian, family: "Reversal"),
@@ -474,6 +474,43 @@ final class AppState: ObservableObject {
         s.pointOfInterest = pointOfInterest
         s.zoomFactor = Double(currentLens?.zoom ?? 1)
         cameraManager.apply(s)
+    }
+
+    /// Families in shelf order, derived from the roll so the two cannot disagree.
+    static var filmFamilies: [String] {
+        var seen: [String] = []
+        for preset in FilmPreset.all where !seen.contains(preset.family) {
+            seen.append(preset.family)
+        }
+        return seen
+    }
+
+    static func stocks(in family: String) -> [FilmPreset] {
+        FilmPreset.all.filter { $0.family == family }
+    }
+
+    var familyIndex: Int {
+        get { Self.filmFamilies.firstIndex(of: selectedFilm.family) ?? 0 }
+        set {
+            let families = Self.filmFamilies
+            let family = families[min(max(newValue, 0), families.count - 1)]
+            guard family != selectedFilm.family else { return }
+            // Land on the first stock of the family rather than the nearest
+            // index: a family is a shelf, and you take the first thing on it.
+            if let first = Self.stocks(in: family).first { selectedFilm = first }
+        }
+    }
+
+    var stockIndex: Int {
+        get {
+            let family = Self.stocks(in: selectedFilm.family)
+            return family.firstIndex(of: selectedFilm) ?? 0
+        }
+        set {
+            let family = Self.stocks(in: selectedFilm.family)
+            guard !family.isEmpty else { return }
+            selectedFilm = family[min(max(newValue, 0), family.count - 1)]
+        }
     }
 
     /// Reflects the camera actually in use, set from what the switch reported
