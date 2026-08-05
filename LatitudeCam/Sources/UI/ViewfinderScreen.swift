@@ -324,7 +324,7 @@ struct ViewfinderScreen: View {
             Button { app.go(.settings) } label: {
                 optionLabel {
                     Image(systemName: "gearshape")
-                        .font(.system(size: 16, weight: .medium))
+                        .font(.system(size: 19, weight: .medium))
                         .foregroundStyle(Tone.primary)
                         .rotationEffect(orientation.angle)
                 }
@@ -332,22 +332,11 @@ struct ViewfinderScreen: View {
             .buttonStyle(.plain)
             .accessibilityLabel("Settings")
 
-            Button { app.flipCamera() } label: {
-                optionLabel {
-                    Image(systemName: "arrow.triangle.2.circlepath.camera")
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundStyle(app.usingFrontCamera ? Accent.amber : Tone.primary)
-                        .rotationEffect(orientation.angle)
-                }
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Switch camera")
-
             if app.cameraManager.supportsPortrait {
                 Button { app.togglePortrait() } label: {
                     optionLabel {
                         Image(systemName: "person.and.background.dotted")
-                            .font(.system(size: 15, weight: .medium))
+                            .font(.system(size: 18, weight: .medium))
                             .foregroundStyle(app.portrait ? Accent.amber : Tone.primary)
                             .rotationEffect(orientation.angle)
                     }
@@ -359,7 +348,7 @@ struct ViewfinderScreen: View {
             Button { cycleAspect() } label: {
                 optionLabel {
                     Text(aspect)
-                        .font(.mono(11, .semibold))
+                        .font(.mono(13, .semibold))
                         .foregroundStyle(Tone.primary)
                         .rotationEffect(orientation.angle)
                 }
@@ -367,9 +356,9 @@ struct ViewfinderScreen: View {
             .buttonStyle(.plain)
             .accessibilityLabel("Aspect ratio")
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
-        .glass(radius: 30)
+        .padding(.horizontal, 9)
+        .padding(.vertical, 7)
+        .glass(radius: 34)
     }
 
     /// Everything a thumb needs, in the band below the picture: the pro barrels,
@@ -480,11 +469,35 @@ struct ViewfinderScreen: View {
         ZStack {
             ShutterButton { fire() }
 
-            HStack(spacing: 10) {
+            HStack(spacing: 9) {
                 Button { app.go(.library) } label: {
                     LibraryThumbnail(gallery: app.gallery)
                 }
                 .buttonStyle(.plain)
+
+                // Beside the roll and within reach of the thumb already resting
+                // near the release. Turning the camera round is something you do
+                // between frames, not while setting one up — it belongs down here
+                // with the shutter rather than up with the instruments.
+                Button { app.flipCamera() } label: {
+                    Image(systemName: "arrow.triangle.2.circlepath.camera")
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(app.usingFrontCamera ? Ink.base : Tone.primary)
+                        .rotationEffect(orientation.angle)
+                        .frame(width: 36, height: 36)
+                        .background {
+                            if app.usingFrontCamera {
+                                Circle().fill(Accent.amber)
+                            } else {
+                                Circle().fill(.ultraThinMaterial)
+                                    .overlay { Circle().fill(Color.black.opacity(0.2)) }
+                                    .overlay { Circle().strokeBorder(Tone.hairline, lineWidth: 0.5) }
+                            }
+                        }
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Switch camera")
 
                 proButton
 
@@ -606,13 +619,13 @@ struct ViewfinderScreen: View {
         Rectangle().fill(Tone.hairline).frame(width: 0.5, height: 14)
     }
 
-    /// 42pt, up from 32. These are reached for while the other hand is holding
-    /// the phone and the eye is on the picture, which is the worst case for a
-    /// small target. The strip behind them carries the glass now, so each button
-    /// only needs its own tint when it is on.
+    /// 50pt. These are reached for while the other hand holds the phone and the
+    /// eye is on the picture, which is the worst case for a small target — well
+    /// past the 44 Apple asks for, because a miss here costs the shot. The strip
+    /// behind them carries the glass, so each button only needs its own tint.
     private func optionLabel<C: View>(@ViewBuilder content: () -> C) -> some View {
         content()
-            .frame(width: 42, height: 42)
+            .frame(width: 50, height: 50)
             .background {
                 Circle().fill(Color.white.opacity(0.07))
             }
