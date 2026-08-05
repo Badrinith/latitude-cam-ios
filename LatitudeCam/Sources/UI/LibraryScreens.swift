@@ -369,10 +369,16 @@ struct EditScreen: View {
         }
     }
 
-    /// One per row, the full width of the screen. Three across left each barrel
-    /// about 100pt wide, which is barely two stops — a barrel showing only its
-    /// current value is a label with knurling on it. Full width shows five or six,
-    /// which is what makes the scale readable while you are turning it.
+    /// One per row, inset from both edges.
+    ///
+    /// The gutters are not margin. A barrel takes any horizontal drag that starts
+    /// on it, so a stack of edge-to-edge barrels leaves nowhere to begin a scroll
+    /// except on something that might turn instead. The inset gives both thumbs a
+    /// strip of panel that is only ever a scroll — belt and braces alongside the
+    /// axis rule, which handles the drags that do start on a barrel.
+    ///
+    /// Three across was the other extreme: about 100pt each, barely two stops, and
+    /// a barrel showing only its current value is a label with knurling on it.
     private func barrelBank(
         _ controls: [(String, Binding<Double>, Int, (Double) -> String)]
     ) -> some View {
@@ -386,6 +392,7 @@ struct EditScreen: View {
                 )
             }
         }
+        .padding(.horizontal, 22)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
