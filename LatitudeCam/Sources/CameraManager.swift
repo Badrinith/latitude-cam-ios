@@ -232,11 +232,20 @@ public final class CameraManager: NSObject, ObservableObject {
     /// left-right mirror there produced a vertical flip, and the selfie preview
     /// came out upside down. The mirror is done in the render pipeline instead,
     /// where the axes are the ones on screen.
-    private func orient(_ connection: AVCaptureConnection?) {
+    private func orient(_ connection: AVCaptureConnection?, front: Bool) {
         guard let connection else { return }
-        if connection.isVideoRotationAngleSupported(90) {
-            connection.videoRotationAngle = 90
+
+        // The front sensor is mounted the opposite way round, so portrait is 270°
+        // there against 90° on the back. Using 90 for both is what left the selfie
+        // a half-turn out. The list is a fallback chain rather than a single
+        // guarded assignment: skipping rotation entirely, which is what the old
+        // `if supported` did, leaves the frame sideways with nothing to say why.
+        for angle in [front ? 270.0 : 90.0, 90.0, 270.0, 0.0]
+        where connection.isVideoRotationAngleSupported(angle) {
+            connection.videoRotationAngle = angle
+            break
         }
+
         if connection.isVideoMirroringSupported {
             connection.automaticallyAdjustsVideoMirroring = false
             connection.isVideoMirrored = false
@@ -288,8 +297,9 @@ public final class CameraManager: NSObject, ObservableObject {
             }
             // Connections are rebuilt with the input, so rotation and mirroring
             // have to be set again on both outputs.
-            self.orient(self.videoOutput?.connection(with: .video))
-            self.orient(self.photoOutput?.connection(with: .video))
+            let front = target == .front
+            self.orient(self.videoOutput?.connection(with: .video), front: front)
+            self.orient(self.photoOutput?.connection(with: .video), front: front)
 
             session.commitConfiguration()
 
@@ -359,8 +369,8 @@ public final class CameraManager: NSObject, ObservableObject {
         session.addOutput(photoOutput)
         configurePhotoOutput(photoOutput, for: camera)
 
-        orient(output.connection(with: .video))
-        orient(photoOutput.connection(with: .video))
+        orient(output.connection(with: .video), front: false)
+        orient(photoOutput.connection(with: .video), front: false)
 
         session.commitConfiguration()
 

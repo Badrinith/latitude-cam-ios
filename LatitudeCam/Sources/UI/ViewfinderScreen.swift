@@ -162,6 +162,8 @@ struct ViewfinderScreen: View {
     @AppStorage(Pref.aspect) private var aspect = "3:2"
     @AppStorage(Pref.histogramStyle) private var histogramStyle = "Luma"
 
+    @StateObject private var orientation = DeviceOrientation()
+
     var body: some View {
         ZStack {
             Ink.base.ignoresSafeArea()
@@ -287,37 +289,61 @@ struct ViewfinderScreen: View {
         .overlay(alignment: .bottom) { deck }
     }
 
-    /// Everything a thumb needs, stacked in the band below the picture: the pro
-    /// barrels, the release, then the film barrel. Nothing sits over the frame —
-    /// the knob this replaces occupied the lower 340pt of every shot.
+    /// Everything a thumb needs, in the band below the picture: the pro barrels,
+    /// the release, then the film barrel. Nothing sits over the frame — the knob
+    /// this replaces occupied the lower 340pt of every shot.
+    ///
+    /// The app stays locked to portrait, so turning the body does not reflow the
+    /// picture. What moves is the controls: they travel to whichever screen edge
+    /// is now facing the ground and turn as a whole to face the user. Turning the
+    /// lettering alone was not enough — a barrel you drag sideways is the wrong
+    /// shape entirely once sideways has become up. The release does not move; a
+    /// shutter you have to hunt for is worse than one held at an odd angle.
     private var deck: some View {
-        VStack(spacing: 0) {
-            BarrelCluster()
-                .padding(.bottom, 12)
-
-            HStack {
-                Color.clear.frame(width: 34, height: 34)
-
-                Spacer()
-
-                ShutterButton { fire() }
-
-                Spacer()
-
-                Button { app.go(.library) } label: {
-                    LibraryThumbnail(gallery: app.gallery)
+        Group {
+            if orientation.edge == .bottom {
+                VStack(spacing: 0) {
+                    controlCluster
+                    shutterRow
+                    filmSelector.padding(.top, 14)
                 }
-                .buttonStyle(.plain)
-            }
-            .padding(.horizontal, 30)
+                .padding(.bottom, 18)
+                .background { deckShade }
+            } else {
+                GeometryReader { geo in
+                    ZStack {
+                        VStack(spacing: 0) {
+                            Spacer(minLength: 0)
+                            shutterRow.padding(.bottom, 18)
+                        }
+                        .background(alignment: .bottom) {
+                            deckShade.frame(height: 150)
+                        }
 
-            FilmBarrel(
-                selection: $app.selectedFilm,
-                onOpenDetail: { app.go(.filmSim) }
-            )
-            .padding(.top, 14)
+                        HStack(spacing: 0) {
+                            if orientation.edge == .trailing { Spacer(minLength: 0) }
+                            turnedControls(along: geo.size.height)
+                            if orientation.edge == .leading { Spacer(minLength: 0) }
+                        }
+                    }
+                }
+            }
         }
-        .padding(.bottom, 18)
+        .animation(.spring(response: 0.44, dampingFraction: 0.8), value: orientation.edge)
+    }
+
+    /// Thickness of the control band once it is stood on its side.
+    private static let controlBand: CGFloat = 168
+
+    /// Laid out along the long axis, then turned. The second frame gives the
+    /// rotated block its real footprint — without it the layout still reserves
+    /// the pre-rotation size and the controls sit off the edge.
+    private func turnedControls(along length: CGFloat) -> some View {
+        VStack(spacing: 14) {
+            controlCluster
+            filmSelector
+        }
+        .frame(width: length, height: Self.controlBand)
         .background {
             LinearGradient(
                 colors: [.clear, Color.black.opacity(0.72)],
@@ -325,6 +351,41 @@ struct ViewfinderScreen: View {
             )
             .allowsHitTesting(false)
         }
+        .rotationEffect(orientation.angle)
+        .frame(width: Self.controlBand, height: length)
+    }
+
+    private var controlCluster: some View {
+        BarrelCluster().padding(.bottom, 12)
+    }
+
+    private var filmSelector: some View {
+        FilmBarrel(
+            selection: $app.selectedFilm,
+            onOpenDetail: { app.go(.filmSim) }
+        )
+    }
+
+    private var shutterRow: some View {
+        HStack {
+            Color.clear.frame(width: 34, height: 34)
+            Spacer()
+            ShutterButton { fire() }
+            Spacer()
+            Button { app.go(.library) } label: {
+                LibraryThumbnail(gallery: app.gallery)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 30)
+    }
+
+    private var deckShade: some View {
+        LinearGradient(
+            colors: [.clear, Color.black.opacity(0.72)],
+            startPoint: .top, endPoint: .bottom
+        )
+        .allowsHitTesting(false)
     }
 
     /// A heavy thump when a frame is taken, a warning when there was nothing to

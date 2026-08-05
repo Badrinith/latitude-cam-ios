@@ -23,7 +23,12 @@ import UIKit
 // screen that is otherwise a live image.
 
 final class DeviceOrientation: ObservableObject {
+
+    /// The screen edge currently facing the ground. Controls belong along it.
+    enum Edge { case bottom, leading, trailing }
+
     @Published private(set) var angle: Angle = .zero
+    @Published private(set) var edge: Edge = .bottom
 
     private var token: NSObjectProtocol?
 
@@ -42,17 +47,22 @@ final class DeviceOrientation: ObservableObject {
     }
 
     private func update() {
-        let next: Angle
+        let next: (Angle, Edge)
         switch UIDevice.current.orientation {
-        case .landscapeLeft:  next = .degrees(90)
-        case .landscapeRight: next = .degrees(-90)
-        case .portrait:       next = .zero
-        // faceUp, faceDown, upside-down and unknown all keep the last good angle
-        // rather than snapping upright on a table.
+        // Turned anticlockwise: the phone's left edge swings down, so the controls
+        // go there and the block turns +90 to face the user.
+        case .landscapeLeft:  next = (.degrees(90), .leading)
+        case .landscapeRight: next = (.degrees(-90), .trailing)
+        case .portrait:       next = (.zero, .bottom)
+        // faceUp, faceDown, upside-down and unknown all keep the last good answer
+        // rather than snapping about when the phone is set down on a table.
         default:              return
         }
-        guard next != angle else { return }
-        withAnimation(.spring(response: 0.42, dampingFraction: 0.78)) { angle = next }
+        guard next.0 != angle else { return }
+        withAnimation(.spring(response: 0.44, dampingFraction: 0.8)) {
+            angle = next.0
+            edge = next.1
+        }
     }
 }
 
@@ -74,8 +84,6 @@ struct Barrel: View {
     /// The film barrel uses the stock swatches so the engraving shows what the
     /// frame will look like, not just what it is called.
     var tints: [Color]?
-    /// Counter-rotation that keeps the engraving upright when the body is turned.
-    var glyphRotation: Angle = .zero
 
     @State private var dragStart: Int?
     @State private var lastEndTick = Date.distantPast
@@ -151,12 +159,27 @@ struct Barrel: View {
         GeometryReader { geo in
             HStack(spacing: 0) {
                 ForEach(values.indices, id: \.self) { slot in
-                    Text(values[slot])
-                        .font(.mono(slot == clamped ? 15 : 12, slot == clamped ? .bold : .medium))
-                        .foregroundStyle(engravingColour(slot))
-                        .shadow(color: .black.opacity(0.6), radius: 1, y: 0.5)
-                        .rotationEffect(glyphRotation)
-                        .frame(width: pitch)
+                    ZStack {
+                        // The stock's own colour, painted across its whole segment
+                        // rather than only its letters: the barrel reads as a strip
+                        // of the film itself passing under the index.
+                        if let tints, tints.indices.contains(slot) {
+                            LinearGradient(
+                                colors: [
+                                    tints[slot].opacity(slot == clamped ? 1.0 : 0.42),
+                                    tints[slot].opacity(slot == clamped ? 0.72 : 0.28)
+                                ],
+                                startPoint: .top, endPoint: .bottom
+                            )
+                            .padding(.vertical, slot == clamped ? 0 : 7)
+                        }
+
+                        Text(values[slot])
+                            .font(.mono(slot == clamped ? 15 : 12, slot == clamped ? .bold : .medium))
+                            .foregroundStyle(engravingColour(slot))
+                            .shadow(color: .black.opacity(tints == nil ? 0.6 : 0.25), radius: 1, y: 0.5)
+                    }
+                    .frame(width: pitch)
                 }
             }
             .frame(width: pitch * CGFloat(values.count), height: geo.size.height)
@@ -168,10 +191,10 @@ struct Barrel: View {
     }
 
     private func engravingColour(_ slot: Int) -> Color {
-        // A tinted scale keeps its own colours; the live one simply burns brighter
-        // than its neighbours rather than turning into the accent.
+        // On a colour band the lettering has to go dark to survive; the band is
+        // carrying the information now, so the type only has to be readable.
         if let tints, tints.indices.contains(slot) {
-            return slot == clamped ? tints[slot] : tints[slot].opacity(0.42)
+            return slot == clamped ? Ink.base : Ink.base.opacity(0.55)
         }
         if slot == clamped { return isAuto ? Accent.amber : Tone.primary }
         if hasAuto && slot == 0 { return Tone.secondary }
@@ -246,8 +269,6 @@ struct FilmBarrel: View {
     var presets: [FilmPreset] = FilmPreset.all
     var onOpenDetail: () -> Void
 
-    @StateObject private var orientation = DeviceOrientation()
-
     private var index: Binding<Int> {
         Binding(
             get: { presets.firstIndex(of: selection) ?? 0 },
@@ -265,8 +286,7 @@ struct FilmBarrel: View {
                 radius: 9,
                 // Each stock engraved in its own colour, so the barrel shows what
                 // the frame will look like rather than only what it is called.
-                tints: presets.map(\.engraved),
-                glyphRotation: orientation.angle
+                tints: presets.map(\.engraved)
             )
             .overlay(alignment: .top) {
                 Triangle()
@@ -286,7 +306,6 @@ struct FilmBarrel: View {
                     .kerning(0.8)
                     .foregroundStyle(Tone.quaternary)
             }
-            .rotationEffect(orientation.angle)
             .contentShape(Rectangle())
             .onTapGesture {
                 Haptics.tap()
@@ -308,8 +327,6 @@ struct BarrelCluster: View {
     /// nil while collapsed.
     @State private var focus: String?
     @State private var idle: Task<Void, Never>?
-
-    @StateObject private var orientation = DeviceOrientation()
 
     private struct Control: Identifiable {
         let id: String
@@ -354,12 +371,10 @@ struct BarrelCluster: View {
                     .font(.mono(7.5, .semibold))
                     .kerning(1.6)
                     .foregroundStyle(Tone.quaternary)
-                    .rotationEffect(orientation.angle)
                 Spacer()
                 Text(control.chip)
                     .font(.mono(11, .bold))
                     .foregroundStyle(Accent.amber)
-                    .rotationEffect(orientation.angle)
             }
             .padding(.horizontal, 2)
 
@@ -382,27 +397,23 @@ struct BarrelCluster: View {
             Barrel(
                 values: AppState.shutterLabels,
                 index: binding(get: { app.shutterIndex }, set: { app.shutterIndex = $0 }),
-                hasAuto: true,
-                glyphRotation: orientation.angle
+                hasAuto: true
             )
         case "iso":
             Barrel(
                 values: AppState.isoLabels,
                 index: binding(get: { app.isoIndex }, set: { app.isoIndex = $0 }),
-                hasAuto: true,
-                glyphRotation: orientation.angle
+                hasAuto: true
             )
         case "wb":
             Barrel(
                 values: AppState.whiteBalanceLabels,
-                index: binding(get: { app.whiteBalanceIndex }, set: { app.whiteBalanceIndex = $0 }),
-                glyphRotation: orientation.angle
+                index: binding(get: { app.whiteBalanceIndex }, set: { app.whiteBalanceIndex = $0 })
             )
         default:
             Barrel(
                 values: AppState.exposureLabels,
-                index: binding(get: { app.exposureIndex }, set: { app.exposureIndex = $0 }),
-                glyphRotation: orientation.angle
+                index: binding(get: { app.exposureIndex }, set: { app.exposureIndex = $0 })
             )
         }
     }
@@ -426,8 +437,7 @@ struct BarrelCluster: View {
                         .foregroundStyle(focus == control.id ? Ink.base : Tone.primary)
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
-                        .rotationEffect(orientation.angle)
-                        .padding(.horizontal, 8)
+                            .padding(.horizontal, 8)
                         .padding(.vertical, 6)
                         .frame(maxWidth: .infinity)
                         .background {
