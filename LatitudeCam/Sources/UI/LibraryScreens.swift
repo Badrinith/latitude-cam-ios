@@ -300,11 +300,12 @@ struct EditScreen: View {
                     // Under a third of the screen, whatever the group holds. Five
                     // barrels do not fit that and are not meant to — the scroll is
                     // the mechanism, not a fallback.
-                    ScrollView(showsIndicators: false) {
+                    ScrollView {
                         panel
                             .padding(.horizontal, 18)
                             .padding(.bottom, 24)
                     }
+                    .scrollIndicators(.visible)
                     .frame(height: geo.size.height * 0.30)
                 }
             }

@@ -380,3 +380,32 @@ final class EditBarrelStopTests: XCTestCase {
         XCTAssertEqual(String(format: "%+.0f", (0.5 - e.highlights) * 200), "+0")
     }
 }
+
+// MARK: - Scrolling past a barrel
+
+@MainActor
+final class BarrelScrollTests: XCTestCase {
+
+    /// A barrel inside a scroll view must not claim a vertical drag. It claims
+    /// any drag that starts on it, and in a stack of barrels almost every drag
+    /// starts on one — so the panel could not be scrolled at all.
+    func testVerticalDragBelongsToTheScrollView() {
+        XCTAssertTrue(Barrel.claimsDrag(width: 40, height: 5, insideScrollView: true),
+                      "a sideways drag is the barrel's")
+        XCTAssertFalse(Barrel.claimsDrag(width: 5, height: 40, insideScrollView: true),
+                       "a downward drag is the scroll's")
+    }
+
+    /// Outside a scroll view there is nothing to yield to, and waiting would only
+    /// make the camera's barrels feel slow.
+    func testBarrelsOutsideAScrollViewClaimEverything() {
+        XCTAssertTrue(Barrel.claimsDrag(width: 5, height: 40, insideScrollView: false))
+        XCTAssertTrue(Barrel.claimsDrag(width: 40, height: 5, insideScrollView: false))
+    }
+
+    /// A diagonal has to resolve one way or the other rather than doing both.
+    func testDiagonalResolvesToTheLargerAxis() {
+        XCTAssertTrue(Barrel.claimsDrag(width: 31, height: 30, insideScrollView: true))
+        XCTAssertFalse(Barrel.claimsDrag(width: 30, height: 31, insideScrollView: true))
+    }
+}

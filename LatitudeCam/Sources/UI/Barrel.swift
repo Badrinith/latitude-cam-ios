@@ -84,6 +84,14 @@ struct Barrel: View {
     /// The film barrel uses the stock swatches so the engraving shows what the
     /// frame will look like, not just what it is called.
     var tints: [Color]?
+    /// Set when the barrel sits inside a scroll view.
+    ///
+    /// A barrel claims any drag that starts on it, vertical ones included — and
+    /// in a stack of barrels almost every drag starts on one, so the scroll never
+    /// received a gesture and the panel would not move. This makes the barrel wait
+    /// a little longer before claiming, and ignore a drag that is mostly vertical,
+    /// which is the scroll's to have.
+    var insideScrollView = false
 
     @State private var dragStart: Int?
     @State private var lastEndTick = Date.distantPast
@@ -215,9 +223,24 @@ struct Barrel: View {
 
     // MARK: Turning
 
+    /// Whether a drag of this shape is the barrel's to act on. Pulled out so the
+    /// rule can be tested — the failure it guards against is a panel that simply
+    /// will not scroll, which looks like a broken ScrollView rather than a
+    /// gesture that was taken.
+    static func claimsDrag(width: CGFloat, height: CGFloat, insideScrollView: Bool) -> Bool {
+        guard insideScrollView else { return true }
+        return abs(width) > abs(height)
+    }
+
     private var turn: some Gesture {
-        DragGesture(minimumDistance: 1)
+        DragGesture(minimumDistance: insideScrollView ? 10 : 1)
             .onChanged { value in
+                // Let the scroll have anything that is more down than sideways.
+                guard Self.claimsDrag(
+                    width: value.translation.width,
+                    height: value.translation.height,
+                    insideScrollView: insideScrollView
+                ) else { return }
                 if dragStart == nil {
                     dragStart = clamped
                     Haptics.prepare()
@@ -697,7 +720,8 @@ struct EditBarrel: View {
                 // to read the stops either side of the one you are on.
                 pitch: 78,
                 pointsPerStop: 40,
-                radius: 8
+                radius: 8,
+                insideScrollView: true
             )
             .overlay(alignment: .top) {
                 Triangle()
