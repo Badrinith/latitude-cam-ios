@@ -280,3 +280,69 @@ final class AppStateWiringTests: XCTestCase {
         XCTAssertEqual(second.cameraManager.currentSettings.filmID, "mono")
     }
 }
+
+// MARK: - Pro mode
+
+final class ProModeTests: XCTestCase {
+
+    override func setUp() {
+        super.setUp()
+        UserDefaults.standard.removeObject(forKey: Pref.proMode)
+    }
+
+    @MainActor
+    func testManualControlsAreHiddenUntilAskedFor() {
+        let app = AppState()
+        XCTAssertFalse(app.proMode, "a camera should open ready to shoot, not ready to be configured")
+        XCTAssertTrue(app.autoExposure)
+        XCTAssertTrue(app.autoFocus)
+    }
+
+    /// The failure this guards against: a manual shutter still running behind a
+    /// control that is no longer on screen, with no way to see or undo it.
+    @MainActor
+    func testLeavingProModeHandsTheCameraBack() {
+        let app = AppState()
+        app.proMode = true
+        app.shutterIndex = 5
+        app.focusIndex = 3
+        app.metering = "LOCK"
+        XCTAssertFalse(app.autoExposure)
+        XCTAssertFalse(app.autoFocus)
+
+        app.proMode = false
+        XCTAssertTrue(app.autoExposure)
+        XCTAssertTrue(app.autoFocus)
+        XCTAssertEqual(app.metering, "MATRIX")
+        XCTAssertTrue(app.cameraManager.currentSettings.autoExposure)
+        XCTAssertTrue(app.cameraManager.currentSettings.autoFocus)
+    }
+
+    @MainActor
+    func testProModeIsRemembered() {
+        let app = AppState()
+        app.proMode = true
+        XCTAssertTrue(UserDefaults.standard.bool(forKey: Pref.proMode))
+        XCTAssertTrue(AppState().proMode, "a fresh launch should find it still on")
+    }
+
+    @MainActor
+    func testResetReturnsEveryManualControlToDefault() {
+        let app = AppState()
+        app.proMode = true
+        app.shutterIndex = 6
+        app.isoIndex = 2
+        app.whiteBalanceIndex = 0
+        app.exposureIndex = 9
+        app.focusIndex = 2
+        app.metering = "SPOT"
+        XCTAssertNotEqual(app.controls, AppState.defaultControls)
+
+        app.resetControls()
+        XCTAssertEqual(app.controls, AppState.defaultControls)
+        XCTAssertTrue(app.canUndo, "reset has to be recoverable in one tap")
+
+        app.undoControls()
+        XCTAssertEqual(app.metering, "SPOT", "undo must bring the whole setup back")
+    }
+}

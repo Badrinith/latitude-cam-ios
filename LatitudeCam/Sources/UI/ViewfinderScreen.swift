@@ -332,8 +332,11 @@ struct ViewfinderScreen: View {
                     .frame(maxHeight: .infinity, alignment: .bottom)
                     .opacity(orientation.edge == .bottom ? 1 : 0)
 
-                band(BarrelCluster(), thickness: Self.clusterBand,
-                     centre: clusterCentre(in: size), length: size.width)
+                if app.proMode {
+                    band(BarrelCluster(), thickness: Self.clusterBand,
+                         centre: clusterCentre(in: size), length: size.width)
+                        .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .bottom)))
+                }
 
                 band(filmSelector, thickness: Self.filmBand,
                      centre: filmCentre(in: size), length: size.width)
@@ -404,7 +407,32 @@ struct ViewfinderScreen: View {
 
     private var shutterRow: some View {
         HStack {
-            Color.clear.frame(width: 34, height: 34)
+            Button {
+                Haptics.toggle()
+                withAnimation(.spring(response: 0.34, dampingFraction: 0.84)) {
+                    app.proMode.toggle()
+                }
+            } label: {
+                Text("PRO")
+                    .font(.mono(11, .bold))
+                    .kerning(0.8)
+                    .foregroundStyle(app.proMode ? Ink.base : Tone.secondary)
+                    .rotationEffect(orientation.angle)
+                    .frame(width: 40, height: 28)
+                    .background {
+                        if app.proMode {
+                            Capsule().fill(Accent.amber)
+                        } else {
+                            Capsule().fill(.ultraThinMaterial)
+                                .overlay { Capsule().fill(Color.black.opacity(0.2)) }
+                                .overlay { Capsule().strokeBorder(Tone.hairline, lineWidth: 0.5) }
+                        }
+                    }
+                    .contentShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Pro controls")
+
             Spacer()
             ShutterButton { fire() }
             Spacer()

@@ -234,6 +234,10 @@ struct SettingsScreen: View {
                     }
 
                     SettingsGroup(header: "Manual Controls") {
+                        ToggleSettingsRow(title: "Pro Controls", isOn: Binding(
+                            get: { app.proMode },
+                            set: { app.proMode = $0 }
+                        ))
                         OptionRow(title: "Focus Peaking Color",
                                   options: Pref.peakingColorOptions, selection: $peakingColor)
                         OptionRow(title: "Histogram Style",
@@ -246,8 +250,13 @@ struct SettingsScreen: View {
 
                     SettingsGroup(header: "Look") {
                         ActionRow(title: "Reset to Default Look",
-                                  detail: app.selectedFilm.name, isLast: true) {
+                                  detail: app.selectedFilm.name) {
                             app.resetLook()
+                        }
+                        ActionRow(title: "Reset Manual Controls",
+                                  detail: app.autoExposure ? "Auto" : app.shutterLabel,
+                                  isLast: true) {
+                            app.resetControls()
                         }
                     }
 

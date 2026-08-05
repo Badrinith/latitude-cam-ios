@@ -454,7 +454,10 @@ struct BarrelCluster: View {
             ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
                 HStack(spacing: 6) {
                     chipRow(row)
-                    if index == 1 { peakingChip }
+                    if index == 1 {
+                        peakingChip
+                        resetChip
+                    }
                 }
             }
         }
@@ -485,6 +488,35 @@ struct BarrelCluster: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Focus peaking")
+    }
+
+    /// Puts every manual control back where it shipped. Recoverable: the previous
+    /// state goes on the undo stack, so a mistaken tap costs one more tap rather
+    /// than the setup you had built.
+    private var resetChip: some View {
+        Button {
+            app.resetControls()
+            // Whatever was open is showing a value that just changed underneath it.
+            withAnimation(.spring(response: 0.34, dampingFraction: 0.84)) {
+                focus = nil
+                app.proFocus = nil
+            }
+            idle?.cancel()
+        } label: {
+            Image(systemName: "arrow.counterclockwise")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(Tone.secondary)
+                .frame(width: 34)
+                .padding(.vertical, 6)
+                .background {
+                    Capsule().fill(.ultraThinMaterial)
+                        .overlay { Capsule().fill(Color.black.opacity(0.2)) }
+                        .overlay { Capsule().strokeBorder(Tone.hairline, lineWidth: 0.5) }
+                }
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Reset manual controls")
     }
 
     private func chipRow(_ row: [Control]) -> some View {

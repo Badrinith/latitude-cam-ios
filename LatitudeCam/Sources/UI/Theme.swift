@@ -151,6 +151,7 @@ enum Pref {
     static let mirrorToPhotos = "settings.mirrorToPhotos"
     static let captureFormat = "settings.captureFormat"
     static let captureResolution = "settings.captureResolution"
+    static let proMode = "settings.proMode"
     /// Set once the entry flow has been completed, so later cold launches go
     /// straight from the splash to the viewfinder.
     static let onboarded = "app.onboarded"
@@ -218,6 +219,16 @@ final class AppState: ObservableObject {
     // Cold launch only: AppState is built once per process, so the splash cannot
     // replay when the app returns from the background.
     @Published var screen: Screen = .splash
+    /// Manual controls are hidden until asked for, and the choice is remembered.
+    /// A camera that opens in full manual is a camera you have to set up before
+    /// you can use it.
+    @Published var proMode: Bool = UserDefaults.standard.bool(forKey: Pref.proMode) {
+        didSet {
+            UserDefaults.standard.set(proMode, forKey: Pref.proMode)
+            if !proMode { returnToAuto() }
+        }
+    }
+
     @Published var proSheetOpen = false
     /// Which manual control the Pro sheet should call attention to, set when the
     /// user taps that value in the viewfinder HUD.
@@ -610,13 +621,17 @@ final class AppState: ObservableObject {
         var exposureComp: Double
         var focusPeaking: Bool
         var autoExposure: Bool
+        var autoFocus: Bool
+        var focus: Double
+        var metering: String
     }
 
     static let defaultControls = ControlSnapshot(
         filmID: "neutral", intensity: 0.8,
         grain: false, halation: false, vignette: false,
         shutter: 0.36, iso: 0.50, whiteBalance: 0.64, exposureComp: 0.5,
-        focusPeaking: true, autoExposure: true
+        focusPeaking: true, autoExposure: true,
+        autoFocus: true, focus: 1.0, metering: "MATRIX"
     )
 
     private var undoStack: [ControlSnapshot] = []
@@ -635,7 +650,8 @@ final class AppState: ObservableObject {
             grain: grainOn, halation: halationOn, vignette: vignetteOn,
             shutter: shutter, iso: iso, whiteBalance: whiteBalance,
             exposureComp: exposureComp, focusPeaking: focusPeaking,
-            autoExposure: autoExposure
+            autoExposure: autoExposure,
+            autoFocus: autoFocus, focus: focus, metering: metering
         )
     }
 
@@ -653,6 +669,9 @@ final class AppState: ObservableObject {
         exposureComp = snapshot.exposureComp
         focusPeaking = snapshot.focusPeaking
         autoExposure = snapshot.autoExposure
+        autoFocus = snapshot.autoFocus
+        focus = snapshot.focus
+        metering = snapshot.metering
     }
 
     /// Back to the shipped settings. Recoverable — the previous state goes on the
@@ -688,6 +707,17 @@ final class AppState: ObservableObject {
     private func refreshHistory() {
         canUndo = !undoStack.isEmpty
         canRedo = !redoStack.isEmpty
+    }
+
+    /// Leaving pro mode hands the camera back to itself. A manual shutter left
+    /// running behind a control that is no longer on screen is a camera
+    /// misbehaving for reasons the user cannot see or undo.
+    func returnToAuto() {
+        autoExposure = true
+        autoFocus = true
+        metering = "MATRIX"
+        exposureComp = 0.5
+        pointOfInterest = CGPoint(x: 0.5, y: 0.5)
     }
 
     /// Put the look back to the shipped default without touching exposure.
@@ -741,6 +771,8 @@ final class AppState: ObservableObject {
         }) {
             whiteBalance = (Double(index) + 0.5) / Double(Self.whiteBalanceStops.count)
         }
+        // A persisted manual exposure must not outlive the controls that set it.
+        if !proMode { returnToAuto() }
         syncCamera()
 
         // Initialize defaults for settings that should be on by default
