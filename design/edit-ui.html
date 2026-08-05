@@ -1,0 +1,481 @@
+<title>Latitude Cam — Ten Editors</title>
+
+<style>
+  :root {
+    --amber:#D98A52; --amber-deep:#8A5A34;
+    --page-bg:#100F0D; --page-panel:#191714; --page-rule:rgba(242,239,232,.12);
+    --page-text:#E7E2D8; --page-dim:rgba(231,226,216,.60); --page-faint:rgba(231,226,216,.38);
+    --display: ui-serif, "New York", Georgia, serif;
+    --body: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, monospace;
+    --measure: 66ch;
+    --ease: cubic-bezier(.22,1,.28,1);
+  }
+  @media (prefers-color-scheme: light) {
+    :root { --page-bg:#E9E5DC; --page-panel:#F5F2EB; --page-rule:rgba(28,24,20,.14);
+            --page-text:#1E1A16; --page-dim:rgba(30,26,22,.64); --page-faint:rgba(30,26,22,.44); }
+  }
+  :root[data-theme="light"] { --page-bg:#E9E5DC; --page-panel:#F5F2EB; --page-rule:rgba(28,24,20,.14);
+            --page-text:#1E1A16; --page-dim:rgba(30,26,22,.64); --page-faint:rgba(30,26,22,.44); }
+  :root[data-theme="dark"] { --page-bg:#100F0D; --page-panel:#191714; --page-rule:rgba(242,239,232,.12);
+            --page-text:#E7E2D8; --page-dim:rgba(231,226,216,.60); --page-faint:rgba(231,226,216,.38); }
+
+  body { background:var(--page-bg); color:var(--page-text); font-family:var(--body); line-height:1.55; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:1280px; margin:0 auto; padding:clamp(26px,5vw,60px) clamp(16px,4vw,38px) 90px; display:flex; flex-direction:column; gap:clamp(38px,6vw,66px); }
+
+  .eyebrow { font-family:var(--mono); font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:var(--amber); display:flex; gap:12px; flex-wrap:wrap; }
+  .eyebrow span { color:var(--page-faint); }
+  h1 { font-family:var(--display); font-weight:500; font-size:clamp(32px,5.6vw,58px); line-height:1.03; letter-spacing:-.02em; margin:0; text-wrap:balance; }
+  h1 em { font-style:italic; color:var(--amber); }
+  h2 { font-family:var(--display); font-weight:500; font-size:clamp(21px,2.5vw,28px); margin:0; }
+  .standfirst { font-size:clamp(15.5px,1.5vw,18px); color:var(--page-dim); max-width:var(--measure); text-wrap:pretty; }
+  .masthead { display:flex; flex-direction:column; gap:16px; }
+  .section { display:flex; flex-direction:column; gap:22px; }
+  .section-head { display:flex; flex-direction:column; gap:8px; }
+  .section-head p { margin:0; color:var(--page-dim); max-width:var(--measure); text-wrap:pretty; }
+  hr.rule { height:1px; background:var(--page-rule); border:0; margin:0; }
+
+  .constraints { display:grid; grid-template-columns:repeat(auto-fit,minmax(206px,1fr)); gap:1px; background:var(--page-rule); border:1px solid var(--page-rule); border-radius:4px; overflow:hidden; }
+  .constraints > div { background:var(--page-panel); padding:15px 16px; display:flex; flex-direction:column; gap:4px; }
+  .constraints dt { font-family:var(--mono); font-size:8.5px; letter-spacing:.15em; text-transform:uppercase; color:var(--page-faint); }
+  .constraints dd { margin:0; font-size:13.5px; color:var(--page-dim); line-height:1.45; }
+
+  /* ---------- phone ---------- */
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(262px,1fr)); gap:clamp(20px,2.6vw,30px); }
+  .card { display:flex; flex-direction:column; gap:12px; }
+  .cardhead { display:flex; align-items:baseline; gap:9px; }
+  .cardhead .n { font-family:var(--mono); font-size:10px; color:var(--amber); letter-spacing:.12em; }
+  .cardhead h3 { margin:0; font-size:16.5px; font-weight:650; letter-spacing:-.01em; }
+  .card > p { margin:0; font-size:13px; color:var(--page-dim); text-wrap:pretty; }
+
+  .phone {
+    width:246px; aspect-ratio:246/520; border-radius:32px; background:#0D0D0D;
+    position:relative; overflow:hidden; flex:none; color:#F2EFE8; margin:0 auto;
+    box-shadow:0 0 0 1.2px rgba(255,255,255,.09), 0 0 0 6px #0a0a0a, 0 16px 38px rgba(0,0,0,.5);
+    cursor:pointer;
+  }
+  .bar { display:flex; align-items:center; justify-content:space-between; padding:11px 13px 0; font-family:var(--mono); font-size:8px; letter-spacing:.1em; color:rgba(242,239,232,.55); }
+  .bar b { color:var(--amber); font-weight:700; }
+
+  /* the photo being edited — drawn, with colour families to move */
+  .shot { position:relative; margin:9px 12px 0; border-radius:9px; overflow:hidden; aspect-ratio:3/2;
+    background:linear-gradient(200deg,#6b5a47 0%,#3a2f26 52%,#191410 100%); }
+  .shot .sky  { position:absolute; left:50%; top:6%; width:44%; height:44%; background:linear-gradient(#cfe6f2,#eef6f8); }
+  .shot .hill { position:absolute; left:50%; top:36%; width:44%; height:16%; background:linear-gradient(#4e7043,#2f4a2b); }
+  .shot .lamp { position:absolute; left:6%; top:10%; width:26%; height:34%; border-radius:50%; background:radial-gradient(circle,#ffd9a0,#e0a14e 55%,transparent 72%); }
+  .shot .skin { position:absolute; left:12%; bottom:-8%; width:40%; height:58%; border-radius:48% 48% 12% 12%; background:linear-gradient(160deg,#e0b192,#a9714f); }
+  .shot .leaf { position:absolute; right:3%; bottom:-8%; width:30%; height:44%; border-radius:60% 20% 50% 30%; background:linear-gradient(150deg,#5d8a3f,#25381c); }
+
+  .deck { position:absolute; left:0; right:0; bottom:0; padding:0 12px 14px; }
+
+  .grp { font-family:var(--mono); font-size:6.5px; letter-spacing:.22em; color:var(--amber); }
+  .lbl { font-family:var(--mono); font-size:7.5px; letter-spacing:.08em; color:rgba(242,239,232,.62); }
+  .val { font-family:var(--mono); font-size:7.5px; color:#F2EFE8; }
+
+  .track { height:2px; border-radius:2px; background:rgba(255,255,255,.14); position:relative; }
+  .track i { position:absolute; top:-3px; width:8px; height:8px; border-radius:50%; background:var(--amber); }
+
+  .tabs { display:flex; gap:12px; justify-content:center; font-family:var(--mono); font-size:7.5px; letter-spacing:.12em; color:rgba(242,239,232,.4); padding:8px 0; }
+  .tabs b { color:var(--amber); font-weight:700; }
+
+  /* ===== 01 CONSOLE ===== */
+  .e1 .rows { display:flex; flex-direction:column; gap:7px; padding:8px 2px 0; }
+  .e1 .row { display:flex; align-items:center; gap:8px; }
+  .e1 .row .lbl { width:52px; }
+  .e1 .row .track { flex:1; }
+  .e1 .row .val { width:26px; text-align:right; }
+
+  /* ===== 02 DIAL STACK ===== */
+  .e2 .dials { display:flex; gap:6px; padding:10px 0 0; }
+  .e2 .dial { flex:1; height:34px; border-radius:6px; position:relative; overflow:hidden;
+    background:repeating-linear-gradient(to right, rgba(0,0,0,.5) 0 1px, transparent 1px 4px), linear-gradient(#121213,#3a3a3e 48%,#121213);
+    box-shadow:inset 0 0 0 .5px rgba(255,255,255,.14); display:grid; place-items:center; }
+  .e2 .dial span { font-family:var(--mono); font-size:8px; font-weight:700; }
+  .e2 .dial i { position:absolute; top:0; bottom:0; left:50%; width:1px; background:var(--amber); opacity:.7; }
+
+  /* ===== 03 WHEEL ===== */
+  .e3 .wheel { position:relative; height:118px; }
+  .e3 .ring { position:absolute; left:50%; bottom:-58px; transform:translateX(-50%); width:210px; height:210px; border-radius:50%;
+    box-shadow:inset 0 0 0 .5px rgba(255,255,255,.22);
+    -webkit-mask:radial-gradient(closest-side, transparent 72%, #000 74% 96%, transparent 97%);
+    mask:radial-gradient(closest-side, transparent 72%, #000 74% 96%, transparent 97%);
+    background:conic-gradient(from 208deg, rgba(10,9,8,.7) 0 104deg, transparent 104deg); }
+  .e3 .spoke { position:absolute; font-family:var(--mono); font-size:7px; color:rgba(242,239,232,.5); }
+  .e3 .spoke.on { color:var(--amber); font-weight:700; font-size:9px; }
+  .e3 .hub { position:absolute; left:0; right:0; bottom:14px; text-align:center; }
+  .e3 .hub .v { font-family:var(--mono); font-size:17px; font-weight:700; }
+
+  /* ===== 04 LADDER ===== */
+  .e4 .list { padding:6px 0 0; }
+  .e4 .item { display:flex; justify-content:space-between; align-items:center; padding:5px 2px; border-bottom:.5px solid rgba(255,255,255,.08); }
+  .e4 .item.on { border-bottom-color:var(--amber); }
+  .e4 .item.on .val { color:var(--amber); font-weight:700; }
+
+  /* ===== 05 STRIP ===== */
+  .e5 .variants { display:flex; gap:5px; padding:9px 0 8px; }
+  .e5 .v { flex:1; aspect-ratio:1; border-radius:4px; box-shadow:inset 0 0 0 .5px rgba(255,255,255,.2); }
+  .e5 .v.on { box-shadow:inset 0 0 0 .5px rgba(255,255,255,.2), 0 0 0 1.5px var(--amber); }
+  .e5 .row { display:flex; align-items:center; gap:8px; padding-top:2px; }
+  .e5 .row .track { flex:1; }
+
+  /* ===== 06 SPLIT ===== */
+  .e6 .divider { position:absolute; top:0; bottom:0; left:50%; width:1px; background:var(--amber); }
+  .e6 .divider::after { content:""; position:absolute; top:50%; left:-7px; width:15px; height:15px; margin-top:-7px; border-radius:50%; background:var(--amber); }
+  .e6 .tagl, .e6 .tagr { position:absolute; top:5px; font-family:var(--mono); font-size:6px; letter-spacing:.16em; color:rgba(255,255,255,.75); }
+  .e6 .tagl { left:6px; } .e6 .tagr { right:6px; }
+  .e6 .before { position:absolute; inset:0; filter:saturate(.45) brightness(.86); clip-path:inset(0 50% 0 0); }
+
+  /* ===== 07 CURVE ===== */
+  .e7 .plot { height:96px; margin-top:8px; border-radius:6px; position:relative; overflow:hidden;
+    background:rgba(255,255,255,.045); box-shadow:inset 0 0 0 .5px rgba(255,255,255,.12); }
+  .e7 .plot .g { position:absolute; inset:0;
+    background-image:linear-gradient(to right, rgba(255,255,255,.07) 1px, transparent 1px),
+                     linear-gradient(to bottom, rgba(255,255,255,.07) 1px, transparent 1px);
+    background-size:25% 25%; }
+  .e7 .plot svg { position:absolute; inset:0; }
+
+  /* ===== 08 CARDS ===== */
+  .e8 .stack { position:relative; height:104px; }
+  .e8 .c {
+    position:absolute; left:0; right:0; border-radius:9px; padding:8px 10px;
+    background:linear-gradient(#232326,#151517); box-shadow:0 -3px 10px rgba(0,0,0,.5), inset 0 .5px 0 rgba(255,255,255,.14);
+    transition:transform 380ms var(--ease);
+  }
+  .e8 .c:nth-child(1) { bottom:0; z-index:3; }
+  .e8 .c:nth-child(2) { bottom:0; z-index:2; transform:translateY(-13px) scale(.97); filter:brightness(.7); }
+  .e8 .c:nth-child(3) { bottom:0; z-index:1; transform:translateY(-25px) scale(.94); filter:brightness(.5); }
+  .phone:hover .e8 .c:nth-child(2) { transform:translateY(-40px) scale(1); filter:none; }
+  .phone:hover .e8 .c:nth-child(3) { transform:translateY(-79px) scale(1); filter:none; }
+
+  /* ===== 09 THUMB ARC ===== */
+  .e9 .fan { position:relative; height:112px; }
+  .e9 .pip {
+    position:absolute; width:30px; height:30px; border-radius:50%;
+    background:rgba(255,255,255,.09); box-shadow:inset 0 0 0 .5px rgba(255,255,255,.18);
+    display:grid; place-items:center; font-family:var(--mono); font-size:6.5px; color:rgba(242,239,232,.7);
+    transition:transform 360ms var(--ease), opacity 300ms var(--ease);
+    opacity:0; left:50%; bottom:6px; margin-left:-15px;
+  }
+  .phone:hover .e9 .pip { opacity:1; }
+  .phone:hover .e9 .pip:nth-child(1) { transform:translate(-78px,-24px); }
+  .phone:hover .e9 .pip:nth-child(2) { transform:translate(-46px,-58px); }
+  .phone:hover .e9 .pip:nth-child(3) { transform:translate(0,-74px); }
+  .phone:hover .e9 .pip:nth-child(4) { transform:translate(46px,-58px); }
+  .phone:hover .e9 .pip:nth-child(5) { transform:translate(78px,-24px); }
+  .e9 .pip.on { background:var(--amber); color:#0D0D0D; font-weight:700; opacity:1; }
+
+  /* ===== 10 SINGLE ===== */
+  .e10 .single { padding:14px 0 6px; text-align:center; }
+  .e10 .single .v { font-family:var(--mono); font-size:26px; font-weight:700; }
+  .e10 .single .n { font-family:var(--mono); font-size:7.5px; letter-spacing:.2em; color:rgba(242,239,232,.5); }
+  .e10 .dots { display:flex; gap:4px; justify-content:center; padding-top:9px; }
+  .e10 .dots i { width:4px; height:4px; border-radius:50%; background:rgba(255,255,255,.25); }
+  .e10 .dots i.on { background:var(--amber); width:12px; border-radius:2px; }
+
+  .tags { display:flex; flex-wrap:wrap; gap:5px; }
+  .tag { font-family:var(--mono); font-size:8.5px; letter-spacing:.09em; text-transform:uppercase; padding:3px 7px; border-radius:3px; border:1px solid var(--page-rule); color:var(--page-faint); }
+  .tag.good { color:var(--amber); border-color:rgba(217,138,82,.4); }
+
+  .rec { display:grid; grid-template-columns:34px minmax(0,1fr); gap:14px; padding:16px 2px; border-bottom:1px solid var(--page-rule); align-items:start; }
+  .rec:first-of-type { border-top:1px solid var(--page-rule); }
+  .rec .n { font-family:var(--mono); font-size:10.5px; color:var(--amber); padding-top:3px; }
+  .rec h4 { margin:0 0 3px; font-size:15px; font-weight:650; }
+  .rec p { margin:0; font-size:13.5px; color:var(--page-dim); max-width:var(--measure); text-wrap:pretty; }
+
+  .foot { font-size:13px; color:var(--page-faint); border-top:1px solid var(--page-rule); padding-top:18px; max-width:var(--measure); text-wrap:pretty; }
+  @media (prefers-reduced-motion: reduce) { * { transition:none !important; } }
+  :focus-visible { outline:2px solid var(--amber); outline-offset:3px; }
+</style>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <div class="eyebrow">Latitude Cam <span>/</span> Editor <span>/</span> Ten to pick from</div>
+    <h1>Sixteen controls, and <em>one thumb</em>.</h1>
+    <p class="standfirst">
+      The editor now carries exposure, contrast, highlights, shadows, black point, temperature,
+      tint, saturation, vibrance, structure, sharpen, eleven stocks, intensity, three effects and a
+      crop. That is more than a tab bar and two sliders can hold. These ten each answer the same
+      question differently — how many controls should be visible at once, and how much of the picture
+      may they cover to do it.
+    </p>
+  </header>
+
+  <div class="constraints">
+    <div><dt>Everywhere</dt><dd>Grouped: Light · Colour · Detail · Film · Crop.</dd></div>
+    <div><dt>Everywhere</dt><dd>Neutral at centre, and visibly so — you can see what is untouched.</dd></div>
+    <div><dt>Everywhere</dt><dd>The picture stays the largest thing on screen.</dd></div>
+    <div><dt>Varies</dt><dd>How many controls are reachable without a tab change.</dd></div>
+  </div>
+
+  <hr class="rule" />
+
+  <section class="section">
+    <div class="section-head">
+      <h2>The ten</h2>
+      <p>Hover the ones that move — 08 and 09 open on touch.</p>
+    </div>
+
+    <div class="grid">
+
+      <!-- 01 -->
+      <article class="card">
+        <div class="cardhead"><span class="n">01</span><h3>Console</h3></div>
+        <p>Every control in the group on screen at once, labelled and valued, as a bank of faders. Nothing is hidden and nothing has to be discovered.</p>
+        <div class="phone">
+          <div class="bar"><span>← LIBRARY</span><span>EDIT</span><b>SAVE</b></div>
+          <div class="shot"><div class="sky"></div><div class="hill"></div><div class="lamp"></div><div class="leaf"></div><div class="skin"></div></div>
+          <div class="deck e1">
+            <div class="tabs"><b>LIGHT</b><span>COLOUR</span><span>DETAIL</span><span>FILM</span></div>
+            <div class="rows">
+              <div class="row"><span class="lbl">EXPOSURE</span><span class="track"><i style="left:58%"></i></span><span class="val">+0.3</span></div>
+              <div class="row"><span class="lbl">CONTRAST</span><span class="track"><i style="left:50%"></i></span><span class="val">0</span></div>
+              <div class="row"><span class="lbl">HIGHLIGHT</span><span class="track"><i style="left:36%"></i></span><span class="val">−28</span></div>
+              <div class="row"><span class="lbl">SHADOW</span><span class="track"><i style="left:64%"></i></span><span class="val">+30</span></div>
+              <div class="row"><span class="lbl">BLACKS</span><span class="track"><i style="left:50%"></i></span><span class="val">0</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="tags"><span class="tag good">Nothing hidden</span><span class="tag">Densest</span></div>
+      </article>
+
+      <!-- 02 -->
+      <article class="card">
+        <div class="cardhead"><span class="n">02</span><h3>Barrel bank</h3></div>
+        <p>The app's own control, repeated. Each adjustment is a small knurled barrel you drag sideways — identical in feel to the shutter and film barrels on the camera screen.</p>
+        <div class="phone">
+          <div class="bar"><span>← LIBRARY</span><span>EDIT</span><b>SAVE</b></div>
+          <div class="shot"><div class="sky"></div><div class="hill"></div><div class="lamp"></div><div class="leaf"></div><div class="skin"></div></div>
+          <div class="deck e2">
+            <div class="tabs"><b>LIGHT</b><span>COLOUR</span><span>DETAIL</span><span>FILM</span></div>
+            <div class="dials">
+              <div class="dial"><span>+0.3</span><i></i></div>
+              <div class="dial"><span>0</span><i></i></div>
+              <div class="dial"><span>−28</span><i></i></div>
+            </div>
+            <div class="dials" style="padding-top:6px">
+              <div class="dial"><span>+30</span><i></i></div>
+              <div class="dial"><span>0</span><i></i></div>
+              <div class="dial"><span>f/2.8</span><i></i></div>
+            </div>
+          </div>
+        </div>
+        <div class="tags"><span class="tag good">One vocabulary</span><span class="tag">Values only, no names</span></div>
+      </article>
+
+      <!-- 03 -->
+      <article class="card">
+        <div class="cardhead"><span class="n">03</span><h3>Thumb wheel</h3></div>
+        <p>Controls arc along the sweep the thumb already makes; the live value fills the middle. Reaching a control and changing it are one gesture.</p>
+        <div class="phone">
+          <div class="bar"><span>← LIBRARY</span><span>EDIT</span><b>SAVE</b></div>
+          <div class="shot"><div class="sky"></div><div class="hill"></div><div class="lamp"></div><div class="leaf"></div><div class="skin"></div></div>
+          <div class="deck e3">
+            <div class="wheel">
+              <div class="ring"></div>
+              <span class="spoke" style="left:8px; bottom:40px">EXP</span>
+              <span class="spoke" style="left:38px; bottom:76px">CON</span>
+              <span class="spoke on" style="left:50%; transform:translateX(-50%); bottom:90px">HIGHLIGHT</span>
+              <span class="spoke" style="right:38px; bottom:76px">SHA</span>
+              <span class="spoke" style="right:8px; bottom:40px">BLK</span>
+              <div class="hub"><div class="v">−28</div><div class="grp">LIGHT</div></div>
+            </div>
+          </div>
+        </div>
+        <div class="tags"><span class="tag good">Best ergonomics</span><span class="tag">Unfamiliar</span></div>
+      </article>
+
+      <!-- 04 -->
+      <article class="card">
+        <div class="cardhead"><span class="n">04</span><h3>Ledger</h3></div>
+        <p>A plain ruled list of every control and its value, the whole group readable at a glance. Tap a line and it becomes the slider in place.</p>
+        <div class="phone">
+          <div class="bar"><span>← LIBRARY</span><span>EDIT</span><b>SAVE</b></div>
+          <div class="shot"><div class="sky"></div><div class="hill"></div><div class="lamp"></div><div class="leaf"></div><div class="skin"></div></div>
+          <div class="deck e4">
+            <div class="grp" style="padding-top:8px">LIGHT</div>
+            <div class="list">
+              <div class="item"><span class="lbl">Exposure</span><span class="val">+0.3 EV</span></div>
+              <div class="item on"><span class="lbl">Highlights</span><span class="val">−28</span></div>
+              <div class="item"><span class="lbl">Shadows</span><span class="val">+30</span></div>
+              <div class="item"><span class="lbl">Black Point</span><span class="val">0</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="tags"><span class="tag good">Most readable</span><span class="tag">Two taps per change</span></div>
+      </article>
+
+      <!-- 05 -->
+      <article class="card">
+        <div class="cardhead"><span class="n">05</span><h3>Variant strip</h3></div>
+        <p>A row of the same frame at different settings — you choose by looking rather than by numbering. The slider underneath refines whichever you took.</p>
+        <div class="phone">
+          <div class="bar"><span>← LIBRARY</span><span>EDIT</span><b>SAVE</b></div>
+          <div class="shot"><div class="sky"></div><div class="hill"></div><div class="lamp"></div><div class="leaf"></div><div class="skin"></div></div>
+          <div class="deck e5">
+            <div class="tabs"><b>LIGHT</b><span>COLOUR</span><span>DETAIL</span><span>FILM</span></div>
+            <div class="variants">
+              <div class="v" style="background:linear-gradient(150deg,#6b5a47,#191410); filter:brightness(.7)"></div>
+              <div class="v" style="background:linear-gradient(150deg,#6b5a47,#191410); filter:brightness(.85)"></div>
+              <div class="v on" style="background:linear-gradient(150deg,#6b5a47,#191410)"></div>
+              <div class="v" style="background:linear-gradient(150deg,#6b5a47,#191410); filter:brightness(1.2)"></div>
+              <div class="v" style="background:linear-gradient(150deg,#6b5a47,#191410); filter:brightness(1.45)"></div>
+            </div>
+            <div class="row"><span class="lbl">EXPOSURE</span><span class="track"><i style="left:58%"></i></span><span class="val">+0.3</span></div>
+          </div>
+        </div>
+        <div class="tags"><span class="tag good">Choose by eye</span><span class="tag">5 renders per control</span></div>
+      </article>
+
+      <!-- 06 -->
+      <article class="card">
+        <div class="cardhead"><span class="n">06</span><h3>Split compare</h3></div>
+        <p>Before on one side of a draggable seam, after on the other, permanently. Every adjustment is judged against where you started rather than remembered.</p>
+        <div class="phone">
+          <div class="bar"><span>← LIBRARY</span><span>EDIT</span><b>SAVE</b></div>
+          <div class="shot e6">
+            <div class="sky"></div><div class="hill"></div><div class="lamp"></div><div class="leaf"></div><div class="skin"></div>
+            <div class="before"><div class="sky"></div><div class="hill"></div><div class="lamp"></div><div class="leaf"></div><div class="skin"></div></div>
+            <span class="tagl">BEFORE</span><span class="tagr">AFTER</span>
+            <div class="divider"></div>
+          </div>
+          <div class="deck e1">
+            <div class="tabs"><b>LIGHT</b><span>COLOUR</span><span>DETAIL</span><span>FILM</span></div>
+            <div class="rows">
+              <div class="row"><span class="lbl">EXPOSURE</span><span class="track"><i style="left:58%"></i></span><span class="val">+0.3</span></div>
+              <div class="row"><span class="lbl">HIGHLIGHT</span><span class="track"><i style="left:36%"></i></span><span class="val">−28</span></div>
+              <div class="row"><span class="lbl">SHADOW</span><span class="track"><i style="left:64%"></i></span><span class="val">+30</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="tags"><span class="tag good">Judges against the original</span><span class="tag">Halves the picture</span></div>
+      </article>
+
+      <!-- 07 -->
+      <article class="card">
+        <div class="cardhead"><span class="n">07</span><h3>Curve</h3></div>
+        <p>The tone curve is the control, with the histogram behind it. One surface replaces exposure, contrast, highlights, shadows and black point, and shows what each is doing.</p>
+        <div class="phone">
+          <div class="bar"><span>← LIBRARY</span><span>EDIT</span><b>SAVE</b></div>
+          <div class="shot"><div class="sky"></div><div class="hill"></div><div class="lamp"></div><div class="leaf"></div><div class="skin"></div></div>
+          <div class="deck e7">
+            <div class="tabs"><b>TONE</b><span>COLOUR</span><span>DETAIL</span><span>FILM</span></div>
+            <div class="plot">
+              <div class="g"></div>
+              <svg viewBox="0 0 100 100" preserveAspectRatio="none">
+                <path d="M0,100 C10,86 18,58 32,52 C48,45 60,30 78,14 L100,0" fill="none" stroke="#D98A52" stroke-width="1.6" vector-effect="non-scaling-stroke"/>
+                <circle cx="32" cy="52" r="2.6" fill="#D98A52"/>
+                <circle cx="78" cy="14" r="2.6" fill="#D98A52"/>
+              </svg>
+            </div>
+          </div>
+        </div>
+        <div class="tags"><span class="tag good">Most control per pixel</span><span class="tag">Steepest to learn</span></div>
+      </article>
+
+      <!-- 08 -->
+      <article class="card">
+        <div class="cardhead"><span class="n">08</span><h3>Card deck</h3></div>
+        <p>Each group is a card in a stack at the bottom edge. Reach in and the group you want comes forward; the rest stay visible behind it.</p>
+        <div class="phone">
+          <div class="bar"><span>← LIBRARY</span><span>EDIT</span><b>SAVE</b></div>
+          <div class="shot"><div class="sky"></div><div class="hill"></div><div class="lamp"></div><div class="leaf"></div><div class="skin"></div></div>
+          <div class="deck e8">
+            <div class="stack">
+              <div class="c">
+                <div class="grp">LIGHT</div>
+                <div class="row" style="display:flex;align-items:center;gap:8px;padding-top:6px"><span class="lbl">EXPOSURE</span><span class="track" style="flex:1"><i style="left:58%"></i></span><span class="val">+0.3</span></div>
+              </div>
+              <div class="c"><div class="grp">COLOUR</div></div>
+              <div class="c"><div class="grp">DETAIL</div></div>
+            </div>
+          </div>
+        </div>
+        <div class="tags"><span class="tag good">Groups stay visible</span><span class="tag">Deep stack</span></div>
+      </article>
+
+      <!-- 09 -->
+      <article class="card">
+        <div class="cardhead"><span class="n">09</span><h3>Fan</h3></div>
+        <p>Nothing on screen but the picture until a thumb lands. The controls fan out from where you touched, and fold away again when you lift.</p>
+        <div class="phone">
+          <div class="bar"><span>← LIBRARY</span><span>EDIT</span><b>SAVE</b></div>
+          <div class="shot" style="aspect-ratio:3/3.4"><div class="sky"></div><div class="hill"></div><div class="lamp"></div><div class="leaf"></div><div class="skin"></div></div>
+          <div class="deck e9">
+            <div class="fan">
+              <div class="pip">EXP</div>
+              <div class="pip">CON</div>
+              <div class="pip on">HIGH</div>
+              <div class="pip">SHA</div>
+              <div class="pip">BLK</div>
+            </div>
+          </div>
+        </div>
+        <div class="tags"><span class="tag good">Largest picture</span><span class="tag">Nothing discoverable</span></div>
+      </article>
+
+      <!-- 10 -->
+      <article class="card">
+        <div class="cardhead"><span class="n">10</span><h3>One at a time</h3></div>
+        <p>A single control, very large, swiped horizontally to change it and vertically to move to the next. The value is the interface.</p>
+        <div class="phone">
+          <div class="bar"><span>← LIBRARY</span><span>EDIT</span><b>SAVE</b></div>
+          <div class="shot" style="aspect-ratio:3/3.2"><div class="sky"></div><div class="hill"></div><div class="lamp"></div><div class="leaf"></div><div class="skin"></div></div>
+          <div class="deck e10">
+            <div class="single">
+              <div class="v">−28</div>
+              <div class="n">HIGHLIGHTS</div>
+              <div class="grp" style="padding-top:5px">LIGHT</div>
+            </div>
+            <div class="dots"><i></i><i class="on"></i><i></i><i></i><i></i></div>
+          </div>
+        </div>
+        <div class="tags"><span class="tag good">Least chrome</span><span class="tag">16 swipes to survey</span></div>
+      </article>
+
+    </div>
+  </section>
+
+  <hr class="rule" />
+
+  <section class="section">
+    <div class="section-head"><h2>If you want my read</h2></div>
+
+    <div class="rec">
+      <div class="n">02</div>
+      <div>
+        <h4>Barrel bank is the one I would build</h4>
+        <p>Every other direction introduces a control the app does not otherwise have. This one is the barrel you already ship, at a smaller size — the same drag, the same detent, the same haptic as the shutter and film barrels. An editor should not need to be learned separately from the camera it belongs to. Its weakness is real though: barrels show values, not names, so the group heading has to carry the labelling.</p>
+      </div>
+    </div>
+    <div class="rec">
+      <div class="n">06</div>
+      <div>
+        <h4>Split compare is the one worth stealing from</h4>
+        <p>Not necessarily as the whole design, but as a behaviour any of the others could adopt. Judging an edit against a remembered original is the thing people are worst at, and a permanent seam fixes it for the cost of a drag handle.</p>
+      </div>
+    </div>
+    <div class="rec">
+      <div class="n">01</div>
+      <div>
+        <h4>Console if the priority is that nothing hides</h4>
+        <p>Five labelled faders with live values, no discovery required. It is the densest of the ten and the least characterful, which for a tool used in a hurry may be the right trade.</p>
+      </div>
+    </div>
+    <div class="rec">
+      <div class="n">09</div>
+      <div>
+        <h4>Fan is the one I would avoid</h4>
+        <p>It gives the picture the most room by making every control invisible until touched. Beautiful in a demo; a user who does not know to press and hold sees an editor with no controls at all.</p>
+      </div>
+    </div>
+  </section>
+
+  <p class="foot">
+    Drawn with the app's own tokens. The photograph in each is drawn, not shot, and carries a warm
+    lamp, a cool window, foliage and skin so a colour control has somewhere to show itself. Nothing
+    here is built — the editor currently ships as a tab bar with sliders, which is closest to 01.
+    Give me a number.
+  </p>
+
+</div>

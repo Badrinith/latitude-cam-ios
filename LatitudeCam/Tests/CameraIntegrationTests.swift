@@ -614,3 +614,49 @@ final class FilmShelfTests: XCTestCase {
         XCTAssertEqual(runs.count, Set(runs).count, "a family is split across the roll")
     }
 }
+
+// MARK: - Portrait
+
+@MainActor
+final class PortraitModeTests: XCTestCase {
+
+    /// Off until asked for. Depth delivery narrows the format the device will run
+    /// and costs resolution on every frame, not only the separated ones.
+    func testPortraitIsOffByDefault() {
+        XCTAssertFalse(RenderSettings().portrait)
+        XCTAssertFalse(AppState().portrait)
+    }
+
+    /// The flag follows what the camera reported, not what was tapped. A body
+    /// that cannot separate depth must not leave the control claiming it did.
+    func testPortraitDoesNotTurnOnWithoutHardware() {
+        let app = AppState()
+        app.togglePortrait()
+
+        let settled = expectation(description: "camera answered")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { settled.fulfill() }
+        wait(for: [settled], timeout: 2)
+
+        if !app.cameraManager.supportsPortrait {
+            XCTAssertFalse(app.portrait, "claimed a mode the hardware refused")
+        }
+    }
+
+    func testApertureLadderReadsAsALens() {
+        XCTAssertEqual(AppState.apertureLabels.first, "f/1.4")
+        XCTAssertEqual(AppState.apertureLabels.last, "f/16")
+        // Ascending f-numbers mean descending blur, which is the direction a
+        // photographer already expects.
+        XCTAssertEqual(AppState.apertureStops, AppState.apertureStops.sorted())
+    }
+
+    func testApertureReachesTheRenderPipeline() {
+        let app = AppState()
+        app.apertureIndex = 0
+        XCTAssertEqual(app.apertureValue, 1.4, accuracy: 0.001)
+        XCTAssertEqual(app.cameraManager.currentSettings.aperture, 1.4, accuracy: 0.001)
+
+        app.apertureIndex = 99   // past the end of the ladder
+        XCTAssertEqual(app.apertureValue, 16, accuracy: 0.001)
+    }
+}

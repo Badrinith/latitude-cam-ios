@@ -63,6 +63,12 @@ public struct RenderSettings: Equatable {
     public var pointOfInterest = CGPoint(x: 0.5, y: 0.5)
     /// Device zoom factor for the selected lens.
     public var zoomFactor: Double = 1
+    /// Depth-separated capture. Off by default: it costs resolution on every
+    /// body that offers it, so it has to be asked for.
+    public var portrait = false
+    /// Background blur as an aperture, because that is what it imitates. Smaller
+    /// number, shallower depth of field.
+    public var aperture: Double = 2.8
 
     public init() {}
 }
@@ -120,6 +126,11 @@ public final class CameraManager: NSObject, ObservableObject {
 
     /// Drives the render-side mirror. Read on the camera queue, written there too.
     private(set) var isFrontCamera = false
+
+    /// True where the hardware can hand back a matte. Published so the control
+    /// can hide itself on a body that cannot do it rather than fail on tap.
+    @Published public private(set) var supportsPortrait = false
+    private var portraitOn = false
 
     /// True once the device accepted custom exposure, so the render pipeline
     /// stops simulating ISO/shutter and only applies EV compensation.
@@ -342,6 +353,40 @@ public final class CameraManager: NSObject, ObservableObject {
         if #available(iOS 16.0, *),
            let largest = device.activeFormat.supportedMaxPhotoDimensions.last {
             output.maxPhotoDimensions = largest
+        }
+
+        // Delivery is only switched on while portrait is, because enabling it
+        // narrows the format the device will run and costs resolution on every
+        // frame — not just the ones you wanted separated.
+        let canMatte = output.isPortraitEffectsMatteDeliverySupported
+        output.isDepthDataDeliveryEnabled = portraitOn && output.isDepthDataDeliverySupported
+        output.isPortraitEffectsMatteDeliveryEnabled = portraitOn && canMatte
+
+        DispatchQueue.main.async { [weak self] in self?.supportsPortrait = canMatte }
+    }
+
+    /// Reconfigures the photo output for depth. A mode switch, so a brief
+    /// reconfiguration is the honest cost — unlike a lens change, which is a zoom.
+    public func setPortrait(_ on: Bool, completion: @escaping (Bool) -> Void) {
+        cameraQueue.async { [weak self] in
+            guard let self,
+                  let session = self.captureSession,
+                  let output = self.photoOutput,
+                  let device = self.videoDevice else {
+                DispatchQueue.main.async { completion(false) }
+                return
+            }
+            guard output.isPortraitEffectsMatteDeliverySupported else {
+                DispatchQueue.main.async { completion(false) }
+                return
+            }
+
+            session.beginConfiguration()
+            self.portraitOn = on
+            self.configurePhotoOutput(output, for: device)
+            session.commitConfiguration()
+
+            DispatchQueue.main.async { completion(on) }
         }
     }
 
@@ -659,6 +704,10 @@ public final class CameraManager: NSObject, ObservableObject {
             return
         }
 
+        // Copied out before `settings` below shadows the name with the capture's
+        // own settings object.
+        let current = self.settings
+
         let rawFormats = photoOutput.availableRawPhotoPixelFormatTypes
         // Prefer ProRAW: it is demosaiced and carries Apple's tone mapping as
         // metadata, so it opens sensibly in Photos as well as in a raw editor.
@@ -686,6 +735,11 @@ public final class CameraManager: NSObject, ObservableObject {
         // during configuration.
         settings.photoQualityPrioritization = .quality
 
+        if current.portrait, photoOutput.isPortraitEffectsMatteDeliveryEnabled {
+            settings.isPortraitEffectsMatteDeliveryEnabled = true
+            settings.embedsPortraitEffectsMatteInPhoto = true
+        }
+
         if #available(iOS 16.0, *), let dimensions = photoDimensions(targetMegapixels) {
             settings.maxPhotoDimensions = dimensions
         }
@@ -698,7 +752,10 @@ public final class CameraManager: NSObject, ObservableObject {
 
         let rawWasRefused = wantsRAW && !takingRAW
 
-        let delegate = StillCaptureDelegate(id: settings.uniqueID) { [weak self] raw, processed in
+        let wantsPortrait = current.portrait
+        let aperture = current.aperture
+
+        let delegate = StillCaptureDelegate(id: settings.uniqueID) { [weak self] raw, processed, matte in
             guard let self else { return }
             // Get off AVFoundation's callback queue before developing anything.
             // Holding it stalls the next capture, which is exactly what responsive
@@ -711,7 +768,10 @@ public final class CameraManager: NSObject, ObservableObject {
                 // Develop the full-resolution frame through the same pipeline the
                 // viewfinder uses, so the saved photo matches what was framed.
                 if let processed, let decoded = CIImage(data: processed) {
-                    let source = self.mirroredForFrontCamera(decoded)
+                    var source = self.mirroredForFrontCamera(decoded)
+                    if wantsPortrait, let matte {
+                        source = self.separate(source, matte: matte, aperture: aperture)
+                    }
                     let rendered = self.render(source, with: renderSettings)
                     if let cg = self.ciContext.createCGImage(rendered, from: source.extent) {
                         result.image = UIImage(cgImage: cg)
@@ -735,6 +795,34 @@ public final class CameraManager: NSObject, ObservableObject {
         // delegate's queue and is busy thirty times a second — hopping onto it put
         // the shutter behind whichever preview frame was mid-render.
         photoOutput.capturePhoto(with: settings, delegate: delegate)
+    }
+
+    /// Blurs the background and lays the subject back over it through the matte.
+    ///
+    /// The matte arrives at its own resolution — smaller than the photo — so it is
+    /// scaled to the frame before it is used. Blending against a mask of a
+    /// different size silently misaligns the cut-out, which reads as a halo
+    /// nobody can attribute to anything.
+    private func separate(_ image: CIImage, matte: CIImage, aperture: Double) -> CIImage {
+        let extent = image.extent
+        let mask = matte.transformed(by: CGAffineTransform(
+            scaleX: extent.width / matte.extent.width,
+            y: extent.height / matte.extent.height
+        ))
+
+        // f/1.4 is the most blur, f/16 nearly none — the number reads the way it
+        // does on a lens, so the control means what a photographer expects.
+        let radius = max(0, (16 - aperture) / 15) * 26
+
+        let background = image
+            .clampedToExtent()
+            .applyingFilter("CIGaussianBlur", parameters: [kCIInputRadiusKey: radius])
+            .cropped(to: extent)
+
+        return image.applyingFilter("CIBlendWithMask", parameters: [
+            kCIInputBackgroundImageKey: background,
+            kCIInputMaskImageKey: mask
+        ])
     }
 
     private func finishCapture(id: Int64) {
@@ -798,12 +886,13 @@ public final class CameraManager: NSObject, ObservableObject {
 
 final class StillCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegate {
     private let id: Int64
-    private let completion: (_ raw: Data?, _ processed: Data?) -> Void
+    private let completion: (_ raw: Data?, _ processed: Data?, _ matte: CIImage?) -> Void
 
     private var rawData: Data?
     private var processedData: Data?
+    private var matte: CIImage?
 
-    init(id: Int64, completion: @escaping (Data?, Data?) -> Void) {
+    init(id: Int64, completion: @escaping (Data?, Data?, CIImage?) -> Void) {
         self.id = id
         self.completion = completion
         super.init()
@@ -814,7 +903,11 @@ final class StillCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegate {
         didFinishProcessingPhoto photo: AVCapturePhoto,
         error: Error?
     ) {
-        guard error == nil, let data = photo.fileDataRepresentation() else { return }
+        guard error == nil else { return }
+        if let matte = photo.portraitEffectsMatte {
+            self.matte = CIImage(cvImageBuffer: matte.mattingImage)
+        }
+        guard let data = photo.fileDataRepresentation() else { return }
         if photo.isRawPhoto {
             rawData = data
         } else {
@@ -827,7 +920,7 @@ final class StillCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegate {
         didFinishCaptureFor resolvedSettings: AVCaptureResolvedPhotoSettings,
         error: Error?
     ) {
-        completion(rawData, processedData)
+        completion(rawData, processedData, matte)
     }
 }
 

@@ -348,12 +348,22 @@ struct BarrelCluster: View {
                 .init(id: "iso", label: "ISO", chip: app.isoLabel),
                 .init(id: "wb", label: "WHITE BALANCE", chip: app.kelvinLabel)
             ],
-            [
-                .init(id: "ev", label: "EXPOSURE", chip: app.exposureLabel),
-                .init(id: "focus", label: "FOCUS", chip: app.focusLabel),
-                .init(id: "metering", label: "METERING", chip: app.metering)
-            ]
+            portraitRow
         ]
+    }
+
+    /// Aperture only appears while portrait is on, because that is the only time
+    /// it does anything. A control that is present but inert teaches the wrong
+    /// thing about every other control beside it.
+    private var portraitRow: [Control] {
+        var row: [Control] = [
+            .init(id: "ev", label: "EXPOSURE", chip: app.exposureLabel),
+            .init(id: "focus", label: "FOCUS", chip: app.focusLabel)
+        ]
+        row.append(app.portrait
+            ? .init(id: "aperture", label: "APERTURE", chip: app.apertureLabel)
+            : .init(id: "metering", label: "METERING", chip: app.metering))
+        return row
     }
 
     private var controls: [Control] { rows.flatMap { $0 } }
@@ -430,6 +440,11 @@ struct BarrelCluster: View {
                 values: AppState.focusLabels,
                 index: binding(get: { app.focusIndex }, set: { app.focusIndex = $0 }),
                 hasAuto: true
+            )
+        case "aperture":
+            Barrel(
+                values: AppState.apertureLabels,
+                index: binding(get: { app.apertureIndex }, set: { app.apertureIndex = $0 })
             )
         case "metering":
             Barrel(

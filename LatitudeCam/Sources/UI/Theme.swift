@@ -307,6 +307,32 @@ final class AppState: ObservableObject {
     /// Which lens is selected, by id. Held as an id rather than a zoom factor so
     /// it survives a camera flip, where the ladder is a different one entirely.
     @Published var lensID = "wide" { didSet { syncCamera() } }
+    /// Set from what the camera reported, not from the tap — a body that cannot
+    /// separate depth must not leave the control claiming it did.
+    @Published private(set) var portrait = false
+    /// Ladder position for the aperture barrel.
+    @Published var apertureIndex = 2 { didSet { syncCamera() } }
+
+    static let apertureStops: [Double] = [1.4, 2.0, 2.8, 4.0, 5.6, 8.0, 11.0, 16.0]
+    static var apertureLabels: [String] {
+        apertureStops.map { $0 < 10 ? String(format: "f/%.1f", $0) : String(format: "f/%.0f", $0) }
+    }
+    var apertureValue: Double { Self.apertureStops[min(max(apertureIndex, 0), Self.apertureStops.count - 1)] }
+    var apertureLabel: String { Self.apertureLabels[min(max(apertureIndex, 0), Self.apertureStops.count - 1)] }
+
+    func togglePortrait() {
+        Haptics.toggle()
+        let wanted = !portrait
+        cameraManager.setPortrait(wanted) { [weak self] actual in
+            guard let self else { return }
+            if actual != wanted {
+                self.lastSaveMessage = "This camera cannot separate depth"
+                self.clearMessageSoon()
+            }
+            self.portrait = actual
+            self.syncCamera()
+        }
+    }
     /// Where the meter reads and the lens focuses, set by tapping the viewfinder.
     @Published var pointOfInterest = CGPoint(x: 0.5, y: 0.5) { didSet { syncCamera() } }
     @Published var proRAW = false
@@ -473,6 +499,8 @@ final class AppState: ObservableObject {
         s.metering = metering
         s.pointOfInterest = pointOfInterest
         s.zoomFactor = Double(currentLens?.zoom ?? 1)
+        s.portrait = portrait
+        s.aperture = apertureValue
         cameraManager.apply(s)
     }
 

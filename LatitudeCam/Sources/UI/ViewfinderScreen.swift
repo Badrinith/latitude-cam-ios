@@ -324,6 +324,19 @@ struct ViewfinderScreen: View {
                     }
                     .buttonStyle(.plain)
 
+                    if app.cameraManager.supportsPortrait {
+                        Button { app.togglePortrait() } label: {
+                            optionLabel {
+                                Image(systemName: "person.and.background.dotted")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundStyle(app.portrait ? Accent.amber : Tone.primary)
+                                    .rotationEffect(orientation.angle)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Portrait")
+                    }
+
                     Button { cycleAspect() } label: {
                         optionLabel {
                             Text(aspect)
