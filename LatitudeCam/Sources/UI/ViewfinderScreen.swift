@@ -313,7 +313,7 @@ struct ViewfinderScreen: View {
     /// shutter you have to hunt for is worse than one held at an odd angle.
     private static let clusterBand: CGFloat = 118
     private static let filmBand: CGFloat = 76
-    private static let shutterBand: CGFloat = 88
+    private static let shutterBand: CGFloat = 80
     private static let bandInset: CGFloat = 12
 
     /// One view tree in every orientation.
@@ -333,7 +333,8 @@ struct ViewfinderScreen: View {
                     .opacity(orientation.edge == .bottom ? 1 : 0)
 
                 if app.proMode {
-                    band(BarrelCluster(), thickness: Self.clusterBand,
+                    band(BarrelCluster().frame(maxHeight: .infinity, alignment: .bottom),
+                         thickness: Self.clusterBand,
                          centre: clusterCentre(in: size), length: size.width)
                         .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .bottom)))
                 }
@@ -411,24 +412,23 @@ struct ViewfinderScreen: View {
         ZStack {
             ShutterButton(frames: app.cameraManager.frames) { fire() }
 
-            HStack(spacing: 8) {
-                proButton
-
-                LensSelector(
-                    camera: app.cameraManager,
-                    selected: app.lensID,
-                    rotation: orientation.angle,
-                    onSelect: { app.selectLens($0) }
-                )
-
-                Spacer(minLength: 0)
-
+            HStack(spacing: 10) {
                 Button { app.go(.library) } label: {
                     LibraryThumbnail(gallery: app.gallery)
                 }
                 .buttonStyle(.plain)
+
+                proButton
+
+                Spacer(minLength: 0)
+
+                LensBarrel(
+                    camera: app.cameraManager,
+                    selected: app.lensID,
+                    onSelect: { app.selectLens($0) }
+                )
             }
-            .padding(.horizontal, 20)
+            .padding(.horizontal, 18)
         }
     }
 

@@ -581,47 +581,43 @@ struct BarrelCluster: View {
 
 // MARK: - Lens selector
 //
-// Always on screen, unlike the pro controls: which lens you are looking through
-// is not an advanced setting, it is what the picture is. Observes the camera
-// directly because the ladder is a property of the hardware — a body with no
-// ultra-wide must not be offered 0.5×.
+// The same barrel as every other control, because it is the same kind of choice:
+// an ordered ladder you step along. A row of buttons made it the one control on
+// screen that worked differently from its neighbours.
+//
+// Observes the camera directly — the ladder is a property of the hardware, and a
+// body with no ultra-wide must not be offered 0.5×.
 
-struct LensSelector: View {
+struct LensBarrel: View {
     @ObservedObject var camera: CameraManager
     var selected: String
-    var rotation: Angle
     var onSelect: (CameraManager.Lens) -> Void
 
     var body: some View {
         // One lens is not a choice, so it does not get a control.
         if camera.lenses.count > 1 {
-            HStack(spacing: 2) {
-                ForEach(camera.lenses) { lens in
-                    let on = lens.id == selected
-                    Button { onSelect(lens) } label: {
-                        Text(lens.label)
-                            .font(.mono(on ? 9.5 : 8.5, on ? .bold : .medium))
-                            .foregroundStyle(on ? Ink.base : Tone.primary)
-                            .rotationEffect(rotation)
-                            .frame(width: on ? 32 : 27, height: on ? 32 : 27)
-                            .background {
-                                Circle().fill(on ? AnyShapeStyle(Accent.amber)
-                                                 : AnyShapeStyle(Color.white.opacity(0.10)))
-                            }
-                            .contentShape(Circle())
+            Barrel(
+                values: camera.lenses.map(\.label),
+                index: Binding(
+                    get: { camera.lenses.firstIndex { $0.id == selected } ?? 0 },
+                    set: { index in
+                        let clamped = min(max(index, 0), camera.lenses.count - 1)
+                        onSelect(camera.lenses[clamped])
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("\(lens.label) lens")
-                }
+                ),
+                height: 38,
+                pitch: 46,
+                pointsPerStop: 44,
+                radius: 8
+            )
+            .frame(width: 106)
+            .overlay(alignment: .top) {
+                Triangle()
+                    .fill(Accent.amber)
+                    .frame(width: 7, height: 4.5)
+                    .offset(y: -3)
             }
-            .padding(.horizontal, 4)
-            .padding(.vertical, 3)
-            .background {
-                Capsule().fill(.ultraThinMaterial)
-                    .overlay { Capsule().fill(Color.black.opacity(0.24)) }
-                    .overlay { Capsule().strokeBorder(Tone.hairline, lineWidth: 0.5) }
-            }
-            .animation(.spring(response: 0.3, dampingFraction: 0.78), value: selected)
+            .accessibilityLabel("Lens")
         }
     }
 }
