@@ -48,6 +48,12 @@ enum Accent {
 
 enum FilmSwatch {
     static let neutral = Color(hex: 0x8C8C8C)
+    static let vermilion = Color(hex: 0xA33F2C)
+    static let meridian = Color(hex: 0x8C8570)
+    static let porcelain = Color(hex: 0xB08D74)
+    static let harbour = Color(hex: 0x4E7A88)
+    static let ledger = Color(hex: 0x7A766C)
+    static let ash = Color(hex: 0x8E918B)
     static let amber = Color(hex: 0x8A7A63)
     static let slate = Color(hex: 0x6B6A63)
     static let rust = Color(hex: 0x9C3F2E)
@@ -76,15 +82,33 @@ struct FilmPreset: Identifiable, Hashable {
     let name: String
     let blurb: String
     let swatch: Color
+    /// Reversal · Print · Monochrome · Signature. Eleven names in a row is a list;
+    /// grouped, it is a shelf you can find things on — reversal stocks are
+    /// saturated because a slide is the finished object, print stocks are flat
+    /// because a negative is only the middle of the process.
+    let family: String
 
+    /// Ordered by family, so rolling the barrel walks the shelf rather than
+    /// jumping between kinds of film.
     static let all: [FilmPreset] = [
         // First and default. A camera should show you the scene before it shows
-        // you an opinion about it — a look is something you reach for.
-        .init(id: "neutral", name: "Neutral", blurb: "Straight capture, no cast", swatch: FilmSwatch.neutral),
-        .init(id: "amber", name: "Amber Stock", blurb: "Warm, soft highlights", swatch: FilmSwatch.amber),
-        .init(id: "slate", name: "Slate", blurb: "Cool, muted neutral", swatch: FilmSwatch.slate),
-        .init(id: "rust", name: "Rust", blurb: "Deep reds, punchy", swatch: FilmSwatch.rust),
-        .init(id: "mono", name: "Mono", blurb: "High-contrast B&W", swatch: FilmSwatch.mono)
+        // you an opinion about it — a look is something you reach for. Outside
+        // the families: it is the absence of one, not one of them.
+        .init(id: "neutral", name: "Neutral", blurb: "Straight capture", swatch: FilmSwatch.neutral, family: "None"),
+
+        .init(id: "vermilion", name: "Vermilion", blurb: "Landscape", swatch: FilmSwatch.vermilion, family: "Reversal"),
+        .init(id: "meridian", name: "Meridian", blurb: "General", swatch: FilmSwatch.meridian, family: "Reversal"),
+        .init(id: "porcelain", name: "Porcelain", blurb: "Portrait", swatch: FilmSwatch.porcelain, family: "Reversal"),
+
+        .init(id: "amber", name: "Amber", blurb: "Warm highlights", swatch: FilmSwatch.amber, family: "Print"),
+        .init(id: "harbour", name: "Harbour", blurb: "Overcast", swatch: FilmSwatch.harbour, family: "Print"),
+        .init(id: "ledger", name: "Ledger", blurb: "Cine, for grading", swatch: FilmSwatch.ledger, family: "Print"),
+
+        .init(id: "mono", name: "Mono", blurb: "Street", swatch: FilmSwatch.mono, family: "Monochrome"),
+        .init(id: "ash", name: "Ash", blurb: "Portrait, detail", swatch: FilmSwatch.ash, family: "Monochrome"),
+
+        .init(id: "slate", name: "Slate", blurb: "Cool, muted", swatch: FilmSwatch.slate, family: "Signature"),
+        .init(id: "rust", name: "Rust", blurb: "Deep reds, punchy", swatch: FilmSwatch.rust, family: "Signature")
     ]
 
     /// Short label used on the viewfinder filmstrip.
@@ -96,7 +120,13 @@ struct FilmPreset: Identifiable, Hashable {
     /// what the frame will look like, which it cannot do if a stock is invisible.
     var engraved: Color {
         switch id {
-        case "neutral": return Color(hex: 0xD9D7D3)
+        case "neutral":   return Color(hex: 0xD9D7D3)
+        case "vermilion": return Color(hex: 0xE0644A)
+        case "meridian":  return Color(hex: 0xD6CDBA)
+        case "porcelain": return Color(hex: 0xEBC9B4)
+        case "harbour":   return Color(hex: 0x7FB3C4)
+        case "ledger":    return Color(hex: 0xB9B4A8)
+        case "ash":       return Color(hex: 0xC9CCC6)
         case "amber": return Color(hex: 0xE3BA83)
         case "slate": return Color(hex: 0xA6B2B6)
         case "rust":  return Color(hex: 0xDE7455)

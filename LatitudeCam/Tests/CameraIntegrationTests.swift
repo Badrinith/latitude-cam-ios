@@ -539,3 +539,78 @@ final class LensTests: XCTestCase {
         }
     }
 }
+
+// MARK: - The film shelf
+
+final class FilmShelfTests: XCTestCase {
+
+    func testEveryStockHasAMatrixAndTheyAreDistinct() {
+        var seen: [String] = []
+        for preset in FilmPreset.all {
+            let (r, g, b) = CameraManager.filmVectors(preset.id)
+            let key = "\(r.x),\(r.y),\(r.z)|\(g.x),\(g.y),\(g.z)|\(b.x),\(b.y),\(b.z)"
+            XCTAssertFalse(seen.contains(key),
+                           "\(preset.id) renders identically to another stock")
+            seen.append(key)
+        }
+    }
+
+    /// A film simulation must not change how bright the scene is — that is the
+    /// exposure's job. Anything much off unity would read as a metering fault
+    /// the moment someone changed stock.
+    func testNoStockShiftsOverallBrightnessMoreThanAThirdOfAStop() {
+        for preset in FilmPreset.all {
+            let (r, g, b) = CameraManager.filmVectors(preset.id)
+            // Luma-weighted sum of each output channel's contribution.
+            let luma = 0.299 * (r.x + r.y + r.z)
+                     + 0.587 * (g.x + g.y + g.z)
+                     + 0.114 * (b.x + b.y + b.z)
+            XCTAssertEqual(Double(luma), 1.0, accuracy: 0.26,
+                           "\(preset.id) moves overall brightness on its own")
+        }
+    }
+
+    func testCurvesOnlyOnStocksWithoutAReferenceImplementation() {
+        // The four originals are pinned to the per-pixel profiles in
+        // FilmProfiles.swift; a curve here would make the two disagree.
+        for id in ["amber", "slate", "rust", "mono", "neutral"] {
+            XCTAssertNil(CameraManager.filmCurve(id), "\(id) must stay pinned to its reference")
+        }
+        for id in ["vermilion", "meridian", "porcelain", "harbour", "ledger", "ash"] {
+            XCTAssertNotNil(CameraManager.filmCurve(id), "\(id) is defined by its curve")
+        }
+    }
+
+    func testLedgerIsTheOnlyStockThatLiftsBlacks() {
+        for preset in FilmPreset.all {
+            let lift = CameraManager.filmCurve(preset.id)?.lift ?? 0
+            if preset.id == "ledger" {
+                XCTAssertGreaterThan(lift, 0)
+            } else {
+                XCTAssertEqual(lift, 0, accuracy: 0.0001, "\(preset.id) should reach true black")
+            }
+        }
+    }
+
+    func testMonochromeStocksAreTrulyGrey() {
+        for id in ["mono", "ash"] {
+            let (r, g, b) = CameraManager.filmVectors(id)
+            XCTAssertEqual(r.x, g.x, accuracy: 0.0001)
+            XCTAssertEqual(g.x, b.x, accuracy: 0.0001)
+            XCTAssertEqual(r.y, g.y, accuracy: 0.0001)
+            XCTAssertEqual(r.z, b.z, accuracy: 0.0001)
+        }
+        // Ash is panchromatic, Mono is luma-weighted — the whole reason for two.
+        XCTAssertNotEqual(CameraManager.filmVectors("ash").0.y,
+                          CameraManager.filmVectors("mono").0.y)
+    }
+
+    func testStocksAreOrderedByFamily() {
+        let families = FilmPreset.all.map(\.family)
+        XCTAssertEqual(Array(Set(families)).count, 5, "None, Reversal, Print, Monochrome, Signature")
+        // Grouped, not interleaved: each family appears in one unbroken run.
+        var runs: [String] = []
+        for family in families where runs.last != family { runs.append(family) }
+        XCTAssertEqual(runs.count, Set(runs).count, "a family is split across the roll")
+    }
+}

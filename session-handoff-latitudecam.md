@@ -1,8 +1,8 @@
 # Latitude Cam — Session Handoff
 
 **Date:** 5 Aug 2026
-**Branch:** `feat/camera-pipeline-dials-splash` — 27 commits, **all local, nothing pushed to `origin`**
-**Tests:** 239 passing
+**Branch:** `feat/camera-pipeline-dials-splash` — 30 commits, **all local, nothing pushed to `origin`**
+**Tests:** 245 passing
 **Device:** iPhone 17 Pro Max, UDID `854CD202-7808-597B-A70F-6A6628AED263` (build installed and current)
 
 ---
@@ -26,6 +26,7 @@
 | Lens ladder read from `virtualDeviceSwitchOverVideoZoomFactors` | A 17 Pro Max and an SE disagree about what exists |
 | Shutter is a six-blade iris carrying the meter reading | The aperture is already looking at the light; exposure reads without leaving the frame |
 | Metering target is 118 (18% grey through sRGB), not 128 | Metering to mid-scale reads a third of a stop hot |
+| 11 stocks in 4 families; curves only on the 6 new ones | The 4 originals are pinned to per-pixel references in `FilmProfiles.swift` |
 
 ## Architecture
 

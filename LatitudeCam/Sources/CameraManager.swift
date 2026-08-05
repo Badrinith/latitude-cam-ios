@@ -942,11 +942,28 @@ extension CameraManager {
         // 3. Film look.
         let t = CGFloat(min(max(s.intensity, 0), 1))
         let (fr, fg, fb) = CameraManager.filmVectors(s.filmID)
+        let curve = CameraManager.filmCurve(s.filmID)
+        let lift = CGFloat(curve?.lift ?? 0) * t
+
         image = image.applyingFilter("CIColorMatrix", parameters: [
             "inputRVector": CameraManager.lerp(CIVector(x: 1, y: 0, z: 0, w: 0), fr, t),
             "inputGVector": CameraManager.lerp(CIVector(x: 0, y: 1, z: 0, w: 0), fg, t),
-            "inputBVector": CameraManager.lerp(CIVector(x: 0, y: 0, z: 1, w: 0), fb, t)
+            "inputBVector": CameraManager.lerp(CIVector(x: 0, y: 0, z: 1, w: 0), fb, t),
+            // The bias column lifts the blacks in the same pass rather than
+            // costing another filter.
+            "inputBiasVector": CIVector(x: lift, y: lift, z: lift * 1.1, w: 0)
         ])
+
+        // Curve follows intensity to 1.0, so a stock dialled to zero is inert in
+        // tone as well as in colour.
+        if let curve {
+            let power = 1 + (curve.gamma - 1) * Double(t)
+            if abs(power - 1) > 0.001 {
+                image = image.applyingFilter("CIGammaAdjust", parameters: [
+                    "inputPower": power
+                ])
+            }
+        }
 
         // 4. Halation — highlight bleed.
         if s.halation {
@@ -1014,6 +1031,42 @@ extension CameraManager {
             return (CIVector(x: 1, y: 0, z: 0, w: 0),
                     CIVector(x: 0, y: 1, z: 0, w: 0),
                     CIVector(x: 0, y: 0, z: 1, w: 0))
+
+        // --- Reversal. Off-diagonal terms are negative: pulling a little of the
+        // other channels out of each is what separates hues, where a pure gain
+        // only brightens them.
+        case "vermilion":
+            return (CIVector(x: 1.34, y: -0.16, z: -0.10, w: 0),
+                    CIVector(x: -0.12, y: 1.26, z: -0.08, w: 0),
+                    CIVector(x: -0.08, y: -0.14, z: 1.14, w: 0))
+        case "meridian":
+            return (CIVector(x: 1.12, y: -0.06, z: -0.04, w: 0),
+                    CIVector(x: -0.04, y: 1.10, z: -0.04, w: 0),
+                    CIVector(x: -0.04, y: -0.06, z: 1.12, w: 0))
+        case "porcelain":
+            // Positive off-diagonals instead: the channels bleed slightly into
+            // each other, which is what keeps skin from going waxy under
+            // saturation.
+            return (CIVector(x: 1.06, y: 0.04, z: 0.00, w: 0),
+                    CIVector(x: 0.02, y: 1.02, z: 0.02, w: 0),
+                    CIVector(x: 0.00, y: 0.02, z: 1.04, w: 0))
+
+        // --- Print
+        case "harbour":
+            return (CIVector(x: 0.92, y: 0.04, z: 0.02, w: 0),
+                    CIVector(x: 0.02, y: 0.98, z: 0.04, w: 0),
+                    CIVector(x: 0.04, y: 0.08, z: 1.14, w: 0))
+        case "ledger":
+            return (CIVector(x: 0.86, y: 0.08, z: 0.04, w: 0),
+                    CIVector(x: 0.06, y: 0.86, z: 0.06, w: 0),
+                    CIVector(x: 0.04, y: 0.08, z: 0.88, w: 0))
+
+        // --- Monochrome. Green-weighted rather than luma-weighted, which is what
+        // a panchromatic emulsion does: skin lightens, red fabric darkens, and
+        // foliage separates from sky instead of merging with it.
+        case "ash":
+            let pan = CIVector(x: 0.24, y: 0.68, z: 0.08, w: 0)
+            return (pan, pan, pan)
         case "slate":
             return (CIVector(x: 0.8, y: 0, z: 0, w: 0),
                     CIVector(x: 0, y: 0.8, z: 0, w: 0),
@@ -1029,6 +1082,27 @@ extension CameraManager {
             return (CIVector(x: 1.2, y: 0, z: 0, w: 0),
                     CIVector(x: 0, y: 0.9, z: 0, w: 0),
                     CIVector(x: 0, y: 0, z: 0.8, w: 0))
+        }
+    }
+
+    /// The stock's tone curve, as a power and a black lift.
+    ///
+    /// The matrix moves hue and saturation; the curve is what makes a reversal
+    /// stock feel like one and a cine stock feel gradeable. Nil for the four
+    /// original stocks, whose per-pixel implementations in FilmProfiles are the
+    /// ground truth the matrix tests pin against — giving them a curve here would
+    /// make the two disagree without either being wrong.
+    static func filmCurve(_ id: String) -> (gamma: Double, lift: Double)? {
+        switch id {
+        case "vermilion": return (0.89, 0)
+        case "meridian":  return (0.95, 0)
+        case "porcelain": return (1.05, 0)
+        case "harbour":   return (1.05, 0)
+        // The only stock with its blacks off zero: built to be graded afterwards
+        // rather than looked at straight.
+        case "ledger":    return (1.13, 0.045)
+        case "ash":       return (1.05, 0)
+        default:          return nil
         }
     }
 

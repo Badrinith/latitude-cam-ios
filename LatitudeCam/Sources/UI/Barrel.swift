@@ -282,7 +282,10 @@ struct FilmBarrel: View {
                 values: presets.map { $0.name.uppercased() },
                 index: index,
                 height: 44,
-                pitch: 96,
+                // Tighter than the 96 four stocks could afford. Eleven names have
+                // to be reachable without a drag that outlasts the moment.
+                pitch: 78,
+                pointsPerStop: 46,
                 radius: 9,
                 // Each stock engraved in its own colour, so the barrel shows what
                 // the frame will look like rather than only what it is called.
@@ -301,6 +304,17 @@ struct FilmBarrel: View {
                     .fill(selection.engraved)
                     .frame(width: 7, height: 7)
                     .overlay { Circle().strokeBorder(Color.white.opacity(0.25), lineWidth: 0.5) }
+                // Family first: it is what tells you why this stock behaves as it
+                // does, and it is the thing eleven names would otherwise lose.
+                if selection.family != "None" {
+                    Text(selection.family.uppercased())
+                        .font(.mono(7, .semibold))
+                        .kerning(0.9)
+                        .foregroundStyle(Accent.amber.opacity(0.85))
+                    Text("·")
+                        .font(.mono(7, .medium))
+                        .foregroundStyle(Tone.quaternary)
+                }
                 Text(selection.blurb.uppercased())
                     .font(.mono(7, .medium))
                     .kerning(0.8)
