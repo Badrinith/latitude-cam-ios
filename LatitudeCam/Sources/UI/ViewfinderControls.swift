@@ -1404,3 +1404,125 @@ private struct LeafBlade: Shape {
         return path
     }
 }
+
+// MARK: - Developing a save
+
+/// What the editor shows while an edit is written back onto its asset.
+///
+/// A save that takes a moment and shows nothing reads as a tap that missed, and
+/// this one genuinely takes a moment — Photos has to render the frame and swap
+/// it in. The metaphor is the one the rest of the app uses: the picture comes up
+/// out of the bath, a line sweeping down it as it develops.
+struct DevelopingOverlay: View {
+    enum Phase: Equatable {
+        case developing
+        case done(String)
+        case failed(String)
+    }
+
+    var phase: Phase
+    var image: UIImage?
+
+    @State private var sweep: CGFloat = 0
+    @State private var settled = false
+
+    var body: some View {
+        ZStack {
+            Ink.base.opacity(0.86).ignoresSafeArea()
+
+            VStack(spacing: 26) {
+                frame
+                caption
+            }
+            .padding(32)
+        }
+        .transition(.opacity)
+        .onAppear {
+            withAnimation(.easeInOut(duration: 1.15).repeatForever(autoreverses: false)) {
+                sweep = 1
+            }
+        }
+        .onChange(of: phase) { _, new in
+            guard case .done = new else { return }
+            withAnimation(.spring(response: 0.44, dampingFraction: 0.7)) { settled = true }
+        }
+    }
+
+    private var frame: some View {
+        ZStack {
+            if let image {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFit()
+                    // Comes up from flat and dark, the way a print does.
+                    .saturation(developing ? 0.15 : 1)
+                    .brightness(developing ? -0.16 : 0)
+                    .overlay {
+                        if developing { developingSweep }
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .animation(.easeOut(duration: 0.8), value: developing)
+            }
+        }
+        .frame(maxWidth: 300, maxHeight: 300)
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(Accent.amber.opacity(developing ? 0.5 : 0.18), lineWidth: 1)
+        }
+        .scaleEffect(settled ? 1 : 0.97)
+        .shadow(color: .black.opacity(0.6), radius: 26, y: 12)
+    }
+
+    /// The line travelling down the print. Deliberately soft — a hard edge reads
+    /// as a scanner, not a bath.
+    private var developingSweep: some View {
+        GeometryReader { geo in
+            LinearGradient(
+                colors: [.clear, Accent.amber.opacity(0.34), .clear],
+                startPoint: .top, endPoint: .bottom
+            )
+            .frame(height: geo.size.height * 0.42)
+            .offset(y: -geo.size.height * 0.42 + sweep * geo.size.height * 1.42)
+            .blur(radius: 8)
+        }
+        .allowsHitTesting(false)
+    }
+
+    private var caption: some View {
+        VStack(spacing: 9) {
+            switch phase {
+            case .developing:
+                ProgressView()
+                    .tint(Accent.amber)
+                Text("DEVELOPING")
+                    .font(.mono(9, .semibold))
+                    .kerning(3)
+                    .foregroundStyle(Tone.secondary)
+            case .done(let message):
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 24, weight: .medium))
+                    .foregroundStyle(Accent.amber)
+                Text(message.uppercased())
+                    .font(.mono(9, .semibold))
+                    .kerning(2)
+                    .foregroundStyle(Tone.secondary)
+                    .multilineTextAlignment(.center)
+            case .failed(let message):
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 22, weight: .medium))
+                    .foregroundStyle(Color(hex: 0xE2685A))
+                Text(message)
+                    .font(.ui(13, .medium))
+                    .foregroundStyle(Tone.secondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 280)
+            }
+        }
+        .animation(.easeInOut(duration: 0.24), value: phase)
+    }
+
+    private var developing: Bool {
+        if case .developing = phase { return true }
+        return false
+    }
+}

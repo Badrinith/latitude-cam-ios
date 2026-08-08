@@ -151,3 +151,40 @@ Still unverified on hardware — same caveat as above. If this also comes back w
 ### Design follow-up
 
 Two untracked `designs/` mockup explorations remain local only and are intentionally excluded from this commit. They were rejected during review; no viewfinder redesign is being shipped in this handover.
+
+
+## Editing in place (Photos-backed)
+
+The editor used to call `gallery.addPhoto` on save: every edit filed a *second*
+frame beside the first, so the roll grew by one per save and Apple Photos never
+heard about the change. This was listed under "Known gaps" for several sessions.
+
+`PhotoGallery` now edits the asset itself through PhotoKit's adjustment-data
+mechanism — the same one Photos' own editor uses:
+
+- `applyEdit(to:image:filmID:)` — requests `PHContentEditingInput`, writes the
+  rendered JPEG to `output.renderedContentURL`, attaches a `PHAdjustmentData`
+  stamped `com.latitude.cam.edit` / `1.0`, and commits via
+  `PHAssetChangeRequest.contentEditingOutput`.
+- `revertEdit(_:)` — `PHAssetChangeRequest.revertAssetContentToOriginal()`.
+  Photos still holds the original, so this discards the edit rather than
+  reconstructing anything, and it works after quitting the app.
+- `hasEdit(_:)` — asks Photos whether the asset carries adjustment data, rather
+  than remembering locally, because the user can also edit or revert in Photos
+  itself. Drives whether the editor offers "Revert".
+
+`options.canHandleAdjustmentData` returning true for our own identifier is
+load-bearing: without it Photos treats a previously-edited frame as
+un-editable and hands back the *rendered* result as though it were the
+original, so a second edit stacks on the first and Revert only undoes half.
+
+`DevelopingOverlay` (ViewfinderControls.swift) covers the write — the print
+comes up out of the bath with a soft amber line sweeping down it, then a
+checkmark. Saves are not instant (Photos renders and swaps), and a save that
+shows nothing reads as a tap that missed.
+
+**Device-only:** everything past the "frame has no asset" guard needs a real
+photo library. The tests cover the identifier contract, both not-yet-in-Photos
+failure paths, and that editing still writes nothing into app storage — the
+single-copy invariant. Whether an edit actually lands in Photos, and whether
+Revert restores it, has to be checked on the phone.

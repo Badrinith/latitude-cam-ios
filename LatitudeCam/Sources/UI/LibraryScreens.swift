@@ -1286,6 +1286,15 @@ struct EditScreen: View {
     @StateObject private var editor = PhotoEditor()
     @State private var tab = "Light"
 
+    /// Nil while editing. Set for the duration of a write back to Photos, which
+    /// is not instant — Photos renders the frame and swaps it in.
+    @State private var saving: DevelopingOverlay.Phase?
+    @State private var savingImage: UIImage?
+    /// Whether this frame already carries one of our edits, which is what makes
+    /// "Revert" worth offering. Asked of Photos rather than remembered, because
+    /// it can also be edited or reverted in Photos itself.
+    @State private var hasEdit = false
+
     var body: some View {
         ZStack {
             Ink.base.ignoresSafeArea()
@@ -1341,6 +1350,13 @@ struct EditScreen: View {
                 app.gallery.loadFullImage(for: photo) { full in
                     if let full { editor.load(app.editingPhoto, image: full) }
                 }
+                app.gallery.hasEdit(photo) { hasEdit = $0 }
+            }
+        }
+        .overlay {
+            if let saving {
+                DevelopingOverlay(phase: saving, image: savingImage)
+                    .zIndex(9)
             }
         }
     }
@@ -1355,6 +1371,12 @@ struct EditScreen: View {
                 Haptics.toggle()
                 editor.reset()
             }
+            if hasEdit {
+                GalleryAction(title: "Revert", role: .secondary, compact: true) {
+                    Haptics.toggle()
+                    revert()
+                }
+            }
             GalleryAction(title: "Cancel", role: .secondary, compact: true) {
                 Haptics.tap()
                 editor.reset()
@@ -1366,17 +1388,71 @@ struct EditScreen: View {
         .padding(.top, 8)
     }
 
-    /// Edits are non-destructive: the original stays in the roll and the result
-    /// is filed as a new frame, so a bad edit can never eat the only copy.
+    /// Edits the frame itself rather than filing a second one beside it.
+    ///
+    /// It used to call addPhoto, so every save grew the roll by one and Apple
+    /// Photos never heard about the change. The asset is edited in place now,
+    /// through the same adjustment-data mechanism Photos' own editor uses: the
+    /// change appears in Photos, and the original is kept by the system, which
+    /// is what makes Revert possible at all — including after quitting the app.
     private func save() {
         guard let edited = editor.flattened(), let source = app.editingPhoto else { return }
-        app.gallery.addPhoto(
-            edited,
-            filmID: editor.filmID,
-            iso: source.iso,
-            shutterDenominator: source.shutterDenominator
-        )
-        app.go(.library)
+
+        savingImage = edited
+        withAnimation(.easeInOut(duration: 0.24)) { saving = .developing }
+        Haptics.tap()
+
+        app.gallery.applyEdit(to: source, image: edited, filmID: editor.filmID) { result in
+            switch result {
+            case .saved:
+                Haptics.shutter()
+                withAnimation(.easeInOut(duration: 0.24)) { saving = .done("Saved to this photo") }
+                dismissAfterSave()
+            case .reverted:
+                withAnimation(.easeInOut(duration: 0.24)) { saving = .done("Reverted") }
+                dismissAfterSave()
+            case .failed(let reason):
+                Haptics.blocked()
+                withAnimation(.easeInOut(duration: 0.24)) { saving = .failed(reason) }
+                dismissAfterSave(delay: 2.4, thenLeave: false)
+            }
+        }
+    }
+
+    /// Puts the frame back the way it was taken. Photos still holds the
+    /// original, so this discards the edit rather than reconstructing anything.
+    private func revert() {
+        guard let source = app.editingPhoto else { return }
+
+        savingImage = editor.preview
+        withAnimation(.easeInOut(duration: 0.24)) { saving = .developing }
+
+        app.gallery.revertEdit(source) { result in
+            switch result {
+            case .reverted, .saved:
+                Haptics.shutter()
+                hasEdit = false
+                editor.reset()
+                withAnimation(.easeInOut(duration: 0.24)) { saving = .done("Back to the original") }
+                dismissAfterSave()
+            case .failed(let reason):
+                Haptics.blocked()
+                withAnimation(.easeInOut(duration: 0.24)) { saving = .failed(reason) }
+                dismissAfterSave(delay: 2.4, thenLeave: false)
+            }
+        }
+    }
+
+    /// Holds the finished state long enough to be read, then gets out of the
+    /// way. A confirmation that vanishes on the same frame it appears is the
+    /// same as no confirmation.
+    private func dismissAfterSave(delay: Double = 0.9, thenLeave: Bool = true) {
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(delay))
+            withAnimation(.easeInOut(duration: 0.24)) { saving = nil }
+            savingImage = nil
+            if thenLeave { app.go(.library) }
+        }
     }
 
     // MARK: Preview

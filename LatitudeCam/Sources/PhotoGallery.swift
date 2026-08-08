@@ -34,6 +34,10 @@ public final class PhotoGallery: NSObject, ObservableObject {
     /// Newest first.
     @Published public private(set) var photos: [Photo] = []
 
+    /// Asset ids currently carrying one of our edits. Kept so the grid can badge
+    /// them without asking Photos about every frame on every scroll tick.
+    @Published public internal(set) var edited: Set<String> = []
+
     private let fileManager = FileManager.default
     private let ioQueue = DispatchQueue(label: "com.latitude.gallery", qos: .utility)
 
@@ -393,5 +397,167 @@ extension PhotoGallery: PHPhotoLibraryChangeObserver {
     /// its own hop to ioQueue and to main, so this only needs to kick it off.
     public func photoLibraryDidChange(_ changeInstance: PHChange) {
         reload()
+    }
+}
+
+// MARK: - Editing in place
+//
+// An edit used to file a second frame beside the first, so the roll grew by one
+// every time a picture was adjusted and Apple Photos never heard about it. The
+// asset itself is edited now, through the same mechanism Photos' own editor
+// uses: a rendered result plus adjustment data describing what was done.
+//
+// That gets three things at once. The change shows up in Photos rather than
+// only here; the original is kept by the system rather than by us; and it can
+// be put back later, because Photos still holds the frame the edit started
+// from. None of it needs a second copy in app storage.
+
+extension PhotoGallery {
+
+    /// Marks an edit as ours. Photos hands adjustment data back to whichever app
+    /// recognises the identifier, which is what lets a later session reopen an
+    /// edit rather than treating the rendered result as the original.
+    static let adjustmentFormatID = "com.latitude.cam.edit"
+    static let adjustmentVersion = "1.0"
+
+    public enum EditResult {
+        case saved
+        case reverted
+        case failed(String)
+    }
+
+    /// Writes the edited frame back onto the asset it came from.
+    ///
+    /// The rendered JPEG becomes what everything sees; the original stays with
+    /// Photos untouched, which is what makes `revertEdit` possible at all.
+    public func applyEdit(
+        to photo: Photo,
+        image: UIImage,
+        filmID: String,
+        completion: @escaping (EditResult) -> Void
+    ) {
+        guard let assetID = photo.assetID,
+              let asset = PHAsset.fetchAssets(withLocalIdentifiers: [assetID], options: nil).firstObject
+        else {
+            report(.failed("That frame is still being added to Apple Photos."), to: completion)
+            return
+        }
+
+        let options = PHContentEditingInputRequestOptions()
+        options.isNetworkAccessAllowed = true
+        // Says we understand our own edits. Without it Photos treats a frame we
+        // edited before as un-editable and hands back the rendered result as
+        // though it were the original, so the second edit would stack on the
+        // first and the revert would only undo half of it.
+        options.canHandleAdjustmentData = { data in
+            data.formatIdentifier == Self.adjustmentFormatID
+        }
+
+        asset.requestContentEditingInput(with: options) { [weak self] input, info in
+            guard let self else { return }
+            guard let input else {
+                let reason = (info[PHContentEditingInputErrorKey] as? Error)?.localizedDescription
+                self.report(.failed(reason ?? "Apple Photos would not open that frame for editing."),
+                            to: completion)
+                return
+            }
+
+            guard let rendered = image.jpegData(compressionQuality: 0.95) else {
+                self.report(.failed("Could not encode the edited frame."), to: completion)
+                return
+            }
+
+            let output = PHContentEditingOutput(contentEditingInput: input)
+            output.adjustmentData = PHAdjustmentData(
+                formatIdentifier: Self.adjustmentFormatID,
+                formatVersion: Self.adjustmentVersion,
+                // Enough to say what look was applied. The rendered file is the
+                // result; this is the receipt.
+                data: Data(filmID.utf8)
+            )
+
+            do {
+                try rendered.write(to: output.renderedContentURL, options: .atomic)
+            } catch {
+                self.report(.failed("Could not write the edited frame."), to: completion)
+                return
+            }
+
+            PHPhotoLibrary.shared().performChanges {
+                let request = PHAssetChangeRequest(for: asset)
+                request.contentEditingOutput = output
+            } completionHandler: { ok, error in
+                guard ok else {
+                    self.report(.failed(error?.localizedDescription ?? "Apple Photos refused the edit."),
+                                to: completion)
+                    return
+                }
+                DispatchQueue.main.async {
+                    self.edited.insert(assetID)
+                    completion(.saved)
+                    self.reload()
+                }
+            }
+        }
+    }
+
+    /// Puts the frame back the way it was taken.
+    ///
+    /// Photos kept the original, so this discards the rendered result rather
+    /// than trying to reconstruct anything — an edit can always be undone, and
+    /// it can be undone after quitting the app.
+    public func revertEdit(
+        _ photo: Photo,
+        completion: @escaping (EditResult) -> Void
+    ) {
+        guard let assetID = photo.assetID,
+              let asset = PHAsset.fetchAssets(withLocalIdentifiers: [assetID], options: nil).firstObject
+        else {
+            report(.failed("That frame is not in Apple Photos."), to: completion)
+            return
+        }
+
+        PHPhotoLibrary.shared().performChanges {
+            let request = PHAssetChangeRequest(for: asset)
+            request.revertAssetContentToOriginal()
+        } completionHandler: { [weak self] ok, error in
+            guard let self else { return }
+            guard ok else {
+                self.report(.failed(error?.localizedDescription ?? "Apple Photos refused to revert that frame."),
+                            to: completion)
+                return
+            }
+            DispatchQueue.main.async {
+                self.edited.remove(assetID)
+                completion(.reverted)
+                self.reload()
+            }
+        }
+    }
+
+    /// Whether this frame currently carries an edit, so the screen can offer to
+    /// put it back. Asked of Photos rather than remembered, because the user can
+    /// also edit or revert in Photos itself.
+    public func hasEdit(_ photo: Photo, completion: @escaping (Bool) -> Void) {
+        guard let assetID = photo.assetID,
+              let asset = PHAsset.fetchAssets(withLocalIdentifiers: [assetID], options: nil).firstObject
+        else {
+            DispatchQueue.main.async { completion(false) }
+            return
+        }
+
+        let options = PHContentEditingInputRequestOptions()
+        options.canHandleAdjustmentData = { _ in true }
+        asset.requestContentEditingInput(with: options) { input, _ in
+            let edited = input?.adjustmentData != nil
+            DispatchQueue.main.async {
+                if edited { self.edited.insert(assetID) } else { self.edited.remove(assetID) }
+                completion(edited)
+            }
+        }
+    }
+
+    private func report(_ result: EditResult, to completion: @escaping (EditResult) -> Void) {
+        DispatchQueue.main.async { completion(result) }
     }
 }

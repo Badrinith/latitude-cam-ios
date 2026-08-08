@@ -323,3 +323,120 @@ final class GalleryLayoutPrefTests: XCTestCase {
         XCTAssertEqual(Pref.string(Pref.galleryLayout, default: "Organizer"), "Organizer")
     }
 }
+
+// MARK: - Editing in place
+
+/// An edit used to file a second frame beside the first: the roll grew by one
+/// on every save and Apple Photos never heard about the change. The asset is
+/// edited in place now, so what is pinned here is the contract that makes that
+/// safe — the identifier Photos hands our own edits back by, and the fact that
+/// nothing is written into app storage to do it.
+@MainActor
+final class InPlaceEditTests: XCTestCase {
+
+    /// Photos routes adjustment data to whichever app claims the identifier. If
+    /// it ever changed, previously edited frames would come back as if the
+    /// rendered result were the original — a second edit would stack on the
+    /// first, and Revert would only undo half of it.
+    func testTheAdjustmentIdentifierIsStable() {
+        XCTAssertEqual(PhotoGallery.adjustmentFormatID, "com.latitude.cam.edit")
+        XCTAssertEqual(PhotoGallery.adjustmentVersion, "1.0")
+    }
+
+    /// It has to be ours specifically. A generic identifier would collide with
+    /// another app's edits on the same library.
+    func testTheIdentifierIsNamespacedToThisApp() {
+        XCTAssertTrue(PhotoGallery.adjustmentFormatID.hasPrefix("com.latitude.cam"),
+                      "an un-namespaced identifier can collide with another editor")
+    }
+
+    /// Editing a frame that has not reached Photos yet has nothing to edit. It
+    /// must say so rather than silently doing nothing or filing a copy.
+    func testEditingAFrameNotYetInPhotosReportsRatherThanForking() {
+        let gallery = PhotoGallery()
+        gallery.addPhoto(UIImage(systemName: "camera") ?? UIImage(),
+                         filmID: "amber", iso: 100, shutterDenominator: 60)
+        let settled = expectation(description: "insert landed")
+        DispatchQueue.main.async { settled.fulfill() }
+        wait(for: [settled], timeout: 2)
+
+        guard let photo = gallery.photos.first else { return XCTFail("no frame") }
+        let before = gallery.photos.count
+
+        let reported = expectation(description: "edit reported")
+        var failure: String?
+        gallery.applyEdit(to: photo, image: UIImage(systemName: "camera") ?? UIImage(),
+                          filmID: "rust") { result in
+            if case .failed(let reason) = result { failure = reason }
+            reported.fulfill()
+        }
+        wait(for: [reported], timeout: 4)
+
+        XCTAssertNotNil(failure, "an un-mirrored frame cannot be edited in place")
+        XCTAssertEqual(gallery.photos.count, before,
+                       "a failed edit must not fork the roll the way the old save did")
+    }
+
+    /// Reverting something that was never in Photos is the same story.
+    func testRevertingAFrameNotInPhotosReportsRatherThanCrashing() {
+        let gallery = PhotoGallery()
+        gallery.addPhoto(UIImage(systemName: "camera") ?? UIImage(),
+                         filmID: "amber", iso: 100, shutterDenominator: 60)
+        let settled = expectation(description: "insert landed")
+        DispatchQueue.main.async { settled.fulfill() }
+        wait(for: [settled], timeout: 2)
+
+        guard let photo = gallery.photos.first else { return XCTFail("no frame") }
+        let reported = expectation(description: "revert reported")
+        var failure: String?
+        gallery.revertEdit(photo) { result in
+            if case .failed(let reason) = result { failure = reason }
+            reported.fulfill()
+        }
+        wait(for: [reported], timeout: 4)
+        XCTAssertNotNil(failure)
+    }
+
+    /// A frame with no asset carries no edit, and asking must not hang.
+    func testAFrameWithNoAssetHasNoEdit() {
+        let gallery = PhotoGallery()
+        gallery.addPhoto(UIImage(systemName: "camera") ?? UIImage(),
+                         filmID: "amber", iso: 100, shutterDenominator: 60)
+        let settled = expectation(description: "insert landed")
+        DispatchQueue.main.async { settled.fulfill() }
+        wait(for: [settled], timeout: 2)
+
+        guard let photo = gallery.photos.first else { return XCTFail("no frame") }
+        let answered = expectation(description: "edit state answered")
+        gallery.hasEdit(photo) { edited in
+            XCTAssertFalse(edited)
+            answered.fulfill()
+        }
+        wait(for: [answered], timeout: 4)
+    }
+
+    /// Editing must stay a Photos operation. The whole point of the rewrite is
+    /// that there is still exactly one copy of a picture on the phone.
+    func testEditingWritesNothingIntoAppStorage() {
+        let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        try? FileManager.default.removeItem(at: documents.appendingPathComponent("Gallery"))
+
+        let gallery = PhotoGallery()
+        gallery.addPhoto(UIImage(systemName: "camera") ?? UIImage(),
+                         filmID: "amber", iso: 100, shutterDenominator: 60)
+        let settled = expectation(description: "insert landed")
+        DispatchQueue.main.async { settled.fulfill() }
+        wait(for: [settled], timeout: 2)
+
+        guard let photo = gallery.photos.first else { return XCTFail("no frame") }
+        let reported = expectation(description: "edit reported")
+        gallery.applyEdit(to: photo, image: UIImage(systemName: "camera") ?? UIImage(),
+                          filmID: "rust") { _ in reported.fulfill() }
+        wait(for: [reported], timeout: 4)
+
+        XCTAssertFalse(
+            FileManager.default.fileExists(atPath: documents.appendingPathComponent("Gallery").path),
+            "editing put a second copy back into app storage"
+        )
+    }
+}
