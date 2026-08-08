@@ -220,6 +220,11 @@ struct ViewfinderScreen: View {
     /// position survives the deck being rebuilt by an unrelated state change.
     @State private var bellowsOpen = false
 
+    /// Top Plate only. Set while a dial is turning and cleared a beat after it
+    /// stops, which is what puts the barrel on screen and takes it away again.
+    @State private var activeDial: ActiveDial?
+    @State private var dialIdleTask: Task<Void, Never>?
+
     var body: some View {
         ZStack {
             Ink.base.ignoresSafeArea()
@@ -273,7 +278,8 @@ struct ViewfinderScreen: View {
                         .zIndex(3)
                 }
             }
-            .padding(.top, controlStyle == "Top Plate" ? TopPlateBand.height : 0)
+            .padding(.top, controlStyle == "Top Plate"
+                     ? TopPlateBand.height(proOpen: app.proMode) : 0)
             .ignoresSafeArea(edges: controlStyle == "Top Plate" ? [] : .all)
 
             chrome
@@ -341,14 +347,17 @@ struct ViewfinderScreen: View {
             TopPlateBand(
                 rotation: orientation.angle,
                 onSettings: { app.go(.settings) },
-                onCycleGrid: cycleGrid
+                onCycleGrid: cycleGrid,
+                onCycleAspect: cycleAspect,
+                aspect: aspect,
+                onDialTurn: showBarrel
             )
 
             TopPlateDeck(
                 rotation: orientation.angle,
+                landscape: orientation.edge != .bottom,
                 histogramStyle: histogramStyle,
                 aspect: aspect,
-                onCycleAspect: cycleAspect,
                 onSettings: { app.go(.settings) },
                 onFilmSim: { app.go(.filmSim) },
                 onLibrary: { app.go(.library) },
@@ -359,7 +368,32 @@ struct ViewfinderScreen: View {
             }
         }
         .ignoresSafeArea(edges: .top)
+        // The barrel hangs just under the plate in both orientations — over the
+        // picture, never displacing it, and translucent so the frame reads
+        // through. The controls themselves do not move when the body turns.
+        .overlay(alignment: .top) {
+            if let activeDial {
+                DialBarrel(dial: activeDial, rotation: orientation.angle)
+                    .padding(.horizontal, 12)
+                    .padding(.top, TopPlateBand.height(proOpen: app.proMode) + 10)
+                    .transition(.opacity.combined(with: .offset(y: -10)))
+            }
+        }
         .animation(.spring(response: 0.34, dampingFraction: 0.84), value: app.proMode)
+        .animation(.easeOut(duration: 0.22), value: activeDial)
+    }
+
+    /// Shows the barrel for the dial being turned, and starts the clock that
+    /// retires it. Restarted on every change, so a long adjustment keeps it up
+    /// and letting go puts it away.
+    private func showBarrel(_ dial: ActiveDial) {
+        activeDial = dial
+        dialIdleTask?.cancel()
+        dialIdleTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(1.4))
+            guard !Task.isCancelled else { return }
+            activeDial = nil
+        }
     }
 
     private var classicChrome: some View {

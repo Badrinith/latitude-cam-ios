@@ -511,6 +511,18 @@ struct CrownControl: View {
 // placeholder becomes the real lens selector, and the glass pill it defines for
 // HUD chips carries the meter, the status and the zoom.
 
+/// What a dial is doing right now, so the barrel underneath can report it.
+///
+/// A 44pt dial is a good thing to grab and a poor thing to land a value with.
+/// The barrel is the other half of that trade: coarse in the hand, precise on
+/// the scale, and gone again the moment you stop.
+struct ActiveDial: Equatable {
+    var name: String
+    var reading: String
+    /// 0…1, drives the barrel's travel so the ticks move with the dial.
+    var value: Double
+}
+
 /// One knurled dial on the plate. Turned like the Knob above — the handoff's own
 /// note is that these are rotation-driven controls, with the pro sheet as the
 /// expanded view rather than the only way in.
@@ -518,11 +530,15 @@ struct PlateDial: View {
     var label: String
     /// Shown inside the dial face. Only the big centre dial uses it.
     var inlineReading: String?
+    /// What the barrel calls this control, and what it reads out.
+    var barrelName: String
+    var barrelReading: String
     @Binding var value: Double
     var stops: Int
     var diameter: CGFloat
     var highlighted: Bool = false
     var rotation: Angle = .zero
+    var onTurn: (ActiveDial) -> Void = { _ in }
 
     @State private var lastAngle: Double?
     @State private var lastDetent: Int?
@@ -536,45 +552,27 @@ struct PlateDial: View {
                 .rotationEffect(rotation)
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(label)
-        .accessibilityValue(inlineReading ?? "")
+        .accessibilityLabel(barrelName)
+        .accessibilityValue(barrelReading)
         .accessibilityAdjustableAction { direction in
             let step = 1.0 / Double(max(stops, 1))
             value = KnobMath.clamp(value + (direction == .increment ? step : -step))
             Haptics.detent()
+            onTurn(ActiveDial(name: barrelName, reading: barrelReading, value: value))
         }
     }
 
     private var face: some View {
         ZStack {
-            // Knurling, ridge for ridge as specified: alternating 4° segments.
             Circle()
                 .fill(Color(hex: 0x2C2924))
-                .overlay {
-                    ZStack {
-                        ForEach(0..<45, id: \.self) { i in
-                            Path { path in
-                                path.move(to: CGPoint(x: diameter / 2, y: diameter / 2))
-                                path.addArc(
-                                    center: CGPoint(x: diameter / 2, y: diameter / 2),
-                                    radius: diameter / 2,
-                                    startAngle: .degrees(Double(i) * 8),
-                                    endAngle: .degrees(Double(i) * 8 + 4),
-                                    clockwise: false
-                                )
-                            }
-                            .fill(Color(hex: 0x4A453C))
-                        }
-                    }
-                    .mask(Circle())
-                }
+                .overlay { knurling }
                 .overlay {
                     Circle().strokeBorder(Ink.base, lineWidth: diameter > 60 ? 3 : 2)
                 }
                 .shadow(color: .black.opacity(diameter > 60 ? 0.6 : 0.5),
                         radius: diameter > 60 ? 3 : 2, y: 2)
 
-            // Amber index tick.
             Capsule()
                 .fill(Accent.amber)
                 .frame(width: diameter > 60 ? 3 : 2, height: diameter > 60 ? 12 : 8)
@@ -593,70 +591,181 @@ struct PlateDial: View {
         // are turned rather than tapped, so the hit area is grown past the face.
         .frame(width: max(diameter, 52), height: max(diameter, 52))
         .contentShape(Circle())
-        .gesture(
-            DragGesture(minimumDistance: 0)
-                .onChanged { drag in
-                    let centre = CGPoint(x: diameter / 2, y: diameter / 2)
-                    let angle = atan2(drag.location.y - centre.y,
-                                      drag.location.x - centre.x) * 180 / .pi
-                    defer { lastAngle = angle }
-                    guard let previous = lastAngle else { return }
+        .gesture(turn)
+    }
 
-                    value = KnobMath.advance(
-                        value, byDegrees: KnobMath.angleDelta(from: previous, to: angle)
+    /// Alternating wedges, the handoff's 4° ridges.
+    private var knurling: some View {
+        ZStack {
+            ForEach(0..<45, id: \.self) { i in
+                Path { path in
+                    path.move(to: CGPoint(x: diameter / 2, y: diameter / 2))
+                    path.addArc(
+                        center: CGPoint(x: diameter / 2, y: diameter / 2),
+                        radius: diameter / 2,
+                        startAngle: .degrees(Double(i) * 8),
+                        endAngle: .degrees(Double(i) * 8 + 4),
+                        clockwise: false
                     )
-                    let detent = KnobMath.detent(value, stops: stops)
-                    if detent != lastDetent {
-                        lastDetent = detent
-                        Haptics.detent()
-                    }
                 }
-                .onEnded { _ in lastAngle = nil; lastDetent = nil }
-        )
+                .fill(Color(hex: 0x4A453C))
+            }
+        }
+        .frame(width: diameter, height: diameter)
+        .mask(Circle())
+    }
+
+    private var turn: some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { drag in
+                let centre = CGPoint(x: diameter / 2, y: diameter / 2)
+                let angle = atan2(drag.location.y - centre.y,
+                                  drag.location.x - centre.x) * 180 / .pi
+                defer { lastAngle = angle }
+                guard let previous = lastAngle else { return }
+
+                value = KnobMath.advance(
+                    value, byDegrees: KnobMath.angleDelta(from: previous, to: angle)
+                )
+                let detent = KnobMath.detent(value, stops: stops)
+                if detent != lastDetent {
+                    lastDetent = detent
+                    Haptics.detent()
+                }
+                onTurn(ActiveDial(name: barrelName, reading: barrelReading, value: value))
+            }
+            .onEnded { _ in lastAngle = nil; lastDetent = nil }
     }
 }
 
-/// The film-stock card carousel that replaces the flat strip: the chosen stock
-/// held as a physical card with its neighbours peeking past it.
+// MARK: - The barrel a turning dial drops
+
+/// Appears under the plate the moment a dial moves and retires a beat after it
+/// stops. Translucent on purpose: it sits over the frame, so it has to let the
+/// frame through — blocking the picture to report a number is the wrong trade
+/// in a camera.
+struct DialBarrel: View {
+    var dial: ActiveDial
+    var rotation: Angle = .zero
+
+    var body: some View {
+        ZStack {
+            // Fine ticks, offset by the value so the scale travels with the dial.
+            GeometryReader { geo in
+                let spacing: CGFloat = 11
+                let travel = CGFloat(dial.value) * spacing * 26
+                HStack(spacing: spacing - 1) {
+                    ForEach(0..<Int(geo.size.width / spacing) + 30, id: \.self) { i in
+                        Rectangle()
+                            .fill(Color.white.opacity(i.isMultiple(of: 5) ? 0.42 : 0.16))
+                            .frame(width: i.isMultiple(of: 5) ? 1.5 : 1,
+                                   height: i.isMultiple(of: 5) ? 20 : 12)
+                    }
+                }
+                .frame(height: geo.size.height, alignment: .center)
+                .offset(x: -travel.truncatingRemainder(dividingBy: spacing * 5) - spacing * 8)
+            }
+
+            HStack {
+                Text(dial.name)
+                    .font(.mono(7.5, .semibold))
+                    .kerning(1.8)
+                    .foregroundStyle(Color(hex: 0x8A8478))
+                    .rotationEffect(rotation)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 11)
+
+            // Fixed index, with the value riding under it.
+            Rectangle()
+                .fill(Accent.amber)
+                .frame(width: 1.5)
+                .shadow(color: Accent.amber.opacity(0.7), radius: 4)
+
+            Text(dial.reading)
+                .font(.mono(13, .bold))
+                .foregroundStyle(Tone.primary)
+                .rotationEffect(rotation)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 3)
+                .background {
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(Ink.base.opacity(0.8))
+                }
+        }
+        .frame(height: 46)
+        .background {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color(hex: 0x121212).opacity(0.72))
+        }
+        .background {
+            RoundedRectangle(cornerRadius: 12, style: .continuous).fill(.ultraThinMaterial)
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(Tone.hairline, lineWidth: 0.5)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
+/// The film-stock carousel: glass rather than a solid card, so the picture reads
+/// through it. Swiping steps stock by stock with a detent each time.
 struct FilmCardStack: View {
     @EnvironmentObject var app: AppState
     var rotation: Angle = .zero
     var onOpen: () -> Void
+
+    @State private var drag: CGFloat = 0
 
     private var index: Int {
         FilmPreset.all.firstIndex { $0.id == app.selectedFilm.id } ?? 0
     }
 
     var body: some View {
-        VStack(spacing: 8) {
-            HStack(spacing: -6) {
+        VStack(spacing: 7) {
+            HStack(spacing: 8) {
                 peek(at: index - 1)
                 card
                 peek(at: index + 1)
             }
-            Text("‹ TAP TO CHANGE STOCK ›")
-                .font(.mono(9, .semibold))
-                .foregroundStyle(Color.white.opacity(0.35))
+            Text("‹ SWIPE FILM ›")
+                .font(.mono(8, .semibold))
+                .kerning(1.4)
+                .foregroundStyle(Color.white.opacity(0.34))
                 .rotationEffect(rotation)
         }
         .contentShape(Rectangle())
         .onTapGesture { Haptics.tap(); onOpen() }
-        .gesture(
-            // Swipeable, per the handoff's note that this is a carousel and not
-            // a button. Horizontal only, so it never competes with a vertical
-            // system edge gesture.
-            DragGesture(minimumDistance: 18)
-                .onEnded { drag in
-                    guard abs(drag.translation.width) > abs(drag.translation.height) else { return }
-                    step(by: drag.translation.width < 0 ? 1 : -1)
-                }
-        )
-        .animation(.spring(response: 0.34, dampingFraction: 0.82), value: app.selectedFilm)
+        .gesture(swipe)
+        .animation(.spring(response: 0.32, dampingFraction: 0.82), value: app.selectedFilm)
     }
 
-    private func step(by delta: Int) {
+    /// Horizontal only, and only when the drag is clearly horizontal — a
+    /// vertical component belongs to the system edge gestures, not to us.
+    private var swipe: some Gesture {
+        DragGesture(minimumDistance: 14)
+            .onChanged { value in
+                guard abs(value.translation.width) > abs(value.translation.height) else { return }
+                let step = value.translation.width - drag
+                if abs(step) > 46 {
+                    drag = value.translation.width
+                    move(by: step < 0 ? 1 : -1)
+                }
+            }
+            .onEnded { _ in drag = 0 }
+    }
+
+    private func move(by delta: Int) {
         let next = index + delta
-        guard FilmPreset.all.indices.contains(next) else { Haptics.blocked(); return }
+        guard FilmPreset.all.indices.contains(next) else {
+            Haptics.blocked()
+            return
+        }
+        // One tick per stock crossed — the carousel should feel like a detented
+        // wheel, not a scroll view that happens to snap.
         Haptics.detent()
         app.selectedFilm = FilmPreset.all[next]
     }
@@ -665,36 +774,65 @@ struct FilmCardStack: View {
         VStack(spacing: 4) {
             RoundedRectangle(cornerRadius: 3, style: .continuous)
                 .fill(app.selectedFilm.swatch)
-                .frame(height: 50)
+                .frame(height: 44)
             Text(app.selectedFilm.name.uppercased())
-                .font(.mono(7, .bold))
-                .foregroundStyle(Color(hex: 0x3A2C14))
+                .font(.mono(6.5, .bold))
+                .kerning(0.5)
+                .foregroundStyle(Color(hex: 0xFFF6E8).opacity(0.94))
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
         }
         .padding(5)
-        .frame(width: 58, height: 80)
+        .frame(width: 54, height: 74)
         .background {
-            RoundedRectangle(cornerRadius: 5, style: .continuous).fill(Color(hex: 0xC9A45C))
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(Color(hex: 0xC9A45C).opacity(0.30))
+        }
+        .background {
+            RoundedRectangle(cornerRadius: 6, style: .continuous).fill(.ultraThinMaterial)
         }
         .overlay {
-            RoundedRectangle(cornerRadius: 5, style: .continuous)
-                .strokeBorder(Accent.amber, lineWidth: 2)
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .strokeBorder(Accent.amber.opacity(0.85), lineWidth: 1.5)
         }
-        .shadow(color: .black.opacity(0.5), radius: 8, y: 5)
+        .overlay(alignment: .top) {
+            // The inner light along the top edge is what keeps a translucent
+            // card reading as a physical object rather than a tint.
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.24), lineWidth: 1)
+                .mask(LinearGradient(colors: [.white, .clear], startPoint: .top, endPoint: .bottom))
+        }
+        .shadow(color: .black.opacity(0.45), radius: 8, y: 5)
         .rotationEffect(rotation)
         .zIndex(2)
     }
 
     @ViewBuilder private func peek(at position: Int) -> some View {
         if FilmPreset.all.indices.contains(position) {
-            RoundedRectangle(cornerRadius: 3, style: .continuous)
-                .fill(FilmPreset.all[position].swatch)
-                .frame(width: 36, height: 52)
-                .opacity(0.4)
-                .scaleEffect(0.85)
+            VStack(spacing: 3) {
+                RoundedRectangle(cornerRadius: 3, style: .continuous)
+                    .fill(FilmPreset.all[position].swatch)
+                    .frame(height: 32)
+                Text(FilmPreset.all[position].name.uppercased())
+                    .font(.mono(5.5, .semibold))
+                    .foregroundStyle(Color.white.opacity(0.72))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+            }
+            .padding(4)
+            .frame(width: 40, height: 58)
+            .background {
+                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                    .fill(Color.white.opacity(0.07))
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.2), lineWidth: 1)
+            }
+            .opacity(0.45)
+            .rotationEffect(rotation)
         } else {
-            Color.clear.frame(width: 36, height: 52)
+            Color.clear.frame(width: 40, height: 58)
         }
     }
 }
@@ -706,12 +844,7 @@ struct FilmCardStack: View {
 /// The front camera is one of the focal lengths rather than a switch somewhere
 /// else on the body. That is what it physically is: another lens pointing the
 /// other way, and choosing it is the same decision as choosing between 1× and
-/// 2× — "which lens am I shooting through". Splitting that decision across two
-/// controls in two places was the odd part.
-///
-/// `camera.lenses` republishes on every flip, so the row shows whichever
-/// camera's focal lengths are actually available and never offers a 5× the
-/// front camera does not have.
+/// 2× — "which lens am I shooting through".
 struct PlateLensRow: View {
     @ObservedObject var camera: CameraManager
     var selected: String
@@ -723,14 +856,9 @@ struct PlateLensRow: View {
     var body: some View {
         HStack(spacing: 2) {
             ForEach(camera.lenses) { lens in
-                item(
-                    label: lens.label,
-                    active: !usingFront && lens.id == selected,
-                    accessibility: "\(lens.label) lens"
-                ) {
-                    // Coming back from the front camera is a flip, not a
-                    // selection — the back lenses are not addressable while the
-                    // front one is live.
+                item(label: lens.label,
+                     active: !usingFront && lens.id == selected,
+                     accessibility: "\(lens.label) lens") {
                     if usingFront { onSelectFront() } else { onSelect(lens) }
                 }
             }
@@ -740,12 +868,10 @@ struct PlateLensRow: View {
                 .frame(width: 0.5, height: 18)
                 .padding(.horizontal, 3)
 
-            item(
-                label: nil, symbol: "person.fill",
-                active: usingFront,
-                accessibility: usingFront ? "Front camera, selected" : "Front camera",
-                action: onSelectFront
-            )
+            item(label: nil, symbol: "person.fill",
+                 active: usingFront,
+                 accessibility: usingFront ? "Front camera, selected" : "Front camera",
+                 action: onSelectFront)
         }
         .padding(4)
         .background { Capsule().fill(Color.black.opacity(0.45)) }
@@ -773,8 +899,6 @@ struct PlateLensRow: View {
             .rotationEffect(rotation)
             .frame(minWidth: 34, minHeight: 28)
             .padding(.horizontal, 8)
-            // 28pt of paint inside a 44pt target: the row is a tight strip and
-            // these are chosen mid-frame without looking down.
             .frame(minHeight: 44)
             .background {
                 if active { Capsule().fill(Accent.amber.opacity(0.22)).padding(.vertical, 8) }
@@ -786,18 +910,26 @@ struct PlateLensRow: View {
     }
 }
 
-/// The 210pt metal plate: body switches in the head the handoff leaves empty,
-/// then the five dials along its foot.
+/// The metal plate. PRO lives here now rather than at the bottom of the screen,
+/// and what it does is open and close the plate: the tap that means "I am
+/// setting up" is the same tap that produces the instruments. Closed, the plate
+/// is the switches alone and the picture gets the rest of the glass.
 struct TopPlateBand: View {
     @EnvironmentObject var app: AppState
     var rotation: Angle = .zero
     var onSettings: () -> Void
     var onCycleGrid: () -> Void
+    var onCycleAspect: () -> Void
+    var aspect: String
+    var onDialTurn: (ActiveDial) -> Void
 
+    /// Open, with the dials showing.
     static let height: CGFloat = 210
+    /// Closed — the switch strip only.
+    static let collapsedHeight: CGFloat = 96
 
-    /// Aperture is stored as a ladder index rather than 0…1 like the others, so
-    /// it is bridged here rather than given a second representation on AppState.
+    static func height(proOpen: Bool) -> CGFloat { proOpen ? height : collapsedHeight }
+
     private var apertureBinding: Binding<Double> {
         Binding(
             get: {
@@ -819,22 +951,26 @@ struct TopPlateBand: View {
                     Rectangle().fill(Color(hex: 0x0A0A0A)).frame(height: 2)
                 }
 
-            utilities.padding(.top, 46)
+            VStack(spacing: 0) {
+                utilities.padding(.top, 46)
 
-            dials
-                .frame(maxHeight: .infinity, alignment: .bottom)
-                .padding(.bottom, 16)
-                .padding(.horizontal, 6)
+                if app.proMode {
+                    dials
+                        .padding(.top, 8)
+                        .padding(.horizontal, 6)
+                        .transition(.opacity.combined(with: .offset(y: -14)))
+                }
+            }
         }
-        .frame(height: Self.height)
+        .frame(height: Self.height(proOpen: app.proMode))
         .frame(maxWidth: .infinity)
+        .clipped()
     }
 
-    /// No camera-flip button here. Front is a focal length now, chosen in the
-    /// lens row with the others — one control answering "which lens am I
-    /// shooting through" instead of that decision living in two places.
+    /// No camera-flip button: front is a focal length now, chosen in the lens
+    /// row with the others.
     private var utilities: some View {
-        HStack(spacing: 7) {
+        HStack(spacing: 6) {
             if app.cameraManager.supportsPortrait {
                 utility(text: "PORTRAIT", on: app.portrait, label: "Portrait") {
                     app.togglePortrait()
@@ -842,8 +978,15 @@ struct TopPlateBand: View {
             }
 
             utility(text: "GRID", on: false, label: "Grid", action: onCycleGrid)
-
+            utility(text: aspect, on: false, label: "Aspect ratio", action: onCycleAspect)
             utility(systemImage: "gearshape", on: false, label: "Settings", action: onSettings)
+
+            // PRO is the plate's own switch, and it is what opens it.
+            utility(text: "PRO", on: app.proMode, label: "Pro controls") {
+                withAnimation(.spring(response: 0.4, dampingFraction: 0.86)) {
+                    app.proMode.toggle()
+                }
+            }
         }
     }
 
@@ -888,39 +1031,53 @@ struct TopPlateBand: View {
         HStack(alignment: .bottom, spacing: 0) {
             Group {
                 PlateDial(label: AppState.apertureLabels[app.apertureIndex],
+                          barrelName: "APERTURE",
+                          barrelReading: AppState.apertureLabels[app.apertureIndex],
                           value: apertureBinding,
                           stops: AppState.apertureStops.count,
-                          diameter: 44, rotation: rotation)
+                          diameter: 44, rotation: rotation, onTurn: onDialTurn)
 
-                PlateDial(label: app.isoLabel, value: $app.iso,
+                PlateDial(label: app.isoLabel,
+                          barrelName: "ISO", barrelReading: app.isoLabel,
+                          value: $app.iso,
                           stops: AppState.isoStops.count,
-                          diameter: 50, rotation: rotation)
+                          diameter: 50, rotation: rotation, onTurn: onDialTurn)
 
                 PlateDial(label: "SHUTTER", inlineReading: app.shutterLabel,
+                          barrelName: "SHUTTER", barrelReading: app.shutterLabel,
                           value: $app.shutter, stops: AppState.shutterStops.count,
-                          diameter: 70, highlighted: true, rotation: rotation)
+                          diameter: 70, highlighted: true, rotation: rotation, onTurn: onDialTurn)
 
-                PlateDial(label: app.kelvinLabel, value: $app.whiteBalance,
+                PlateDial(label: app.kelvinLabel,
+                          barrelName: "WHITE BALANCE", barrelReading: app.kelvinLabel,
+                          value: $app.whiteBalance,
                           stops: AppState.whiteBalanceStops.count,
-                          diameter: 50, rotation: rotation)
+                          diameter: 50, rotation: rotation, onTurn: onDialTurn)
 
                 PlateDial(label: String(format: "%+.1fEV", app.evValue),
+                          barrelName: "EXPOSURE",
+                          barrelReading: String(format: "%+.1f EV", app.evValue),
                           value: $app.exposureComp, stops: AppState.evDetents,
-                          diameter: 44, rotation: rotation)
+                          diameter: 44, rotation: rotation, onTurn: onDialTurn)
             }
             .frame(maxWidth: .infinity)
         }
     }
 }
 
-/// Everything below the plate: the HUD chips over the feed, the film carousel
-/// (or the pro barrels in its place), the focal-length row, and the bottom bar.
+/// Everything below the plate: the HUD chips, the film carousel (or the pro
+/// barrels in its place), the focal-length row, and the bottom bar.
+///
+/// PRO is not down here any more — it moved to the plate, where it belongs with
+/// the instruments it reveals.
 struct TopPlateDeck: View {
     @EnvironmentObject var app: AppState
     var rotation: Angle = .zero
+    /// True when the body is turned. The controls do not move — only the film
+    /// strip changes station, to the ground-facing edge.
+    var landscape: Bool = false
     var histogramStyle: String
     var aspect: String
-    var onCycleAspect: () -> Void
     var onSettings: () -> Void
     var onFilmSim: () -> Void
     var onLibrary: () -> Void
@@ -930,25 +1087,38 @@ struct TopPlateDeck: View {
         VStack(spacing: 0) {
             hud
             Spacer(minLength: 0)
-            band
+
+            // Portrait keeps film with the rest of the controls. Landscape sends
+            // it to the bottom edge on its own, clear of everything else.
+            if !landscape { filmBand }
+
             lensRow.padding(.bottom, 10)
             bottomBar.padding(.bottom, 30)
+
+            if landscape {
+                filmBand.padding(.bottom, 8)
+            }
         }
     }
 
-    // MARK: HUD
+    @ViewBuilder private var filmBand: some View {
+        if app.proMode {
+            BarrelCluster()
+                .frame(height: BarrelCluster.expandedHeight)
+                .padding(.bottom, 12)
+                .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .bottom)))
+        } else {
+            FilmCardStack(rotation: rotation, onOpen: onFilmSim)
+                .padding(.bottom, 14)
+                .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .bottom)))
+        }
+    }
 
     private var hud: some View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 6) {
                 LiveHistogramView(frames: app.cameraManager.frames, style: histogramStyle)
-                    .frame(width: 96, height: 40)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 5)
-                    .background { RoundedRectangle(cornerRadius: 8).fill(Color.black.opacity(0.45)) }
-
                 CameraStatusPill(camera: app.cameraManager)
-
                 MeterReadout(frames: app.cameraManager.frames, rotation: rotation)
 
                 if let wide = app.cameraManager.lenses.first(where: { $0.id == "wide" }) {
@@ -961,56 +1131,10 @@ struct TopPlateDeck: View {
                         .background { RoundedRectangle(cornerRadius: 8).fill(Color.black.opacity(0.45)) }
                 }
             }
-
             Spacer(minLength: 0)
-
-            // The handoff's own pill, and it already shows the aspect — so it
-            // is the aspect control too. Tap cycles, long press goes to
-            // Settings, which is where the handoff sent it.
-            Button {
-                Haptics.detent()
-                onCycleAspect()
-            } label: {
-                Text("\(Pref.string(Pref.captureFormat, default: "RAW + JPEG") == "JPEG Only" ? "HEIF" : "RAW") · \(aspect)")
-                    .font(.mono(9, .semibold))
-                    .foregroundStyle(Accent.amber)
-                    .rotationEffect(rotation)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 5)
-                    .frame(minHeight: 44)
-                    .background {
-                        RoundedRectangle(cornerRadius: 8).fill(Color.black.opacity(0.45))
-                            .padding(.vertical, 9)
-                    }
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .simultaneousGesture(LongPressGesture().onEnded { _ in
-                Haptics.toggle()
-                onSettings()
-            })
-            .accessibilityLabel("Format and aspect ratio")
-            .accessibilityHint("Long press for settings")
         }
         .padding(.horizontal, 16)
         .padding(.top, 14)
-    }
-
-    // MARK: Film carousel / pro barrels
-
-    /// Both want this band and they are never wanted at once — one is framing,
-    /// the other is setting up.
-    @ViewBuilder private var band: some View {
-        if app.proMode {
-            BarrelCluster()
-                .frame(height: BarrelCluster.expandedHeight)
-                .padding(.bottom, 12)
-                .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .bottom)))
-        } else {
-            FilmCardStack(rotation: rotation, onOpen: onFilmSim)
-                .padding(.bottom, 14)
-                .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .bottom)))
-        }
     }
 
     private var lensRow: some View {
@@ -1024,36 +1148,12 @@ struct TopPlateDeck: View {
         )
     }
 
-    // MARK: Bottom bar
-
     private var bottomBar: some View {
         ZStack {
             LeafShutterButton(action: onFire)
 
             HStack {
-                Button {
-                    Haptics.toggle()
-                    withAnimation(.spring(response: 0.34, dampingFraction: 0.84)) {
-                        app.proMode.toggle()
-                    }
-                } label: {
-                    Text("PRO")
-                        .font(.mono(12, .bold))
-                        .kerning(0.9)
-                        .foregroundStyle(app.proMode ? Ink.base : Tone.secondary)
-                        .rotationEffect(rotation)
-                        .frame(width: 62, height: 44)
-                        .background {
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .fill(app.proMode ? Accent.amber : Color.white.opacity(0.07))
-                        }
-                        .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Pro controls")
-
                 Spacer(minLength: 0)
-
                 Button { onLibrary() } label: {
                     LibraryThumbnail(gallery: app.gallery)
                 }

@@ -1001,3 +1001,55 @@ final class LeafShutterGeometryTests: XCTestCase {
                        LeafShutterGeometry.apertureRadius(closure: 1), accuracy: 0.0001)
     }
 }
+
+// MARK: - Plate that opens and closes
+
+/// PRO now opens the plate rather than sitting at the bottom of the screen, and
+/// the picture is inset below the plate. Those two numbers have to agree in both
+/// states or the frame slides under opaque metal when PRO is toggled.
+final class TopPlateCollapseTests: XCTestCase {
+
+    func testTheClosedPlateIsShorterThanTheOpenOne() {
+        XCTAssertLessThan(TopPlateBand.collapsedHeight, TopPlateBand.height,
+                          "closing the plate has to give the picture room back")
+    }
+
+    func testTheHeightHelperMatchesBothConstants() {
+        XCTAssertEqual(TopPlateBand.height(proOpen: true), TopPlateBand.height)
+        XCTAssertEqual(TopPlateBand.height(proOpen: false), TopPlateBand.collapsedHeight)
+    }
+
+    /// The closed plate still carries the switch row, so it cannot collapse to
+    /// less than one 44pt target plus the status bar it sits under.
+    func testTheClosedPlateStillFitsItsSwitches() {
+        XCTAssertGreaterThanOrEqual(TopPlateBand.collapsedHeight, 90,
+                                    "the switch row would be clipped")
+    }
+}
+
+// MARK: - The barrel a dial drops
+
+final class ActiveDialTests: XCTestCase {
+
+    /// The barrel is driven by value equality — if two consecutive readings
+    /// compared equal while the reading text differed, the barrel would show a
+    /// stale number for the whole gesture.
+    func testADialChangeIsVisibleAsAChange() {
+        let a = ActiveDial(name: "ISO", reading: "400", value: 0.5)
+        let b = ActiveDial(name: "ISO", reading: "800", value: 0.6)
+        XCTAssertNotEqual(a, b)
+    }
+
+    func testTheSameReadingComparesEqualSoTheBarrelDoesNotThrash() {
+        let a = ActiveDial(name: "ISO", reading: "400", value: 0.5)
+        let b = ActiveDial(name: "ISO", reading: "400", value: 0.5)
+        XCTAssertEqual(a, b)
+    }
+
+    func testADialCarriesBothItsNameAndItsReading() {
+        let dial = ActiveDial(name: "WHITE BALANCE", reading: "5600K", value: 0.7)
+        XCTAssertFalse(dial.name.isEmpty)
+        XCTAssertFalse(dial.reading.isEmpty)
+        XCTAssertTrue((0...1).contains(dial.value))
+    }
+}
