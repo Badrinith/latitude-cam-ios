@@ -257,6 +257,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = Latitude;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Latitude uses the camera to shoot photos with manual controls and film simulations.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Latitude saves your captures to your photo library.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Latitude shows your Latitude roll by reading it back from Photos, so it does not keep a second copy of every frame.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UIStatusBarStyle = UIStatusBarStyleLightContent;
@@ -285,6 +286,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = Latitude;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Latitude uses the camera to shoot photos with manual controls and film simulations.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Latitude saves your captures to your photo library.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Latitude shows your Latitude roll by reading it back from Photos, so it does not keep a second copy of every frame.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UIStatusBarStyle = UIStatusBarStyleLightContent;

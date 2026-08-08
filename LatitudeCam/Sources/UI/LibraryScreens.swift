@@ -154,12 +154,78 @@ struct LibraryScreen: View {
     }
 }
 
+/// A frame, full size, with somewhere to go from it. Looking and editing are
+/// different intentions and this is what separates them.
+struct PhotoViewer: View {
+    var photo: PhotoGallery.Photo
+    var onEdit: () -> Void
+    var onDelete: () -> Void
+    var onClose: () -> Void
+
+    var body: some View {
+        ZStack {
+            Ink.base.opacity(0.97).ignoresSafeArea()
+                .onTapGesture { onClose() }
+
+            VStack(spacing: 0) {
+                HStack {
+                    ScreenReturn(title: "Close", action: onClose)
+                    Spacer()
+                    Text(stamp)
+                        .font(.mono(9, .semibold))
+                        .kerning(1)
+                        .foregroundStyle(Tone.quaternary)
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 10)
+
+                Spacer(minLength: 0)
+
+                Image(uiImage: photo.image)
+                    .resizable()
+                    .scaledToFit()
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .padding(.horizontal, 14)
+
+                Spacer(minLength: 0)
+
+                HStack(spacing: 30) {
+                    Button {
+                        Haptics.toggle()
+                        onDelete()
+                    } label: {
+                        Text("DELETE")
+                            .font(.mono(9.5, .semibold))
+                            .kerning(1)
+                            .foregroundStyle(Color(hex: 0xE2685A))
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 8)
+                            .background { Capsule().fill(Color.white.opacity(0.07)) }
+                    }
+                    .buttonStyle(.plain)
+
+                    PrimaryAction(title: "Edit", action: onEdit)
+                }
+                .padding(.bottom, 26)
+            }
+        }
+        .transition(.opacity)
+        .zIndex(5)
+    }
+
+    private var stamp: String {
+        let film = FilmPreset.all.first { $0.id == photo.filmID }?.name.uppercased() ?? "—"
+        return "\(film) · ISO \(photo.iso) · 1/\(photo.shutterDenominator)"
+    }
+}
+
 /// Owns the filter state and the gallery subscription so the surrounding screen
 /// does not rebuild when photos load in off the disk queue.
 private struct LibraryGrid: View {
     @ObservedObject var gallery: PhotoGallery
     @EnvironmentObject var app: AppState
     @State private var filter = "All"
+    @State private var viewing: PhotoGallery.Photo?
 
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 6), count: 3)
 
@@ -219,8 +285,11 @@ private struct LibraryGrid: View {
                     ForEach(filtered) { photo in
                         Button {
                             Haptics.tap()
-                            app.editingPhoto = photo
-                            app.go(.edit)
+                            // Opens the frame, not the editor. Tapping a photo used
+                            // to drop straight into edit controls, which is an
+                            // answer to a question nobody asked — most taps are to
+                            // look at the picture.
+                            withAnimation(.easeOut(duration: 0.18)) { viewing = photo }
                         } label: {
                             // Colour.clear sets the cell size and the photo fills
                             // it from an overlay. Sizing the Image directly let a
@@ -253,6 +322,11 @@ private struct LibraryGrid: View {
                         }
                         .buttonStyle(.plain)
                         .contextMenu {
+                            Button("Edit") {
+                                Haptics.tap()
+                                app.editingPhoto = photo
+                                app.go(.edit)
+                            }
                             Button("Delete", role: .destructive) {
                                 Haptics.toggle()
                                 gallery.deletePhoto(photo.id)
@@ -261,6 +335,26 @@ private struct LibraryGrid: View {
                     }
                 }
             }
+        }
+        .overlay { viewerOverlay }
+    }
+
+    @ViewBuilder
+    var viewerOverlay: some View {
+        if let photo = viewing {
+            PhotoViewer(
+                photo: photo,
+                onEdit: {
+                    app.editingPhoto = photo
+                    viewing = nil
+                    app.go(.edit)
+                },
+                onDelete: {
+                    gallery.deletePhoto(photo.id)
+                    withAnimation(.easeOut(duration: 0.18)) { viewing = nil }
+                },
+                onClose: { withAnimation(.easeOut(duration: 0.18)) { viewing = nil } }
+            )
         }
     }
 

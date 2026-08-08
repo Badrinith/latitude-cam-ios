@@ -1,8 +1,8 @@
 # Latitude Cam — Session Handoff
 
 **Date:** 5 Aug 2026
-**Branch:** `feat/camera-pipeline-dials-splash` — 33 commits, **all local, nothing pushed to `origin`**
-**Tests:** 266 passing
+**Branch:** `feat/camera-pipeline-dials-splash` — 34 commits, **all local, nothing pushed to `origin`**
+**Tests:** 271 passing
 **Device:** iPhone 17 Pro Max, UDID `854CD202-7808-597B-A70F-6A6628AED263` (build installed and current)
 
 ---
@@ -33,6 +33,9 @@
 | Portrait reconfigures the photo output, on demand only | Depth delivery narrows the device format and costs resolution on every frame |
 | Portrait applies on capture, not in the preview | Live depth needs a depth stream; the matte arrives with the still |
 | Editor uses the same barrel as the camera | An editor should not be learned separately from the camera it belongs to |
+| Apple Photos is the only copy; roll reads back from a "Latitude" album | The app kept its own JPEG of every frame, so each picture existed twice on the phone |
+| Shoot settings ride in the asset's `originalFilename` | Metadata survives the round trip without a second store |
+| `photoQualityPrioritization = .speed` per capture | Quality prioritisation fuses frames, and that fusion is the shutter lag |
 | Edit ladders have an odd stop count | Only an odd count puts a notch exactly at neutral |
 
 ## Architecture
@@ -49,7 +52,7 @@ CameraManager
 AppState  ──syncCamera()──▶  RenderSettings  ──apply()──▶  CameraManager
    proMode · autoExposure · autoFocus · metering · pointOfInterest
 
-PhotoGallery   1280pt roll copy + 420pt grid copy in memory, CGImageSourceCreateThumbnail on load
+PhotoGallery   1280pt roll + 420pt grid copy in memory; loads from the Latitude album in Photos
 PhotoExporter  paired asset (.photo + .alternatePhoto), falls back to two assets
 ```
 
@@ -69,6 +72,7 @@ PhotoExporter  paired asset (.photo + .alternatePhoto), falls back to two assets
 1. RAW pairs split into two Photos assets at any aspect but the sensor's own (JPEG cropped, DNG not → `PHPhotosErrorDomain 3300`, falls back to two assets).
 2. `AppState.proRAW` is now read only by the unreachable `ReviewScreen`; the button is gone.
 3. Edit screen writes a new frame rather than replacing; roll grows per save.
+5. `FilmPreviewBuffer` is never filled now — `FilmKnob` is its only reader and is dead.
 4. No Simulator.app in this Xcode (`~/Downloads/Apps/Xcode-beta.app`) — device verification only.
 
 ## Next steps

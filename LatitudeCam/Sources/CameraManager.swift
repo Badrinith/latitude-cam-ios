@@ -139,10 +139,6 @@ public final class CameraManager: NSObject, ObservableObject {
     private var lastFrameTime: CFTimeInterval = 0
     private let minFrameInterval: CFTimeInterval = 1.0 / 30.0
 
-    // The knob only needs to keep up with the eye, not the sensor.
-    private var lastPreviewTime: CFTimeInterval = 0
-    private let previewInterval: CFTimeInterval = 1.0 / 4.0
-    private static let previewEdge: CGFloat = 96
 
     override public init() {
         if let device = MTLCreateSystemDefaultDevice() {
@@ -731,9 +727,12 @@ public final class CameraManager: NSObject, ObservableObject {
             settings = AVCapturePhotoSettings(format: [AVVideoCodecKey: AVVideoCodecType.hevc])
         }
 
-        // Safe only because maxPhotoQualityPrioritization was raised to .quality
-        // during configuration.
-        settings.photoQualityPrioritization = .quality
+        // .speed, not .quality. Quality prioritisation lets the system fuse several
+        // frames, and that fusion is the delay between the tap and the exposure —
+        // zero shutter lag can serve the frame you asked for, but not if the
+        // pipeline then waits to gather more. The ceiling stays .quality so this
+        // remains a per-capture choice rather than a session-wide one.
+        settings.photoQualityPrioritization = .speed
 
         if current.portrait, photoOutput.isPortraitEffectsMatteDeliveryEnabled {
             settings.isPortraitEffectsMatteDeliveryEnabled = true
@@ -949,47 +948,12 @@ extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate {
             self?.frames.image = uiImage
         }
 
-        if now - lastPreviewTime >= previewInterval {
-            lastPreviewTime = now
-            makeFilmPreviews(from: source, settings: settings)
-        }
     }
 
-    /// One downscale, then a colour matrix per stock. Four 96pt renders at 4Hz is
-    /// nothing next to the 1080p pipeline they sit alongside.
-    private func makeFilmPreviews(from source: CIImage, settings s: RenderSettings) {
-        let extent = source.extent
-        guard extent.width > 1, extent.height > 1 else { return }
-
-        let scale = Self.previewEdge / max(extent.width, extent.height)
-        let small = source
-            .applyingFilter("CILanczosScaleTransform", parameters: [
-                kCIInputScaleKey: scale, kCIInputAspectRatioKey: 1.0
-            ])
-
-        var built: [String: UIImage] = [:]
-        for film in Self.previewFilmIDs {
-            var perStock = s
-            perStock.filmID = film
-            perStock.intensity = max(s.intensity, 0.85)
-            // No grain or peaking at thumbnail size — both are invisible there and
-            // only cost time.
-            perStock.grain = false
-            perStock.focusPeaking = false
-
-            let rendered = render(small, with: perStock)
-            if let cg = ciContext.createCGImage(rendered, from: small.extent) {
-                built[film] = UIImage(cgImage: cg)
-            }
-        }
-
-        guard !built.isEmpty else { return }
-        DispatchQueue.main.async { [weak self] in
-            self?.filmPreviews.thumbnails = built
-        }
-    }
-
-    static let previewFilmIDs = ["neutral", "amber", "slate", "rust", "mono"]
+    // makeFilmPreviews lived here: five 96pt renders every quarter second, feeding
+    // a film knob that no longer exists. Dead work on the frame path is worse than
+    // dead code anywhere else — it competed with the preview for the GPU on every
+    // fourth frame and nothing was looking at the result.
 
     public func captureOutput(
         _ output: AVCaptureOutput,

@@ -654,17 +654,20 @@ final class AppState: ObservableObject {
         // Failures still speak up, below.
         let mirrorEnabled = UserDefaults.standard.object(forKey: Pref.mirrorToPhotos) as? Bool ?? true
 
+        let filename = savedPhotoID.map(PhotoGallery.filename(for:))
+
         exportQueue.async { [weak self] in
             guard let self else { return }
-            if let dng = still.raw {
-                PhotoExporter.saveRawDNG(dng, iso: self.isoValue) { _, _ in }
-            }
             guard mirrorEnabled else { return }
 
             // A full-resolution encode is far too slow for the main queue; running
             // it there froze the whole viewfinder for the duration.
+            //
+            // The DNG no longer goes to a folder of its own either — it rides with
+            // the JPEG into Photos, so a frame exists once on the phone rather than
+            // three times.
             let jpeg = frame?.jpegData(compressionQuality: quality)
-            PhotoExporter.saveCapture(jpeg: jpeg, dng: still.raw) { ok, problem in
+            PhotoExporter.saveCapture(jpeg: jpeg, dng: still.raw, filename: filename) { ok, problem in
                 guard !ok else { return }
                 Task { @MainActor in
                     self.lastSaveMessage = problem ?? "Could not save to Photos"

@@ -183,3 +183,64 @@ final class PrivacyTests: XCTestCase {
         XCTAssertTrue(policy.contains("Privacy Policy"))
     }
 }
+
+// MARK: - Single copy
+
+@MainActor
+final class SingleCopyTests: XCTestCase {
+
+    /// The app used to keep its own JPEG of every frame in Documents, so every
+    /// picture existed twice on the phone — once where the user expects it and
+    /// once where they cannot see it. Adding a frame must now touch app storage
+    /// not at all.
+    func testAddingAFrameWritesNothingToAppStorage() {
+        let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        try? FileManager.default.removeItem(at: documents.appendingPathComponent("Gallery"))
+        try? FileManager.default.removeItem(at: documents.appendingPathComponent("LatitudeCam"))
+
+        let gallery = PhotoGallery()
+        gallery.addPhoto(UIImage(systemName: "camera") ?? UIImage(),
+                         filmID: "amber", iso: 400, shutterDenominator: 60)
+
+        let settled = expectation(description: "insert landed")
+        DispatchQueue.main.async { settled.fulfill() }
+        wait(for: [settled], timeout: 2)
+
+        // Give any stray write a chance to appear before asserting it did not.
+        let drained = expectation(description: "queues drained")
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.3) { drained.fulfill() }
+        wait(for: [drained], timeout: 2)
+
+        XCTAssertFalse(
+            FileManager.default.fileExists(atPath: documents.appendingPathComponent("Gallery").path),
+            "a second copy of the roll is back in app storage"
+        )
+        XCTAssertEqual(gallery.photos.count, 1, "the frame is still in the roll")
+    }
+
+    /// The filename is how the shoot settings survive the round trip through
+    /// Photos, so it has to be the id and nothing else.
+    func testFilenameCarriesTheIDAndParsesBack() {
+        let when = Date(timeIntervalSince1970: 1_000_000)
+        let id = PhotoGallery.makeID(timestamp: when, filmID: "harbour", iso: 800, shutter: 250)
+        let name = PhotoGallery.filename(for: id)
+
+        XCTAssertTrue(name.hasSuffix(".jpg"))
+        let recovered = (name as NSString).deletingPathExtension
+        XCTAssertEqual(recovered, id)
+
+        let meta = PhotoGallery.parseID(recovered)
+        XCTAssertEqual(meta.filmID, "harbour")
+        XCTAssertEqual(meta.iso, 800)
+        XCTAssertEqual(meta.shutter, 250)
+    }
+
+    /// A frame taken by anything else lands in the album without our filename and
+    /// must not crash the loader or claim settings it never had.
+    func testAForeignFilenameGetsDefaultsRatherThanNonsense() {
+        let meta = PhotoGallery.parseID("IMG_4021")
+        XCTAssertFalse(meta.filmID.isEmpty)
+        XCTAssertGreaterThan(meta.iso, 0)
+        XCTAssertGreaterThan(meta.shutter, 0)
+    }
+}

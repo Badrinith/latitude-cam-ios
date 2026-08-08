@@ -13,6 +13,32 @@ import Photos
 
 public class PhotoExporter {
 
+    /// The album the roll is read back from. Having our own album is what lets the
+    /// library show your frames without the app keeping a second copy of them.
+    static let albumName = "Latitude"
+
+    /// Finds our album, creating it the first time. Runs inside whatever change
+    /// block calls it only for the create; the fetch is cheap and synchronous.
+    static func album() -> PHAssetCollection? {
+        let options = PHFetchOptions()
+        options.predicate = NSPredicate(format: "title = %@", albumName)
+        let existing = PHAssetCollection.fetchAssetCollections(
+            with: .album, subtype: .albumRegular, options: options
+        )
+        if let found = existing.firstObject { return found }
+
+        var identifier: String?
+        try? PHPhotoLibrary.shared().performChangesAndWait {
+            let request = PHAssetCollectionChangeRequest
+                .creationRequestForAssetCollection(withTitle: albumName)
+            identifier = request.placeholderForCreatedAssetCollection.localIdentifier
+        }
+        guard let identifier else { return nil }
+        return PHAssetCollection.fetchAssetCollections(
+            withLocalIdentifiers: [identifier], options: nil
+        ).firstObject
+    }
+
     /// Save one exposure to Apple Photos: the developed JPEG, with the DNG attached
     /// to the same asset as its raw alternate rather than as a second photo.
     ///
@@ -25,6 +51,7 @@ public class PhotoExporter {
     public static func saveCapture(
         jpeg: Data?,
         dng: Data?,
+        filename: String? = nil,
         completion: @escaping (Bool, String?) -> Void
     ) {
         guard jpeg != nil || dng != nil else {
@@ -32,7 +59,10 @@ public class PhotoExporter {
             return
         }
 
-        PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in
+        // .readWrite rather than .addOnly. The library is now the only copy, so
+        // the app has to be able to read it back — add-only would let us save
+        // frames we could never show again.
+        PHPhotoLibrary.requestAuthorization(for: .readWrite) { status in
             guard status == .authorized || status == .limited else {
                 DispatchQueue.main.async {
                     completion(false, permissionMessage(for: status))
@@ -45,12 +75,12 @@ public class PhotoExporter {
             // request with changeNotSupported (PHPhotosErrorDomain 3300).
             let dngURL = dng.flatMap(writeTemporaryDNG)
 
-            addPaired(jpeg: jpeg, dngURL: dngURL) { paired, pairError in
+            addPaired(jpeg: jpeg, dngURL: dngURL, filename: filename) { paired, pairError in
                 if paired {
                     DispatchQueue.main.async { completion(true, nil) }
                     return
                 }
-                addSeparately(jpeg: jpeg, dngURL: dngURL) { ok, splitError in
+                addSeparately(jpeg: jpeg, dngURL: dngURL, filename: filename) { ok, splitError in
                     if !ok, let dngURL { try? FileManager.default.removeItem(at: dngURL) }
                     DispatchQueue.main.async {
                         completion(ok, ok ? nil : describe(splitError ?? pairError))
@@ -64,12 +94,18 @@ public class PhotoExporter {
     private static func addPaired(
         jpeg: Data?,
         dngURL: URL?,
+        filename: String?,
         completion: @escaping (Bool, Error?) -> Void
     ) {
+        let collection = album()
         PHPhotoLibrary.shared().performChanges({
             let request = PHAssetCreationRequest.forAsset()
             if let jpeg {
-                request.addResource(with: .photo, data: jpeg, options: nil)
+                // The shoot settings ride in the resource filename, which is how
+                // the roll reads them back without a second store of its own.
+                let options = PHAssetResourceCreationOptions()
+                options.originalFilename = filename
+                request.addResource(with: .photo, data: jpeg, options: options)
             }
             if let dngURL {
                 let options = PHAssetResourceCreationOptions()
@@ -81,24 +117,42 @@ public class PhotoExporter {
                     options: options
                 )
             }
+            file(request, into: collection)
         }, completionHandler: completion)
+    }
+
+    /// Puts the new asset in our album as part of the same change, so a frame is
+    /// never briefly in the library but outside the roll.
+    private static func file(
+        _ request: PHAssetCreationRequest, into collection: PHAssetCollection?
+    ) {
+        guard let collection,
+              let placeholder = request.placeholderForCreatedAsset,
+              let change = PHAssetCollectionChangeRequest(for: collection) else { return }
+        change.addAssets([placeholder] as NSArray)
     }
 
     private static func addSeparately(
         jpeg: Data?,
         dngURL: URL?,
+        filename: String?,
         completion: @escaping (Bool, Error?) -> Void
     ) {
+        let collection = album()
         PHPhotoLibrary.shared().performChanges({
             if let jpeg {
-                PHAssetCreationRequest.forAsset()
-                    .addResource(with: .photo, data: jpeg, options: nil)
+                let request = PHAssetCreationRequest.forAsset()
+                let options = PHAssetResourceCreationOptions()
+                options.originalFilename = filename
+                request.addResource(with: .photo, data: jpeg, options: options)
+                file(request, into: collection)
             }
             if let dngURL {
+                let request = PHAssetCreationRequest.forAsset()
                 let options = PHAssetResourceCreationOptions()
                 options.shouldMoveFile = true
-                PHAssetCreationRequest.forAsset()
-                    .addResource(with: .photo, fileURL: dngURL, options: options)
+                request.addResource(with: .photo, fileURL: dngURL, options: options)
+                file(request, into: collection)
             }
         }, completionHandler: completion)
     }

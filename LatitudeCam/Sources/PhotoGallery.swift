@@ -8,6 +8,7 @@
 import Foundation
 import UIKit
 import ImageIO
+import Photos
 
 public final class PhotoGallery: ObservableObject {
 
@@ -19,6 +20,9 @@ public final class PhotoGallery: ObservableObject {
         /// a 2048px image means downsampling a megapixel per cell on every scroll
         /// tick, for a picture the size of a postage stamp.
         public let thumb: UIImage
+        /// The asset in Apple Photos this row stands for. Nil only for a frame
+        /// taken this session that the library has not confirmed yet.
+        public let assetID: String?
         public let filmID: String
         public let iso: Int
         public let shutterDenominator: Int
@@ -52,37 +56,43 @@ public final class PhotoGallery: ObservableObject {
             id: id,
             image: image,
             thumb: Self.downscaled(image, maxEdge: Self.gridEdge),
+            assetID: nil,
             filmID: filmID,
             iso: iso,
             shutterDenominator: shutterDenominator,
             timestamp: timestamp
         )
 
+        // Shown immediately, so the roll never lags the shutter. Nothing is written
+        // to app storage: Apple Photos is the only copy, and the next load reads it
+        // back from there.
         DispatchQueue.main.async { [weak self] in
             self?.photos.insert(photo, at: 0)
-        }
-
-        let quality = Pref.compressionQuality(
-            Pref.string(Pref.jpegQuality, default: "Maximum")
-        )
-        ioQueue.async { [weak self] in
-            guard let self, let data = image.jpegData(compressionQuality: quality) else { return }
-            try? data.write(to: self.galleryDirectory().appendingPathComponent("\(id).jpg"))
         }
         return id
     }
 
+    /// The name the frame is filed under in Photos. The shoot settings ride in it,
+    /// which is how the roll reads them back without a second store of its own.
+    public static func filename(for id: String) -> String { "\(id).jpg" }
+
     public func deletePhoto(_ id: String) {
+        let assetID = photos.first { $0.id == id }?.assetID
+
         DispatchQueue.main.async { [weak self] in
             self?.photos.removeAll { $0.id == id }
         }
-        ioQueue.async { [weak self] in
-            guard let self else { return }
-            // The file has to go too — dropping only the in-memory entry meant
-            // loadPhotos() resurrected deleted photos on the next launch.
-            try? self.fileManager.removeItem(
-                at: self.galleryDirectory().appendingPathComponent("\(id).jpg")
-            )
+
+        // The asset has to go too, or the next load brings it straight back. Photos
+        // asks the user to confirm, which is right: this is their library now, not
+        // ours to quietly empty.
+        guard let assetID else { return }
+        ioQueue.async {
+            let assets = PHAsset.fetchAssets(withLocalIdentifiers: [assetID], options: nil)
+            guard assets.count > 0 else { return }
+            PHPhotoLibrary.shared().performChanges {
+                PHAssetChangeRequest.deleteAssets(assets)
+            }
         }
     }
 
@@ -130,38 +140,79 @@ public final class PhotoGallery: ObservableObject {
         }
     }
 
+    /// Reads the roll back out of Apple Photos.
+    ///
+    /// The app used to keep its own JPEG of every frame in Documents, which meant
+    /// every picture existed twice on the phone — once where the user expects it
+    /// and once where they cannot see it. Photos is now the only copy, and this
+    /// fetches our own album back.
     private func loadPhotos() {
-        let urls = (try? fileManager.contentsOfDirectory(
-            at: galleryDirectory(), includingPropertiesForKeys: nil
-        )) ?? []
+        let status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+        guard status == .authorized || status == .limited else { return }
+        guard let album = PhotoExporter.album() else { return }
 
-        let loaded: [Photo] = urls
-            .filter { $0.pathExtension.lowercased() == "jpg" }
-            .compactMap { url in
-                guard let image = Self.thumbnail(at: url, maxEdge: Self.inMemoryEdge),
-                      let thumb = Self.thumbnail(at: url, maxEdge: Self.gridEdge) else { return nil }
-                let id = url.deletingPathExtension().lastPathComponent
-                let meta = Self.parseID(id)
-                return Photo(
-                    id: id,
-                    image: image,
-                    thumb: thumb,
-                    filmID: meta.filmID,
-                    iso: meta.iso,
-                    shutterDenominator: meta.shutter,
-                    timestamp: meta.timestamp
-                )
-            }
-            .sorted { $0.timestamp > $1.timestamp }
+        let options = PHFetchOptions()
+        options.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
+        let assets = PHAssets.fetch(in: album, options: options)
+
+        let manager = PHImageManager.default()
+        let request = PHImageRequestOptions()
+        request.isSynchronous = true
+        request.deliveryMode = .highQualityFormat
+        request.isNetworkAccessAllowed = true
+
+        var loaded: [Photo] = []
+        for asset in assets {
+            // The filename carries the shoot settings; a frame taken by anything
+            // else lands in the album without one and gets sensible defaults.
+            let name = PHAssetResource.assetResources(for: asset)
+                .first?.originalFilename ?? ""
+            let id = (name as NSString).deletingPathExtension
+            let meta = Self.parseID(id)
+
+            var full: UIImage?
+            var small: UIImage?
+            manager.requestImage(
+                for: asset,
+                targetSize: CGSize(width: Self.inMemoryEdge, height: Self.inMemoryEdge),
+                contentMode: .aspectFit, options: request
+            ) { image, _ in full = image }
+            manager.requestImage(
+                for: asset,
+                targetSize: CGSize(width: Self.gridEdge, height: Self.gridEdge),
+                contentMode: .aspectFit, options: request
+            ) { image, _ in small = image }
+
+            guard let full, let small else { continue }
+            loaded.append(Photo(
+                id: id.isEmpty ? asset.localIdentifier : id,
+                image: full,
+                thumb: small,
+                assetID: asset.localIdentifier,
+                filmID: meta.filmID,
+                iso: meta.iso,
+                shutterDenominator: meta.shutter,
+                timestamp: asset.creationDate ?? meta.timestamp
+            ))
+        }
 
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
-            // A capture can land before this first disk read returns. Replacing
-            // the array wholesale silently dropped that photo from the grid, so
-            // merge on id and keep whatever is already in memory.
-            let known = Set(self.photos.map(\.id))
-            self.photos = (self.photos + loaded.filter { !known.contains($0.id) })
+            // A capture can land before this returns. Replacing the array wholesale
+            // silently dropped that photo from the grid, so merge on id.
+            let known = Set(loaded.map(\.id))
+            self.photos = (loaded + self.photos.filter { !known.contains($0.id) })
                 .sorted { $0.timestamp > $1.timestamp }
+        }
+    }
+
+    /// Small shim so the fetch reads as a sequence rather than as index arithmetic.
+    private enum PHAssets {
+        static func fetch(in album: PHAssetCollection, options: PHFetchOptions) -> [PHAsset] {
+            let result = PHAsset.fetchAssets(in: album, options: options)
+            var assets: [PHAsset] = []
+            result.enumerateObjects { asset, _, _ in assets.append(asset) }
+            return assets
         }
     }
 
