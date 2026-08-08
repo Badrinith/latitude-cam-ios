@@ -1,8 +1,8 @@
 # Latitude Cam — Session Handoff
 
 **Date:** 5 Aug 2026
-**Branch:** `feat/camera-pipeline-dials-splash` — 34 commits, **all local, nothing pushed to `origin`**
-**Tests:** 271 passing
+**Branch:** `feat/camera-pipeline-dials-splash` — 35 commits, **all local, nothing pushed to `origin`**
+**Tests:** 273 passing
 **Device:** iPhone 17 Pro Max, UDID `854CD202-7808-597B-A70F-6A6628AED263` (build installed and current)
 
 ---
@@ -35,7 +35,10 @@
 | Editor uses the same barrel as the camera | An editor should not be learned separately from the camera it belongs to |
 | Apple Photos is the only copy; roll reads back from a "Latitude" album | The app kept its own JPEG of every frame, so each picture existed twice on the phone |
 | Shoot settings ride in the asset's `originalFilename` | Metadata survives the round trip without a second store |
-| `photoQualityPrioritization = .speed` per capture | Quality prioritisation fuses frames, and that fusion is the shutter lag |
+| `photoQualityPrioritization = .balanced` per capture | `.speed` gave up processing entirely; `.balanced` + fast-capture-prioritization adapts to shooting pace |
+| Pinch zoom drives `zoom` (Double), selector snaps to nearest lens | A pinch lands between marked lenses; the lens buttons name the nearest one |
+| Gallery pinch changes column count (2-5), not image scale | Scaling photos in a fixed grid would crop them, not "zoom" the contact sheet |
+| Gallery viewer is a `TabView(.page)` over the filtered roll, each page independently pinch/pan zoomable | Paging, momentum, and per-page zoom state all come free from the system |
 | Edit ladders have an odd stop count | Only an odd count puts a notch exactly at neutral |
 
 ## Architecture

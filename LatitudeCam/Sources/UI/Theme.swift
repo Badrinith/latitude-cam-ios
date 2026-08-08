@@ -307,6 +307,11 @@ final class AppState: ObservableObject {
     /// Which lens is selected, by id. Held as an id rather than a zoom factor so
     /// it survives a camera flip, where the ladder is a different one entirely.
     @Published var lensID = "wide" { didSet { syncCamera() } }
+    /// The live zoom factor. Held here rather than derived from the lens, because
+    /// a pinch lands between lenses and the selector then reports whichever it is
+    /// nearest — the same way a zoom ring passes through the marked focal lengths
+    /// without stopping on them.
+    @Published var zoom: Double = 1 { didSet { syncCamera() } }
     /// Set from what the camera reported, not from the tap — a body that cannot
     /// separate depth must not leave the control claiming it did.
     @Published private(set) var portrait = false
@@ -498,7 +503,7 @@ final class AppState: ObservableObject {
         s.lensPosition = focus
         s.metering = metering
         s.pointOfInterest = pointOfInterest
-        s.zoomFactor = Double(currentLens?.zoom ?? 1)
+        s.zoomFactor = zoom
         s.portrait = portrait
         s.aperture = apertureValue
         cameraManager.apply(s)
@@ -557,6 +562,24 @@ final class AppState: ObservableObject {
         guard lens.id != lensID else { return }
         Haptics.detent()
         lensID = lens.id
+        zoom = Double(lens.zoom)
+    }
+
+    /// Pinch. Multiplicative, because zoom is — adding a delta makes the gesture
+    /// feel heavy at the wide end and skittish at the long one.
+    func pinchZoom(by scale: Double) {
+        let range = cameraManager.zoomRange
+        let next = min(max(zoom * scale, Double(range.lowerBound)), Double(range.upperBound))
+        guard abs(next - zoom) > 0.0001 else { return }
+        zoom = next
+
+        // The selector follows the pinch to the nearest marked lens, so the two
+        // never disagree about what you are looking through.
+        if let nearest = cameraManager.lenses.min(by: {
+            abs(Double($0.zoom) - next) < abs(Double($1.zoom) - next)
+        }), nearest.id != lensID {
+            lensID = nearest.id
+        }
     }
 
     func flipCamera() {
@@ -890,6 +913,13 @@ final class AppState: ObservableObject {
         }) {
             whiteBalance = (Double(index) + 0.5) / Double(Self.whiteBalanceStops.count)
         }
+        // The wide lens is not at factor 1 on a virtual device, so the camera has
+        // to say where it is before the app can start there.
+        cameraManager.onLensesReady = { [weak self] wide in
+            guard let self, self.zoom == 1 else { return }
+            self.zoom = Double(wide)
+        }
+
         // A persisted manual exposure must not outlive the controls that set it.
         if !proMode { returnToAuto() }
         syncCamera()

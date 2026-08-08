@@ -213,6 +213,7 @@ struct ViewfinderScreen: View {
     @StateObject private var orientation = DeviceOrientation()
     @State private var reticle: CGPoint?
     @State private var lastPreviewSize: CGSize?
+    @State private var lastPinch: CGFloat = 1
 
     var body: some View {
         ZStack {
@@ -220,12 +221,24 @@ struct ViewfinderScreen: View {
 
             CameraPreview(frames: app.cameraManager.frames)
                 .contentShape(Rectangle())
+                // A spatial tap rather than a zero-distance drag: a drag gesture
+                // fires on the first finger of a pinch too, so metering used to
+                // jump to wherever the pinch began.
+                .onTapGesture { location in meter(at: location) }
                 .gesture(
-                    // SPOT metering has to read from somewhere, and the only
-                    // honest answer is wherever you pointed.
-                    DragGesture(minimumDistance: 0).onEnded { value in
-                        meter(at: value.location)
-                    }
+                    MagnificationGesture()
+                        .onChanged { value in
+                            // Relative to the last reading, not to the start of the
+                            // gesture — otherwise the zoom snaps back to where the
+                            // pinch began every time the scale is re-read.
+                            let step = value / lastPinch
+                            lastPinch = value
+                            app.pinchZoom(by: step)
+                        }
+                        .onEnded { _ in
+                            lastPinch = 1
+                            Haptics.detent()
+                        }
                 )
 
             AspectMask(aspect: aspect)
@@ -293,10 +306,24 @@ struct ViewfinderScreen: View {
             controlRow
                 .padding(.top, 6)
 
-            MeterReadout(
-                frames: app.cameraManager.frames,
-                rotation: orientation.angle
-            )
+            HStack(spacing: 7) {
+                MeterReadout(
+                    frames: app.cameraManager.frames,
+                    rotation: orientation.angle
+                )
+
+                // The lens buttons name the nearest marked focal length; between
+                // them only a number can say where you actually are.
+                if let wide = app.cameraManager.lenses.first(where: { $0.id == "wide" }) {
+                    Text(String(format: "%.1f×", app.zoom / Double(wide.zoom)))
+                        .font(.mono(11, .semibold))
+                        .foregroundStyle(Accent.amber)
+                        .rotationEffect(orientation.angle)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 6)
+                        .glass(radius: 14)
+                }
+            }
 
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 8) {

@@ -660,3 +660,26 @@ final class PortraitModeTests: XCTestCase {
         XCTAssertEqual(app.apertureValue, 16, accuracy: 0.001)
     }
 }
+
+// MARK: - Pinch zoom
+
+@MainActor
+final class PinchZoomTests: XCTestCase {
+
+    /// A pinch has to stay inside what the hardware will accept, or
+    /// videoZoomFactor throws. Range starts 1...1 before the device answers, so a
+    /// pinch before that point must not move anything.
+    func testPinchClampsToTheReportedRange() {
+        let app = AppState()
+        let before = app.zoom
+        app.pinchZoom(by: 50)
+        XCTAssertEqual(app.zoom, before, accuracy: 0.001,
+                       "zoomed past the range reported before the camera answered")
+    }
+
+    func testZoomReachesTheRenderPipeline() {
+        let app = AppState()
+        app.zoom = 3
+        XCTAssertEqual(app.cameraManager.currentSettings.zoomFactor, 3, accuracy: 0.001)
+    }
+}

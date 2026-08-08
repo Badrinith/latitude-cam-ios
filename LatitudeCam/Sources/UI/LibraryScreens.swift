@@ -154,45 +154,84 @@ struct LibraryScreen: View {
     }
 }
 
-/// A frame, full size, with somewhere to go from it. Looking and editing are
-/// different intentions and this is what separates them.
+/// The full roll, one frame at a time, with somewhere to go from whichever one
+/// is on screen. Looking and editing are different intentions and this is what
+/// separates them; paging is what makes it a viewer rather than a single photo
+/// wearing a close button.
 struct PhotoViewer: View {
-    var photo: PhotoGallery.Photo
-    var onEdit: () -> Void
-    var onDelete: () -> Void
+    var photos: [PhotoGallery.Photo]
+    var startingAt: String
+    var onEdit: (PhotoGallery.Photo) -> Void
+    var onDelete: (PhotoGallery.Photo) -> Void
     var onClose: () -> Void
+
+    @State private var current: String
+
+    init(
+        photos: [PhotoGallery.Photo], startingAt: String,
+        onEdit: @escaping (PhotoGallery.Photo) -> Void,
+        onDelete: @escaping (PhotoGallery.Photo) -> Void,
+        onClose: @escaping () -> Void
+    ) {
+        self.photos = photos
+        self.startingAt = startingAt
+        self.onEdit = onEdit
+        self.onDelete = onDelete
+        self.onClose = onClose
+        self._current = State(initialValue: startingAt)
+    }
+
+    private var index: Int { photos.firstIndex { $0.id == current } ?? 0 }
 
     var body: some View {
         ZStack {
-            Ink.base.opacity(0.97).ignoresSafeArea()
-                .onTapGesture { onClose() }
+            Ink.base.ignoresSafeArea()
+
+            // One paged scroll rather than a manual swipe gesture: paging,
+            // momentum and the settle onto a whole frame all come from the system
+            // for free, and each page keeps its own pinch state independently.
+            TabView(selection: $current) {
+                ForEach(photos) { photo in
+                    ZoomableImage(image: photo.image)
+                        .tag(photo.id)
+                }
+            }
+            .tabViewStyle(.page(indexDisplayMode: .never))
+            .ignoresSafeArea()
 
             VStack(spacing: 0) {
                 HStack {
                     ScreenReturn(title: "Close", action: onClose)
                     Spacer()
-                    Text(stamp)
-                        .font(.mono(9, .semibold))
-                        .kerning(1)
-                        .foregroundStyle(Tone.quaternary)
+                    VStack(spacing: 1) {
+                        Text(stamp)
+                            .font(.mono(9, .semibold))
+                            .kerning(1)
+                            .foregroundStyle(Tone.quaternary)
+                        if photos.count > 1 {
+                            Text("\(index + 1) OF \(photos.count)")
+                                .font(.mono(8, .medium))
+                                .kerning(0.8)
+                                .foregroundStyle(Tone.quaternary.opacity(0.7))
+                        }
+                    }
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 10)
-
-                Spacer(minLength: 0)
-
-                Image(uiImage: photo.image)
-                    .resizable()
-                    .scaledToFit()
-                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                    .padding(.horizontal, 14)
+                .background {
+                    LinearGradient(colors: [Ink.base.opacity(0.85), .clear],
+                                   startPoint: .top, endPoint: .bottom)
+                        .frame(height: 90)
+                        .allowsHitTesting(false)
+                        .frame(maxHeight: .infinity, alignment: .top)
+                }
 
                 Spacer(minLength: 0)
 
                 HStack(spacing: 30) {
                     Button {
                         Haptics.toggle()
-                        onDelete()
+                        if let photo = current(in: photos) { onDelete(photo) }
                     } label: {
                         Text("DELETE")
                             .font(.mono(9.5, .semibold))
@@ -204,18 +243,100 @@ struct PhotoViewer: View {
                     }
                     .buttonStyle(.plain)
 
-                    PrimaryAction(title: "Edit", action: onEdit)
+                    PrimaryAction(title: "Edit") {
+                        if let photo = current(in: photos) { onEdit(photo) }
+                    }
                 }
                 .padding(.bottom, 26)
+                .background {
+                    LinearGradient(colors: [.clear, Ink.base.opacity(0.85)],
+                                   startPoint: .top, endPoint: .bottom)
+                        .frame(height: 110)
+                        .allowsHitTesting(false)
+                        .frame(maxHeight: .infinity, alignment: .bottom)
+                }
             }
         }
         .transition(.opacity)
         .zIndex(5)
     }
 
+    private func current(in photos: [PhotoGallery.Photo]) -> PhotoGallery.Photo? {
+        photos.first { $0.id == current }
+    }
+
     private var stamp: String {
+        guard let photo = current(in: photos) else { return "" }
         let film = FilmPreset.all.first { $0.id == photo.filmID }?.name.uppercased() ?? "—"
         return "\(film) · ISO \(photo.iso) · 1/\(photo.shutterDenominator)"
+    }
+}
+
+/// One page of the viewer: a photo that pinches to zoom and drags while zoomed,
+/// and snaps back the moment it is released at 1×.
+private struct ZoomableImage: View {
+    var image: UIImage
+
+    @State private var scale: CGFloat = 1
+    @State private var lastScale: CGFloat = 1
+    @State private var offset: CGSize = .zero
+    @State private var lastOffset: CGSize = .zero
+
+    var body: some View {
+        GeometryReader { geo in
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFit()
+                .frame(width: geo.size.width, height: geo.size.height)
+                .scaleEffect(scale)
+                .offset(offset)
+                .contentShape(Rectangle())
+                .gesture(
+                    MagnificationGesture()
+                        .onChanged { value in
+                            scale = min(max(lastScale * value, 1), 5)
+                        }
+                        .onEnded { _ in
+                            lastScale = scale
+                            if scale <= 1.01 {
+                                // Below 1× the image is stuck to a size smaller
+                                // than its frame; there is nothing to pan, and
+                                // TabView needs the swipe back for paging.
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                    scale = 1; lastScale = 1
+                                    offset = .zero; lastOffset = .zero
+                                }
+                            }
+                            Haptics.detent()
+                        }
+                )
+                .simultaneousGesture(
+                    // Only competes with paging once zoomed — at 1× the page
+                    // TabView owns horizontal drags outright, which is what lets
+                    // swiping between photos keep working when not zoomed in.
+                    scale > 1.01 ?
+                    DragGesture()
+                        .onChanged { value in
+                            offset = CGSize(
+                                width: lastOffset.width + value.translation.width,
+                                height: lastOffset.height + value.translation.height
+                            )
+                        }
+                        .onEnded { _ in lastOffset = offset }
+                    : nil
+                )
+                .onTapGesture(count: 2) {
+                    withAnimation(.spring(response: 0.32, dampingFraction: 0.78)) {
+                        if scale > 1.01 {
+                            scale = 1; lastScale = 1
+                            offset = .zero; lastOffset = .zero
+                        } else {
+                            scale = 2.5; lastScale = 2.5
+                        }
+                    }
+                    Haptics.detent()
+                }
+        }
     }
 }
 
@@ -227,7 +348,15 @@ private struct LibraryGrid: View {
     @State private var filter = "All"
     @State private var viewing: PhotoGallery.Photo?
 
-    private let columns = Array(repeating: GridItem(.flexible(), spacing: 6), count: 3)
+    /// 2, 3 or 4 across. A pinch changes the count rather than the image scale —
+    /// scaling the images themselves inside a fixed grid would just crop them,
+    /// which is not what "zoom" means to someone looking at a contact sheet.
+    @State private var columnCount = 3
+    @State private var pinchStart = 3
+
+    private var columns: [GridItem] {
+        Array(repeating: GridItem(.flexible(), spacing: 6), count: columnCount)
+    }
 
     /// Families, not stocks. Twelve chips in a fixed HStack ran off the right of
     /// the screen with no way to reach the ones past the edge — which is what
@@ -291,34 +420,7 @@ private struct LibraryGrid: View {
                             // look at the picture.
                             withAnimation(.easeOut(duration: 0.18)) { viewing = photo }
                         } label: {
-                            // Colour.clear sets the cell size and the photo fills
-                            // it from an overlay. Sizing the Image directly let a
-                            // 1080px frame lay out far bigger than its cell —
-                            // clipped() hides that but hit testing still used the
-                            // full bounds, so the top row swallowed taps meant for
-                            // the back button.
-                            Color.clear
-                                .aspectRatio(1, contentMode: .fit)
-                                .overlay {
-                                    Image(uiImage: photo.thumb)
-                                        .resizable()
-                                        .scaledToFill()
-                                }
-                                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                                .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                                .overlay(alignment: .bottomLeading) {
-                                    Circle()
-                                        .fill(swatch(for: photo.filmID))
-                                        .frame(width: 8, height: 8)
-                                        .overlay {
-                                            Circle().strokeBorder(
-                                                photo.filmID == "mono"
-                                                    ? Color.white.opacity(0.3) : .clear,
-                                                lineWidth: 1
-                                            )
-                                        }
-                                        .padding(5)
-                                }
+                            gridCell(photo)
                         }
                         .buttonStyle(.plain)
                         .contextMenu {
@@ -334,25 +436,71 @@ private struct LibraryGrid: View {
                         }
                     }
                 }
+                // Column count, not image scale: scaling the photos inside a fixed
+                // grid would only crop them, which is not what "zoom" means to
+                // someone looking at a contact sheet. Snapped to a whole column so
+                // the pinch has a definite place to land rather than settling on a
+                // fractional width.
+                .animation(.spring(response: 0.32, dampingFraction: 0.82), value: columnCount)
+                .gesture(
+                    MagnificationGesture()
+                        .onChanged { value in
+                            let proposed = Double(pinchStart) / value
+                            columnCount = min(5, max(2, Int(proposed.rounded())))
+                        }
+                        .onEnded { _ in
+                            pinchStart = columnCount
+                            Haptics.detent()
+                        }
+                )
             }
         }
         .overlay { viewerOverlay }
     }
 
+    /// Colour.clear sets the cell size and the photo fills it from an overlay.
+    /// Sizing the Image directly let a 1080px frame lay out far bigger than its
+    /// cell — clipped() hides that but hit testing still used the full bounds, so
+    /// the top row swallowed taps meant for the back button.
+    private func gridCell(_ photo: PhotoGallery.Photo) -> some View {
+        Color.clear
+            .aspectRatio(1, contentMode: .fit)
+            .overlay {
+                Image(uiImage: photo.thumb)
+                    .resizable()
+                    .scaledToFill()
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay(alignment: .bottomLeading) {
+                Circle()
+                    .fill(swatch(for: photo.filmID))
+                    .frame(width: 8, height: 8)
+                    .overlay {
+                        Circle().strokeBorder(
+                            photo.filmID == "mono" ? Color.white.opacity(0.3) : .clear,
+                            lineWidth: 1
+                        )
+                    }
+                    .padding(5)
+            }
+    }
+
     @ViewBuilder
     var viewerOverlay: some View {
         if let photo = viewing {
+            // The whole filtered roll, not just the one photo — scrolling through
+            // the viewer is scrolling through what you were already looking at,
+            // not a second, narrower list.
             PhotoViewer(
-                photo: photo,
-                onEdit: {
-                    app.editingPhoto = photo
+                photos: filtered,
+                startingAt: photo.id,
+                onEdit: { chosen in
+                    app.editingPhoto = chosen
                     viewing = nil
                     app.go(.edit)
                 },
-                onDelete: {
-                    gallery.deletePhoto(photo.id)
-                    withAnimation(.easeOut(duration: 0.18)) { viewing = nil }
-                },
+                onDelete: { chosen in gallery.deletePhoto(chosen.id) },
                 onClose: { withAnimation(.easeOut(duration: 0.18)) { viewing = nil } }
             )
         }

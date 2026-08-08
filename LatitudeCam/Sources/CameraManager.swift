@@ -239,6 +239,17 @@ public final class CameraManager: NSObject, ObservableObject {
     /// lenses the device has rather than a fixed set it might not.
     @Published public private(set) var lenses: [Lens] = []
 
+    /// The zoom the hardware will accept. A pinch has to clamp to this or
+    /// videoZoomFactor throws, and the range differs per camera and per lens.
+    @Published public private(set) var zoomRange: ClosedRange<CGFloat> = 1...1
+
+    /// Called with the wide lens's factor once the hardware has been read.
+    ///
+    /// On a virtual device zoom 1.0 is the *ultra-wide*, so an app that starts at
+    /// 1 opens at 0.5× while its selector says 1×. The camera reports where wide
+    /// actually is and the UI follows.
+    public var onLensesReady: ((CGFloat) -> Void)?
+
     static func camera(at position: AVCaptureDevice.Position) -> AVCaptureDevice? {
         // A virtual device carries every lens behind one input, so changing lens
         // costs a zoom rather than tearing down and rebuilding the session. Ordered
@@ -306,7 +317,16 @@ public final class CameraManager: NSObject, ObservableObject {
 
     private func publishLenses(for device: AVCaptureDevice) {
         let options = lensOptions(for: device)
-        DispatchQueue.main.async { [weak self] in self?.lenses = options }
+        let low = device.minAvailableVideoZoomFactor
+        // Past about eight times the wide lens it is upscaling, not zooming, and
+        // offering it invites a pinch that only makes the picture worse.
+        let base = options.first { $0.id == "wide" }?.zoom ?? 1
+        let high = min(device.maxAvailableVideoZoomFactor, base * 8)
+        DispatchQueue.main.async { [weak self] in
+            self?.lenses = options
+            self?.zoomRange = low...max(low, high)
+            self?.onLensesReady?(base)
+        }
     }
 
     /// Lens changes are a zoom on the virtual device, which is why they do not
@@ -727,12 +747,15 @@ public final class CameraManager: NSObject, ObservableObject {
             settings = AVCapturePhotoSettings(format: [AVVideoCodecKey: AVVideoCodecType.hevc])
         }
 
-        // .speed, not .quality. Quality prioritisation lets the system fuse several
-        // frames, and that fusion is the delay between the tap and the exposure —
-        // zero shutter lag can serve the frame you asked for, but not if the
-        // pipeline then waits to gather more. The ceiling stays .quality so this
-        // remains a per-capture choice rather than a session-wide one.
-        settings.photoQualityPrioritization = .speed
+        // .balanced is the whole point of the setting: .quality fuses as many
+        // frames as it likes and you feel every one of them, .speed takes the first
+        // and leaves processing on the table. Balanced fuses when there is time and
+        // does not when there is not.
+        //
+        // It works because fast capture prioritisation is also on: under rapid fire
+        // the system drops quality on its own to keep pace, so the balance moves
+        // with how you are shooting rather than being fixed at the worst case.
+        settings.photoQualityPrioritization = .balanced
 
         if current.portrait, photoOutput.isPortraitEffectsMatteDeliveryEnabled {
             settings.isPortraitEffectsMatteDeliveryEnabled = true
