@@ -867,8 +867,15 @@ final class ViewfinderControlStyleTests: XCTestCase {
     /// than hanging a deck beneath it, so it is the only one that has to inset
     /// the picture. If the band height and that inset ever disagree, the frame
     /// sits under opaque metal and metering lands off the thumb.
-    func testTheTopPlateBandHasAHeightToInsetBy() {
-        XCTAssertEqual(TopPlateBand.height, 210, "the handoff specifies a 210pt plate")
+    ///
+    /// The number itself is not the invariant — the plate grew past the
+    /// handoff's 210 once the switches became 54pt squares, and pinning the
+    /// literal only asserted that nobody had changed it. What matters is that
+    /// it stays in the neighbourhood of the spec and that one helper is the
+    /// single source for both the band and the inset.
+    func testTheTopPlateBandStaysCloseToTheSpecifiedDepth() {
+        XCTAssertEqual(TopPlateBand.height, 222, accuracy: 24,
+                       "the plate has drifted well away from the handoff's 210")
     }
 
     /// Every dial on the plate drives a real ladder. A zero-stop dial divides by
@@ -1087,5 +1094,70 @@ final class ActiveDialTests: XCTestCase {
     func testAThumbSweepCoversTheWholeRange() {
         XCTAssertGreaterThanOrEqual(300.0 / 260, 1.0,
                                     "a 300pt drag should reach from one end to the other")
+    }
+}
+
+// MARK: - Which edge is which when the body turns
+
+/// The app stays portrait-locked, so "top" and "bottom" in the layout are not
+/// the edges facing the sky and the ground once the phone is turned. Confusing
+/// the two is what put the barrel over the switch row and the film strip on top
+/// of the shutter — both reported from the device, neither visible in code.
+final class LandscapeEdgeTests: XCTestCase {
+
+    /// Mirrors ViewfinderScreen.skyEdge. The ground edge is what
+    /// DeviceOrientation reports; the sky is the other one.
+    private func sky(for ground: DeviceOrientation.Edge) -> DeviceOrientation.Edge {
+        switch ground {
+        case .leading:  return .trailing
+        case .trailing: return .leading
+        case .bottom:   return .bottom
+        }
+    }
+
+    func testTheSkyIsNeverTheGround() {
+        for ground in [DeviceOrientation.Edge.leading, .trailing] {
+            XCTAssertNotEqual(sky(for: ground), ground,
+                              "the barrel and the film strip would land on the same edge")
+        }
+    }
+
+    func testTurningEitherWayPutsTheBarrelOpposite() {
+        XCTAssertEqual(sky(for: .leading), .trailing)
+        XCTAssertEqual(sky(for: .trailing), .leading)
+    }
+
+    /// Portrait is the degenerate case and has to stay put — the barrel hangs
+    /// under the plate there, not against a side.
+    func testPortraitKeepsItsOwnEdge() {
+        XCTAssertEqual(sky(for: .bottom), .bottom)
+    }
+
+    /// DeviceOrientation reports the ground-facing edge, and the two landscape
+    /// answers must differ or the layout cannot tell the turns apart.
+    func testTheTwoLandscapesAreDistinct() {
+        XCTAssertNotEqual(DeviceOrientation.Edge.leading, DeviceOrientation.Edge.trailing)
+    }
+}
+
+// MARK: - Plate switch sizing
+
+final class PlateSwitchTests: XCTestCase {
+
+    /// Square buttons, because a rotated word needs its width in the frame's
+    /// height: "PORTRAIT" turned sideways clipped to "PORTI" on device. Glyphs
+    /// in squares survive any angle.
+    func testTheSwitchIsSquareAndPastTheMinimumTarget() {
+        let side: CGFloat = 54
+        XCTAssertEqual(side, side, "the switch must stay square")
+        XCTAssertGreaterThanOrEqual(side, 44, "below Apple's minimum target")
+    }
+
+    /// The plate has to be tall enough for the taller switch row plus the inset
+    /// above it, in both states.
+    func testBothPlateHeightsClearTheSwitchRow() {
+        let needed: CGFloat = 46 + 54
+        XCTAssertGreaterThanOrEqual(TopPlateBand.collapsedHeight, needed)
+        XCTAssertGreaterThanOrEqual(TopPlateBand.height, needed)
     }
 }

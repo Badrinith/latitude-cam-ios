@@ -368,27 +368,77 @@ struct ViewfinderScreen: View {
             }
         }
         .ignoresSafeArea(edges: .top)
-        // The barrel hangs just under the plate in both orientations — over the
-        // picture, never displacing it, and translucent so the frame reads
-        // through. The controls themselves do not move when the body turns.
+        // Portrait: the barrel hangs under the plate, where the dials are.
         .overlay(alignment: .top) {
-            if let activeDial {
-                DialBarrel(dial: activeDial, rotation: orientation.angle,
+            if let activeDial, orientation.edge == .bottom {
+                DialBarrel(dial: activeDial, rotation: .zero,
                            onScrub: { scrub(activeDial.key, by: $0) })
                     .padding(.horizontal, 12)
-                    // Turned, it goes to the very top of the glass rather than
-                    // under the plate — that edge is the one nearest the eye
-                    // when the body is sideways, and it keeps the barrel off
-                    // the middle of the frame.
-                    .padding(.top, orientation.edge == .bottom
-                             ? TopPlateBand.height(proOpen: app.proMode) + 10
-                             : 8)
+                    .padding(.top, TopPlateBand.height(proOpen: app.proMode) + 10)
                     .transition(.opacity.combined(with: .offset(y: -10)))
                     .zIndex(4)
             }
         }
+        // Turned, both bands go against the edges that are physically up and
+        // down rather than the ones the portrait layout calls top and bottom.
+        // Pinning them to .top and .bottom is what put the barrel over the
+        // switch row and the film strip on top of the shutter.
+        .overlay {
+            if orientation.edge != .bottom {
+                GeometryReader { geo in
+                    if let activeDial {
+                        rotatedBand(
+                            DialBarrel(dial: activeDial, rotation: .zero,
+                                       onScrub: { scrub(activeDial.key, by: $0) })
+                                .padding(.horizontal, 14),
+                            thickness: 62, at: skyEdge, in: geo.size
+                        )
+                    }
+
+                    rotatedBand(
+                        TopPlateDeck.landscapeFilm(rotation: .zero,
+                                                   onOpen: { app.go(.filmSim) }),
+                        thickness: 118, at: orientation.edge, in: geo.size
+                    )
+                }
+                .zIndex(4)
+            }
+        }
         .animation(.spring(response: 0.34, dampingFraction: 0.84), value: app.proMode)
         .animation(.easeOut(duration: 0.22), value: activeDial)
+    }
+
+    /// The edge that is physically up. `orientation.edge` is the one facing the
+    /// ground, so the sky is the other side — the barrel belongs there, nearest
+    /// the eye, and the film strip belongs on the ground edge.
+    private var skyEdge: DeviceOrientation.Edge {
+        switch orientation.edge {
+        case .leading:  return .trailing
+        case .trailing: return .leading
+        case .bottom:   return .bottom
+        }
+    }
+
+    /// Lays a band out along the screen's long side, turns it to face the user,
+    /// and parks it against one edge. The frame stays constant through the
+    /// rotation, which is what lets the move animate rather than snap.
+    private func rotatedBand<C: View>(
+        _ content: C, thickness: CGFloat,
+        at edge: DeviceOrientation.Edge, in size: CGSize
+    ) -> some View {
+        let centre: CGPoint
+        switch edge {
+        case .leading:
+            centre = CGPoint(x: thickness / 2 + 6, y: size.height / 2)
+        case .trailing:
+            centre = CGPoint(x: size.width - thickness / 2 - 6, y: size.height / 2)
+        case .bottom:
+            centre = CGPoint(x: size.width / 2, y: size.height - thickness / 2 - 6)
+        }
+        return content
+            .frame(width: size.height - 140, height: thickness)
+            .rotationEffect(orientation.angle)
+            .position(centre)
     }
 
     /// Dragging the barrel drives the same value its dial does. The key is

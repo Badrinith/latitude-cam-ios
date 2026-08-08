@@ -962,12 +962,12 @@ struct TopPlateBand: View {
     var onDialTurn: (ActiveDial) -> Void
 
     /// Open, with all five dials showing.
-    static let height: CGFloat = 210
+    static let height: CGFloat = 222
     /// Closed — the switch strip alone. No dials, because with PRO off the
     /// camera is on auto and every one of them would read AUTO: a control that
     /// displays a value it is not setting is worse than no control, and it was
     /// costing the frame 70pt to say so.
-    static let collapsedHeight: CGFloat = 96
+    static let collapsedHeight: CGFloat = 108
 
     static func height(proOpen: Bool) -> CGFloat { proOpen ? height : collapsedHeight }
 
@@ -1010,15 +1010,22 @@ struct TopPlateBand: View {
 
     /// No camera-flip button: front is a focal length now, chosen in the lens
     /// row with the others.
+    /// Square, and glyphs rather than words.
+    ///
+    /// Words were the bug: a rotated "PORTRAIT" needs its width in the frame's
+    /// height, so turning the body clipped every label to "PORTI", "GR", "3:".
+    /// A square button holds a square glyph at any angle, and squares are also
+    /// how these get bigger in both directions at once.
     private var utilities: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 8) {
             if app.cameraManager.supportsPortrait {
-                utility(text: "PORTRAIT", on: app.portrait, label: "Portrait") {
+                utility(systemImage: "person.and.background.dotted",
+                        on: app.portrait, label: "Portrait") {
                     app.togglePortrait()
                 }
             }
 
-            utility(text: "GRID", on: false, label: "Grid", action: onCycleGrid)
+            utility(systemImage: "grid", on: false, label: "Grid", action: onCycleGrid)
             utility(text: aspect, on: false, label: "Aspect ratio", action: onCycleAspect)
             utility(systemImage: "gearshape", on: false, label: "Settings", action: onSettings)
 
@@ -1044,9 +1051,9 @@ struct TopPlateBand: View {
         } label: {
             Group {
                 if let systemImage {
-                    Image(systemName: systemImage).font(.system(size: 17, weight: .medium))
+                    Image(systemName: systemImage).font(.system(size: 19, weight: .medium))
                 } else if let text {
-                    Text(text).font(.mono(8, .semibold)).kerning(0.9)
+                    Text(text).font(.mono(11, .semibold)).kerning(0.4).fixedSize()
                 }
             }
             .foregroundStyle(on ? Ink.base : Color(hex: 0xA09A8D))
@@ -1055,7 +1062,9 @@ struct TopPlateBand: View {
             // icon in a 28pt box beside a much wider PORTRAIT, which read as
             // two classes of control when they are the same class — and made
             // the most-used one the hardest to hit.
-            .frame(minWidth: 74, minHeight: 44)
+            // 54 square. Bigger than the handoff's 28 in both directions, and
+            // square so a rotated glyph never outgrows its own button.
+            .frame(width: 54, height: 54)
             .background {
                 RoundedRectangle(cornerRadius: 7, style: .continuous)
                     .fill(on ? Accent.amber : Color.black.opacity(0.34))
@@ -1063,7 +1072,7 @@ struct TopPlateBand: View {
                         RoundedRectangle(cornerRadius: 7, style: .continuous)
                             .strokeBorder(on ? .clear : Color.white.opacity(0.09), lineWidth: 1)
                     }
-                    .padding(.vertical, 8)
+                    .padding(4)
             }
             .contentShape(Rectangle())
         }
@@ -1138,17 +1147,10 @@ struct TopPlateDeck: View {
             lensRow.padding(.bottom, 10)
             bottomBar.padding(.bottom, 30)
         }
-        // Landscape sends film to the ground-facing edge as an overlay rather
-        // than another row in the stack. Stacked, it was laid out after a
-        // bottom bar that had already consumed the height: the strip rendered
-        // past the screen edge and took the shutter row with it, which is why
-        // the controls stopped answering when the body was turned. An overlay
-        // cannot push what it sits over.
-        .overlay(alignment: .bottom) {
-            if landscape {
-                filmBand.padding(.bottom, 6)
-            }
-        }
+        // Landscape film is not drawn here at all. Pinned to .bottom it landed
+        // on the shutter — the release lives at that edge too. Turned, "the
+        // bottom" is a different edge of the glass entirely, so the screen
+        // places it against the one actually facing the ground.
     }
 
     /// Film, always. The barrel cluster used to take this band whenever PRO was
@@ -1158,6 +1160,12 @@ struct TopPlateDeck: View {
     private var filmBand: some View {
         FilmCardStack(rotation: rotation, invertNames: landscape, onOpen: onFilmSim)
             .padding(.bottom, 14)
+    }
+
+    /// The same strip, without the portrait padding, for the screen to hang on
+    /// a rotated band when the body is turned.
+    static func landscapeFilm(rotation: Angle, onOpen: @escaping () -> Void) -> some View {
+        FilmCardStack(rotation: .zero, invertNames: false, onOpen: onOpen)
     }
 
     private var hud: some View {
