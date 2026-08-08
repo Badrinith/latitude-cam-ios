@@ -47,16 +47,81 @@ final class PhotoGalleryTests: XCTestCase {
         XCTAssertEqual(photo?.shutterDenominator, 240)
     }
 
-    func testDeleteRemovesPhoto() {
+    // MARK: - Deletion
+    //
+    // Apple Photos owns the only copy of a frame, so deleting one means deleting
+    // its asset — and the roll is updated only once Photos confirms that
+    // happened. A frame that has not reached Photos yet therefore has nothing to
+    // delete, and saying so is the correct outcome: removing it from the roll
+    // regardless would hide a photo that still exists in the library.
+    //
+    // These frames are added directly to the roll and never mirrored, so they
+    // stand in for exactly that case. Deletion that does reach Photos needs the
+    // real library and is device-only.
+
+    func testDeletingAFrameThatIsNotInPhotosYetSaysSoAndKeepsIt() {
         let gallery = PhotoGallery()
         gallery.addPhoto(UIImage(systemName: "camera") ?? UIImage(),
                          filmID: "amber", iso: 100, shutterDenominator: 60)
         drainMainQueue()
         guard let id = gallery.photos.first?.id else { return XCTFail("no photo to delete") }
 
-        gallery.deletePhoto(id)
+        var reported: (ok: Bool, problem: String?)?
+        gallery.deletePhotos([id]) { ok, problem in reported = (ok, problem) }
         drainMainQueue()
-        XCTAssertTrue(gallery.photos.isEmpty)
+
+        XCTAssertEqual(reported?.ok, false, "a frame with no asset cannot have been deleted")
+        XCTAssertNotNil(reported?.problem, "a failed delete has to explain itself")
+        XCTAssertEqual(gallery.photos.count, 1,
+                       "the frame is still in Photos, so it must stay in the roll")
+    }
+
+    /// The failure has to be the one the user can act on — the frame is on its
+    /// way to Photos and the delete will work shortly — rather than the generic
+    /// "could not find" case, which reads as data loss.
+    func testAFrameStillBeingAddedReportsThatRatherThanMissing() {
+        let gallery = PhotoGallery()
+        gallery.addPhoto(UIImage(systemName: "camera") ?? UIImage(),
+                         filmID: "amber", iso: 100, shutterDenominator: 60)
+        drainMainQueue()
+        guard let id = gallery.photos.first?.id else { return XCTFail("no photo to delete") }
+
+        var problem: String?
+        gallery.deletePhotos([id]) { _, message in problem = message }
+        drainMainQueue()
+
+        XCTAssertEqual(problem?.contains("Apple Photos"), true,
+                       "the message should name where the frame actually is")
+    }
+
+    /// An id the roll has never heard of resolves to no assets, which must not
+    /// be mistaken for a successful delete of nothing.
+    func testDeletingAnUnknownIDDoesNotReportSuccess() {
+        let gallery = PhotoGallery()
+        gallery.addPhoto(UIImage(systemName: "camera") ?? UIImage(),
+                         filmID: "amber", iso: 100, shutterDenominator: 60)
+        drainMainQueue()
+
+        var reported: Bool?
+        gallery.deletePhotos(["photo_0000000000000_0_nonexistent_100_60"]) { ok, _ in reported = ok }
+        drainMainQueue()
+
+        XCTAssertEqual(reported, false)
+        XCTAssertEqual(gallery.photos.count, 1, "an unrelated id must not touch the roll")
+    }
+
+    /// Deleting an empty selection is a no-op, not a crash and not a wipe — the
+    /// multi-select UI can reach this with nothing ticked.
+    func testDeletingAnEmptySelectionLeavesTheRollAlone() {
+        let gallery = PhotoGallery()
+        gallery.addPhoto(UIImage(systemName: "camera") ?? UIImage(),
+                         filmID: "amber", iso: 100, shutterDenominator: 60)
+        drainMainQueue()
+
+        gallery.deletePhotos([])
+        drainMainQueue()
+
+        XCTAssertEqual(gallery.photos.count, 1)
     }
 
     /// Metadata rides in the filename, so a round-trip failure would silently

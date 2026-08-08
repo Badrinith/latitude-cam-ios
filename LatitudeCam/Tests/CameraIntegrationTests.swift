@@ -686,12 +686,92 @@ final class PinchZoomTests: XCTestCase {
 
 // MARK: - Landscape capture orientation
 //
-// The hand-built UIDeviceOrientation → angle table this used to pin was still
-// wrong on device after two attempts to reason it out by hand. Still-capture
-// rotation is now read from AVCaptureDevice.RotationCoordinator at the moment
-// of capture, which is Apple's own answer to exactly this problem — it has no
-// pure function left to unit test, since the correct angle depends on a live
-// AVCaptureDevice and changes as the phone physically turns. That makes this
-// part of the photo-output path that is device-only, alongside the rest of
-// AVCapturePhotoOutput — noted in the handoff rather than approximated with a
-// test that would only be checking that a mock returns what the mock returns.
+// The angle itself is still device-only: it comes from
+// AVCaptureDevice.RotationCoordinator against a live AVCaptureDevice and moves
+// as the phone turns, so there is nothing there a unit test can pin without
+// just checking that a mock returns what the mock returns.
+//
+// Translating that angle into the orientation tag written to the file is a
+// different matter — it is a pure function, and it is the half that decides
+// whether a landscape frame opens upright. The RAW mosaic is never rasterized,
+// so this tag is the *only* thing standing between a sideways DNG and a
+// correct one. These pin it.
+
+final class CaptureExifOrientationTests: XCTestCase {
+
+    /// Turned anticlockwise: the frame needs a quarter turn clockwise to come
+    /// back upright, which EXIF calls `.right`.
+    func testNinetyDegreesMapsToRight() {
+        XCTAssertEqual(CameraManager.exifOrientation(forCaptureRotation: 90),
+                       CGImagePropertyOrientation.right.rawValue)
+    }
+
+    func testMinusNinetyMapsToLeft() {
+        XCTAssertEqual(CameraManager.exifOrientation(forCaptureRotation: -90),
+                       CGImagePropertyOrientation.left.rawValue)
+    }
+
+    /// The two landscape cases must not collapse onto the same tag — that is
+    /// exactly the mistake that reads as "landscape is still rotated", and it
+    /// is invisible until a photo comes out of the roll upside down.
+    func testTheTwoLandscapeCasesAreOpposites() {
+        XCTAssertNotEqual(CameraManager.exifOrientation(forCaptureRotation: 90),
+                          CameraManager.exifOrientation(forCaptureRotation: -90),
+                          "landscape left and landscape right resolved to the same tag")
+    }
+
+    func testUpsideDownMapsToDown() {
+        XCTAssertEqual(CameraManager.exifOrientation(forCaptureRotation: 180),
+                       CGImagePropertyOrientation.down.rawValue)
+        XCTAssertEqual(CameraManager.exifOrientation(forCaptureRotation: -180),
+                       CGImagePropertyOrientation.down.rawValue)
+    }
+
+    func testPortraitIsUntagged() {
+        XCTAssertEqual(CameraManager.exifOrientation(forCaptureRotation: 0),
+                       CGImagePropertyOrientation.up.rawValue)
+    }
+
+    /// 270 and -90 describe the same physical rotation and must agree, as must
+    /// -270 and 90. A table that handles only one sign leaves whichever way the
+    /// coordinator happens to report it as the broken orientation.
+    func testEquivalentAnglesAgreeWhicheverSignIsReported() {
+        XCTAssertEqual(CameraManager.exifOrientation(forCaptureRotation: 270),
+                       CameraManager.exifOrientation(forCaptureRotation: -90))
+        XCTAssertEqual(CameraManager.exifOrientation(forCaptureRotation: -270),
+                       CameraManager.exifOrientation(forCaptureRotation: 90))
+    }
+
+    /// The coordinator reports a Double, and a hair either side of a right
+    /// angle is still that right angle — truncating instead of rounding would
+    /// send 89.6° to the portrait case and silently drop the rotation.
+    func testAnglesRoundRatherThanTruncate() {
+        XCTAssertEqual(CameraManager.exifOrientation(forCaptureRotation: 89.6),
+                       CGImagePropertyOrientation.right.rawValue)
+        XCTAssertEqual(CameraManager.exifOrientation(forCaptureRotation: 90.4),
+                       CGImagePropertyOrientation.right.rawValue)
+    }
+
+    /// A full turn past is the same orientation, not an unhandled one.
+    func testAnglesBeyondAFullTurnWrap() {
+        XCTAssertEqual(CameraManager.exifOrientation(forCaptureRotation: 450),
+                       CGImagePropertyOrientation.right.rawValue)
+        XCTAssertEqual(CameraManager.exifOrientation(forCaptureRotation: 360),
+                       CGImagePropertyOrientation.up.rawValue)
+    }
+
+    /// Nothing may resolve to a value outside the four EXIF quarter turns; a
+    /// stray 0 here would be an invalid tag rather than "no rotation".
+    func testEveryQuarterTurnIsAValidOrientation() {
+        let valid: Set<UInt32> = [
+            CGImagePropertyOrientation.up.rawValue,
+            CGImagePropertyOrientation.down.rawValue,
+            CGImagePropertyOrientation.left.rawValue,
+            CGImagePropertyOrientation.right.rawValue
+        ]
+        for angle in stride(from: -360.0, through: 360.0, by: 90.0) {
+            XCTAssertTrue(valid.contains(CameraManager.exifOrientation(forCaptureRotation: angle)),
+                          "\(angle)° produced an orientation outside the four quarter turns")
+        }
+    }
+}

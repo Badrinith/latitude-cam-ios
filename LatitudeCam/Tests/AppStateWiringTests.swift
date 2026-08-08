@@ -228,7 +228,12 @@ final class AppStateWiringTests: XCTestCase {
     /// *that* frame. Reading `photos.first` right after `addPhoto` returned the
     /// previous photo, because the insert hops to the main queue first — so
     /// deleting a rejected shot removed the one before it.
-    func testDeletingACaptureRemovesThatFrameAndNotTheOneBefore() {
+    ///
+    /// Removal itself now goes through Apple Photos and lands only once Photos
+    /// confirms it, which these unmirrored frames never reach — so what is
+    /// pinned here is the half that bug lived in: whichever frame delete aims
+    /// at, the *earlier* one must survive. It did not, once.
+    func testDeletingACaptureNeverTakesTheFrameBefore() {
         let app = AppState()
 
         app.capturedImage = UIImage(systemName: "camera") ?? UIImage()
@@ -244,8 +249,25 @@ final class AppStateWiringTests: XCTestCase {
         app.deleteCapture()
         drain()
 
-        XCTAssertEqual(app.gallery.photos.count, 1)
-        XCTAssertEqual(app.gallery.photos.first?.id, earlier, "deleted the wrong frame")
+        XCTAssertTrue(app.gallery.photos.contains { $0.id == earlier },
+                      "delete reached back and took the previous frame")
+    }
+
+    /// Review has to hand the viewfinder back either way. Leaving the rejected
+    /// frame on screen because Photos would not take it strands the user on a
+    /// review screen with no way forward.
+    func testDeletingACaptureReturnsToTheViewfinderEvenWhenPhotosCannotDelete() {
+        let app = AppState()
+
+        app.capturedImage = UIImage(systemName: "camera") ?? UIImage()
+        app.saveCapturedPhoto()
+        drain()
+
+        app.deleteCapture()
+        drain()
+
+        XCTAssertNil(app.capturedImage)
+        XCTAssertEqual(app.screen, .viewfinder)
     }
 
     private func drain() {
