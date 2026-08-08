@@ -210,7 +210,7 @@ struct ViewfinderScreen: View {
     @AppStorage(Pref.aspect) private var aspect = "3:2"
     @AppStorage(Pref.histogramStyle) private var histogramStyle = "Luma"
     @AppStorage(Pref.rawProgressDesign) private var rawProgressDesign = "01 Aperture Bloom"
-    @AppStorage(Pref.viewfinderControls) private var controlStyle = "Film Label"
+    @AppStorage(Pref.viewfinderControls) private var controlStyle = "Top Plate"
 
     @StateObject private var orientation = DeviceOrientation()
     @State private var reticle: CGPoint?

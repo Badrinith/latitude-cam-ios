@@ -900,12 +900,53 @@ final class ViewfinderControlStyleTests: XCTestCase {
         }
     }
 
-    /// Film Label is the chosen primary deck. Existing Classic preferences are
-    /// migrated by SettingsScreen, so a fresh install and an upgraded install
-    /// both land on the same presentation.
-    func testFilmLabelIsTheDefault() {
+    /// Top Plate is the camera now, and the Controls picker is hidden, so a
+    /// fresh install must land on it without anyone choosing it.
+    func testTopPlateIsTheDefault() {
         UserDefaults.standard.removeObject(forKey: Pref.viewfinderControls)
-        XCTAssertEqual(Pref.string(Pref.viewfinderControls, default: "Film Label"), "Film Label")
+        XCTAssertEqual(Pref.string(Pref.viewfinderControls, default: "Top Plate"), "Top Plate")
+    }
+
+    /// A default only applies where nothing was stored. These devices stored
+    /// something — and the setting that would change it is gone — so an
+    /// existing choice has to be moved rather than defaulted around, or the
+    /// phone opens on a style it can no longer leave.
+    @MainActor
+    func testAnExistingChoiceIsMovedOntoTopPlate() {
+        let defaults = UserDefaults.standard
+        defaults.set("Film Label", forKey: Pref.viewfinderControls)
+        defaults.removeObject(forKey: Pref.viewfinderControlsPinned)
+
+        AppState.pinViewfinderControlsToTopPlate()
+
+        XCTAssertEqual(defaults.string(forKey: Pref.viewfinderControls), "Top Plate")
+        XCTAssertTrue(defaults.bool(forKey: Pref.viewfinderControlsPinned))
+    }
+
+    /// And it must happen once. Re-pinning on every launch would make the
+    /// picker useless the moment it is put back — every choice overwritten by
+    /// the next cold start.
+    @MainActor
+    func testTheMoveHappensOnlyOnce() {
+        let defaults = UserDefaults.standard
+        defaults.removeObject(forKey: Pref.viewfinderControlsPinned)
+        AppState.pinViewfinderControlsToTopPlate()
+
+        // Stand in for the user choosing again once the picker is restored.
+        defaults.set("Crown", forKey: Pref.viewfinderControls)
+        AppState.pinViewfinderControlsToTopPlate()
+
+        XCTAssertEqual(defaults.string(forKey: Pref.viewfinderControls), "Crown",
+                       "the migration overwrote a later deliberate choice")
+    }
+
+    /// The parked styles stay in the list. They still build, are still tested,
+    /// and putting the picker back should not also mean rebuilding them.
+    func testTheParkedStylesAreStillOffered() {
+        XCTAssertTrue(Pref.viewfinderControlOptions.contains("Film Label"))
+        XCTAssertTrue(Pref.viewfinderControlOptions.contains("Bellows Drawer"))
+        XCTAssertTrue(Pref.viewfinderControlOptions.contains("Crown"))
+        XCTAssertTrue(Pref.viewfinderControlOptions.contains("Top Plate"))
     }
 
     /// The crown cycles through every target and comes back round, so no

@@ -215,6 +215,10 @@ enum Pref {
     static let proMode = "settings.proMode"
     static let galleryLayout = "settings.galleryLayout"
     static let viewfinderControls = "settings.viewfinderControls"
+    /// Records that the one-time move to Top Plate has happened, so it is not
+    /// re-applied on every launch — which would make the Controls picker
+    /// useless the moment it is put back.
+    static let viewfinderControlsPinned = "settings.viewfinderControls.pinnedTopPlate"
     /// Set once the entry flow has been completed, so later cold launches go
     /// straight from the splash to the viewfinder.
     static let onboarded = "app.onboarded"
@@ -1062,7 +1066,27 @@ final class AppState: ObservableObject {
         }
     }
 
+    /// Moves any previously chosen control style onto Top Plate, once.
+    ///
+    /// Top Plate is the camera now and the Controls picker is hidden, so a
+    /// device still holding "Film Label" or "Classic" would open on a style it
+    /// can no longer change — the setting that used to change it is gone. This
+    /// is not a default: a default only applies where nothing was ever stored,
+    /// and these devices stored something.
+    ///
+    /// Guarded by its own marker rather than by comparing values, so putting
+    /// the picker back does not mean fighting a migration that re-pins the
+    /// choice on every launch.
+    static func pinViewfinderControlsToTopPlate() {
+        let defaults = UserDefaults.standard
+        guard !defaults.bool(forKey: Pref.viewfinderControlsPinned) else { return }
+        defaults.set("Top Plate", forKey: Pref.viewfinderControls)
+        defaults.set(true, forKey: Pref.viewfinderControlsPinned)
+    }
+
     init() {
+        Self.pinViewfinderControlsToTopPlate()
+
         // Adopt whatever the camera restored from the last session so the HUD
         // and the pipeline do not disagree on launch.
         let restored = cameraManager.currentSettings
