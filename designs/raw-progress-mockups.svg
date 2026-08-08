@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="2400" viewBox="0 0 1800 2400">
+  <defs>
+    <style>
+      .bg { fill:#151513 } .screen { fill:#24231f; stroke:#4b493f; stroke-width:2 }
+      .ivory { fill:#ebe7dd } .muted { fill:#9e9a90 } .amber { fill:#d6a34a }
+      .rust { fill:#e2685a } .line { stroke:#d6a34a; stroke-width:4; fill:none }
+      .fine { stroke:#747064; stroke-width:2; fill:none } .title { font:700 30px Georgia,serif }
+      .label { font:700 18px monospace; letter-spacing:3px } .copy { font:15px monospace; letter-spacing:1px }
+      .num { font:700 22px monospace } .small { font:13px monospace; letter-spacing:2px }
+    </style>
+    <linearGradient id="darkroom" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#6a2020"/><stop offset=".6" stop-color="#24231f"/><stop offset="1" stop-color="#10100f"/></linearGradient>
+    <pattern id="mosaic" width="18" height="18" patternUnits="userSpaceOnUse"><rect width="9" height="9" fill="#cf5d4d"/><rect x="9" width="9" height="9" fill="#77a968"/><rect y="9" width="9" height="9" fill="#5c83b9"/><rect x="9" y="9" width="9" height="9" fill="#77a968"/></pattern>
+  </defs>
+  <rect class="bg" width="1800" height="2400"/>
+  <text x="90" y="84" class="title ivory" font-size="48">Latitude / RAW Capture Progress</text>
+  <text x="90" y="120" class="copy muted">TEN VIEWFINDER DIRECTIONS · ORIGINAL DNG · FULL SENSOR FRAME</text>
+
+  <!-- 1 -->
+  <g transform="translate(90 175)"><rect class="screen" rx="32" width="780" height="390"/><text x="34" y="42" class="num amber">01</text><text x="82" y="42" class="label ivory">APERTURE BLOOM</text><text x="34" y="365" class="small muted">CAPTURING SENSOR RAW</text>
+    <circle cx="390" cy="190" r="98" class="fine"/><circle cx="390" cy="190" r="68" class="line"/><path d="M390 92 L430 160 L390 190 L350 160Z M488 190 L420 230 L390 190 L420 150Z M390 288 L350 220 L390 190 L430 220Z M292 190 L360 150 L390 190 L360 230Z" fill="#d6a34a" opacity=".45"/><circle cx="390" cy="190" r="28" class="bg"/>
+  </g>
+  <!-- 2 -->
+  <g transform="translate(930 175)"><rect class="screen" rx="32" width="780" height="390"/><text x="34" y="42" class="num amber">02</text><text x="82" y="42" class="label ivory">FILM ADVANCE</text><text x="34" y="365" class="small muted">DEVELOPING DNG</text>
+    <rect x="120" y="125" width="540" height="130" rx="8" fill="#0f0f0e" stroke="#d6a34a" stroke-width="3"/><g fill="#d6a34a"><rect x="135" y="138" width="22" height="22"/><rect x="180" y="138" width="22" height="22"/><rect x="225" y="138" width="22" height="22"/><rect x="270" y="138" width="22" height="22"/><rect x="315" y="138" width="22" height="22"/><rect x="360" y="138" width="22" height="22"/><rect x="405" y="138" width="22" height="22"/><rect x="450" y="138" width="22" height="22"/><rect x="495" y="138" width="22" height="22"/><rect x="540" y="138" width="22" height="22"/><rect x="585" y="138" width="22" height="22"/><rect x="630" y="138" width="22" height="22"/></g><rect x="170" y="174" width="360" height="38" fill="#5b594f"/><path d="M560 193 h65" class="line"/><path d="M610 170 l25 23 -25 23" class="line"/>
+  </g>
+  <!-- 3 -->
+  <g transform="translate(90 625)"><rect class="screen" rx="32" width="780" height="390"/><text x="34" y="42" class="num amber">03</text><text x="82" y="42" class="label ivory">AMBER SCANLINE</text><text x="34" y="365" class="small muted">READING SENSOR DATA</text>
+    <rect x="185" y="78" width="410" height="230" rx="14" fill="#34332c"/><circle cx="302" cy="162" r="58" fill="#747064"/><path d="M410 235 q60-110 135-15 v58 H410Z" fill="#555248"/><path d="M180 205 h420" stroke="#d6a34a" stroke-width="8"/><path d="M180 197 h420" stroke="#fff2c2" stroke-width="2"/>
+  </g>
+  <!-- 4 -->
+  <g transform="translate(930 625)"><rect class="screen" rx="32" width="780" height="390"/><text x="34" y="42" class="num amber">04</text><text x="82" y="42" class="label ivory">EXPOSURE METER</text><text x="34" y="365" class="small muted">LOCKING RAW FRAME</text>
+    <circle cx="390" cy="190" r="104" class="fine" stroke-width="15"/><path d="M318 266 A104 104 0 1 1 468 265" stroke="#d6a34a" stroke-width="15" fill="none"/><text x="344" y="198" class="label ivory" font-size="32">+0.3</text><text x="355" y="226" class="small amber">EV</text><path d="M390 78 v24 M493 190 h-24 M390 302 v-24 M287 190 h24" class="line"/>
+  </g>
+  <!-- 5 -->
+  <g transform="translate(90 1075)"><rect rx="32" width="780" height="390" fill="url(#darkroom)" stroke="#8a4238" stroke-width="2"/><text x="34" y="42" class="num rust">05</text><text x="82" y="42" class="label ivory">DARKROOM BATH</text><text x="34" y="365" class="small muted">DEVELOPING ORIGINAL DNG</text>
+    <rect x="210" y="84" width="360" height="220" rx="8" fill="#0e0d0d" stroke="#d6a34a" stroke-width="3"/><circle cx="320" cy="165" r="49" fill="#b8584c" opacity=".65"/><path d="M375 250 q55-100 138-10v35H375Z" fill="#a54b43" opacity=".65"/><text x="278" y="292" class="small amber">IMAGE EMERGING</text>
+  </g>
+  <!-- 6 -->
+  <g transform="translate(930 1075)"><rect class="screen" rx="32" width="780" height="390"/><text x="34" y="42" class="num amber">06</text><text x="82" y="42" class="label ivory">CONTACT SHEET</text><text x="34" y="365" class="small muted">FILING TO APPLE PHOTOS</text>
+    <g transform="translate(205 88)"><rect width="150" height="95" fill="#565349"/><rect x="170" width="150" height="95" fill="#403f38"/><rect y="115" width="150" height="95" fill="#4a483f"/><rect x="170" y="115" width="150" height="95" fill="#38362f"/><rect x="335" y="62" width="115" height="85" rx="8" fill="#d6a34a"/><text x="357" y="112" class="label bg">DNG</text></g>
+  </g>
+  <!-- 7 -->
+  <g transform="translate(90 1525)"><rect class="screen" rx="32" width="780" height="390"/><text x="34" y="42" class="num amber">07</text><text x="82" y="42" class="label ivory">SENSOR MOSAIC</text><text x="34" y="365" class="small muted">RECONSTRUCTING PREVIEW</text>
+    <rect x="238" y="84" width="304" height="224" rx="12" fill="url(#mosaic)"/><circle cx="390" cy="184" r="76" fill="#27261f" opacity=".38"/><path d="M318 250 q55-112 145-12v28H318Z" fill="#27261f" opacity=".48"/><rect x="238" y="84" width="304" height="224" rx="12" fill="none" stroke="#d6a34a" stroke-width="3"/>
+  </g>
+  <!-- 8 -->
+  <g transform="translate(930 1525)"><rect class="screen" rx="32" width="780" height="390"/><text x="34" y="42" class="num amber">08</text><text x="82" y="42" class="label ivory">LATITUDE COMPASS</text><text x="34" y="365" class="small muted">ALIGNING HORIZON</text>
+    <circle cx="390" cy="190" r="112" class="fine"/><circle cx="390" cy="190" r="78" class="line"/><text x="379" y="88" class="label amber">N</text><text x="492" y="197" class="small ivory">E</text><text x="386" y="306" class="small ivory">S</text><text x="282" y="197" class="small ivory">W</text><path d="M390 114 l-20 70 20-15 20 15Z" class="amber"/><circle cx="390" cy="190" r="13" class="ivory"/>
+  </g>
+  <!-- 9 -->
+  <g transform="translate(90 1975)"><rect class="screen" rx="32" width="780" height="390"/><text x="34" y="42" class="num amber">09</text><text x="82" y="42" class="label ivory">DATA TETHER</text><text x="34" y="365" class="small muted">WRITING ORIGINAL FILE</text>
+    <rect x="176" y="90" width="245" height="190" rx="12" fill="#504d44"/><circle cx="285" cy="155" r="42" fill="#777266"/><path d="M260 258q52-86 105-10v18H260Z" fill="#686358"/><path d="M438 130 C530 130 510 190 610 190 M438 158 C530 158 520 216 610 216 M438 186 C526 186 545 242 610 242" class="line"/><rect x="612" y="168" width="82" height="82" rx="14" fill="#d6a34a"/><path d="M632 225 l18-22 13 13 10-9 12 18Z" fill="#24231f"/>
+  </g>
+  <!-- 10 -->
+  <g transform="translate(930 1975)"><rect class="screen" rx="32" width="780" height="390"/><text x="34" y="42" class="num amber">10</text><text x="82" y="42" class="label ivory">QUIET PROGRESS</text><text x="34" y="365" class="small muted">CAPTURING RAW · 72%</text>
+    <circle cx="390" cy="175" r="74" fill="#34332c"/><circle cx="390" cy="175" r="46" class="fine"/><circle cx="390" cy="175" r="16" class="amber"/><rect x="180" y="286" width="440" height="6" rx="3" fill="#4c493f"/><rect x="180" y="286" width="316" height="6" rx="3" class="amber"/><text x="300" y="245" class="small ivory">PLEASE HOLD STEADY</text>
+  </g>
+</svg>

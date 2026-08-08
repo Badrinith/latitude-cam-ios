@@ -775,3 +775,125 @@ final class CaptureExifOrientationTests: XCTestCase {
         }
     }
 }
+
+// MARK: - Knob geometry
+//
+// The two alternative control decks are both built on one rotary knob, and the
+// parts of a knob that go wrong are invisible in code: a knob that runs
+// backwards, or that slams end to end when the drag crosses the seam behind it,
+// reads as fine on the page and as broken in the hand. Pinned here rather than
+// discovered on device.
+
+final class KnobMathTests: XCTestCase {
+
+    func testMidValueSitsStraightUp() {
+        XCTAssertEqual(KnobMath.pointerAngle(for: 0.5), 0, accuracy: 0.001)
+    }
+
+    func testTheEndsAreSymmetricAboutTheTop() {
+        XCTAssertEqual(KnobMath.pointerAngle(for: 0), -KnobMath.sweep / 2, accuracy: 0.001)
+        XCTAssertEqual(KnobMath.pointerAngle(for: 1), KnobMath.sweep / 2, accuracy: 0.001)
+    }
+
+    /// Clockwise is more. The whole control is wrong if this is inverted, and
+    /// nothing else in the file would fail.
+    func testTurningClockwiseRaisesTheValue() {
+        XCTAssertGreaterThan(KnobMath.advance(0.5, byDegrees: 20), 0.5)
+        XCTAssertLessThan(KnobMath.advance(0.5, byDegrees: -20), 0.5)
+    }
+
+    func testTheKnobStopsAtItsEnds() {
+        XCTAssertEqual(KnobMath.advance(1, byDegrees: 400), 1, accuracy: 0.0001)
+        XCTAssertEqual(KnobMath.advance(0, byDegrees: -400), 0, accuracy: 0.0001)
+    }
+
+    /// A drag passing through ±180° must read as a small step, not most of a
+    /// circle — this is the difference between a smooth turn and the value
+    /// jumping the moment the finger crosses the bottom of the knob.
+    func testCrossingTheSeamIsASmallStepNotAJump() {
+        XCTAssertEqual(KnobMath.angleDelta(from: 179, to: -179), 2, accuracy: 0.001)
+        XCTAssertEqual(KnobMath.angleDelta(from: -179, to: 179), -2, accuracy: 0.001)
+    }
+
+    func testDeltaIsPlainSubtractionAwayFromTheSeam() {
+        XCTAssertEqual(KnobMath.angleDelta(from: 10, to: 40), 30, accuracy: 0.001)
+        XCTAssertEqual(KnobMath.angleDelta(from: 40, to: 10), -30, accuracy: 0.001)
+    }
+
+    /// A full sweep of the finger has to cover the whole range — no more, so
+    /// the ends are reachable, and no less, so they are not overshot instantly.
+    func testAFullSweepCoversExactlyTheRange() {
+        XCTAssertEqual(KnobMath.advance(0, byDegrees: KnobMath.sweep), 1, accuracy: 0.0001)
+    }
+
+    /// The click has to land on the same ladder index the readout uses, or the
+    /// knob clicks without the value changing.
+    func testDetentsMatchTheLadderIndexing() {
+        let stops = AppState.isoStops.count
+        XCTAssertEqual(KnobMath.detent(0, stops: stops), 0)
+        XCTAssertEqual(KnobMath.detent(1, stops: stops), stops - 1)
+        XCTAssertEqual(KnobMath.detent(0.999, stops: stops), stops - 1)
+    }
+
+    func testDetentsNeverLeaveTheLadder() {
+        for step in 0...40 {
+            let index = KnobMath.detent(Double(step) / 40, stops: 7)
+            XCTAssertTrue((0..<7).contains(index), "detent \(index) is off the ladder")
+        }
+    }
+
+    func testDetentSurvivesADegenerateLadder() {
+        XCTAssertEqual(KnobMath.detent(0.7, stops: 1), 0)
+        XCTAssertEqual(KnobMath.detent(0.7, stops: 0), 0)
+    }
+
+    func testClampHoldsTheZeroToOneContract() {
+        XCTAssertEqual(KnobMath.clamp(-3), 0)
+        XCTAssertEqual(KnobMath.clamp(4), 1)
+        XCTAssertEqual(KnobMath.clamp(0.42), 0.42, accuracy: 0.0001)
+    }
+}
+
+// MARK: - Viewfinder control styles
+
+final class ViewfinderControlStyleTests: XCTestCase {
+
+    func testThreeStylesAreOffered() {
+        XCTAssertEqual(Pref.viewfinderControlOptions, ["Classic", "Bellows Drawer", "Crown"])
+    }
+
+    /// Classic is what the app already had. A new style must never become the
+    /// default by accident — that would change every existing user's camera.
+    func testClassicIsTheDefault() {
+        UserDefaults.standard.removeObject(forKey: Pref.viewfinderControls)
+        XCTAssertEqual(Pref.string(Pref.viewfinderControls, default: "Classic"), "Classic")
+    }
+
+    /// The crown cycles through every target and comes back round, so no
+    /// setting can be stranded behind a stop that is never reached.
+    func testTheCrownReachesEveryTargetAndWrapsBack() {
+        let targets = CrownControl.Target.allCases
+        XCTAssertEqual(targets.count, 4)
+
+        var seen: [CrownControl.Target] = []
+        var current = CrownControl.Target.iso
+        for _ in 0..<targets.count {
+            seen.append(current)
+            current = CrownControl.Target(rawValue: (current.rawValue + 1) % targets.count) ?? .iso
+        }
+        XCTAssertEqual(Set(seen).count, targets.count, "a target is unreachable")
+        XCTAssertEqual(current, .iso, "the crown does not come back round")
+    }
+
+    func testEveryCrownTargetIsLabelled() {
+        for target in CrownControl.Target.allCases {
+            XCTAssertFalse(target.label.isEmpty)
+        }
+    }
+
+    /// The drawer has to leave enough of itself on screen to be grabbed again.
+    func testTheStowedDrawerLeavesAHandle() {
+        XCTAssertGreaterThanOrEqual(BellowsDrawer.lip, 28, "too little left to grab")
+        XCTAssertLessThan(BellowsDrawer.lip, BellowsDrawer.height, "the drawer never stows")
+    }
+}

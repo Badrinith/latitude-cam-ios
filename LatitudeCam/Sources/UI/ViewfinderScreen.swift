@@ -210,11 +210,15 @@ struct ViewfinderScreen: View {
     @AppStorage(Pref.aspect) private var aspect = "3:2"
     @AppStorage(Pref.histogramStyle) private var histogramStyle = "Luma"
     @AppStorage(Pref.rawProgressDesign) private var rawProgressDesign = "01 Aperture Bloom"
+    @AppStorage(Pref.viewfinderControls) private var controlStyle = "Classic"
 
     @StateObject private var orientation = DeviceOrientation()
     @State private var reticle: CGPoint?
     @State private var lastPreviewSize: CGSize?
     @State private var lastPinch: CGFloat = 1
+    /// Bellows only. Kept here rather than inside the drawer so the drawer's
+    /// position survives the deck being rebuilt by an unrelated state change.
+    @State private var bellowsOpen = false
 
     var body: some View {
         ZStack {
@@ -437,7 +441,51 @@ struct ViewfinderScreen: View {
     /// is exactly the jump that was reported. Here the blocks are laid out at a
     /// constant size and only their rotation and centre change, and both of those
     /// animate. Nothing resizes, so there is nothing left to snap.
-    private var deck: some View {
+    /// Which deck is on screen. All three keep the shutter row — the release,
+    /// the roll, PRO and the lens selector are how the camera is operated at
+    /// all, and a control style is a choice about the settings around them, not
+    /// about whether the camera still works.
+    @ViewBuilder private var deck: some View {
+        switch controlStyle {
+        case "Bellows Drawer": bellowsDeck
+        case "Crown": crownDeck
+        default: classicDeck
+        }
+    }
+
+    /// 04 · A leatherette drawer under the shutter row, stowed to its pleats.
+    private var bellowsDeck: some View {
+        VStack(spacing: 0) {
+            Spacer(minLength: 0)
+
+            shutterRow
+                .frame(height: Self.shutterBand)
+                .padding(.bottom, 10)
+
+            BellowsDrawer(rotation: orientation.angle, open: $bellowsOpen)
+        }
+        .background(alignment: .bottom) {
+            deckShade.frame(height: 240)
+        }
+    }
+
+    /// 10 · One crown on the right edge. Nothing else is added to the frame,
+    /// which is the entire argument for it.
+    private var crownDeck: some View {
+        VStack(spacing: 0) {
+            CrownControl(rotation: orientation.angle)
+                .frame(maxHeight: .infinity, alignment: .center)
+
+            shutterRow
+                .frame(height: Self.shutterBand)
+                .padding(.bottom, 18)
+        }
+        .background(alignment: .bottom) {
+            deckShade.frame(height: 190)
+        }
+    }
+
+    private var classicDeck: some View {
         GeometryReader { geo in
             let size = geo.size
             ZStack(alignment: .topLeading) {

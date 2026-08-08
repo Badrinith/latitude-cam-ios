@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1200" viewBox="0 0 1800 1200">
+ <defs>
+  <linearGradient id="paper" x2="0" y2="1"><stop stop-color="#ece6d8"/><stop offset="1" stop-color="#cfc3ab"/></linearGradient>
+  <linearGradient id="metal" x2="0" y2="1"><stop stop-color="#363733"/><stop offset=".48" stop-color="#171815"/><stop offset="1" stop-color="#252622"/></linearGradient>
+  <linearGradient id="brass" x2="1" y2="1"><stop stop-color="#e5c978"/><stop offset=".4" stop-color="#9a7335"/><stop offset=".72" stop-color="#604416"/><stop offset="1" stop-color="#c9a457"/></linearGradient>
+  <linearGradient id="scene" x2=".2" y2="1"><stop stop-color="#bdac88"/><stop offset=".42" stop-color="#8d9b88"/><stop offset="1" stop-color="#314451"/></linearGradient>
+  <filter id="shadow"><feDropShadow dx="0" dy="15" stdDeviation="12" flood-color="#221b12" flood-opacity=".28"/></filter>
+  <pattern id="knurl" width="5" height="5" patternUnits="userSpaceOnUse"><path d="M0 5L5 0" stroke="#ead28d" opacity=".45"/></pattern>
+  <g id="camera">
+   <rect width="290" height="570" rx="39" fill="url(#metal)" stroke="#6e6b61" stroke-width="3"/>
+   <rect x="13" y="13" width="264" height="544" rx="31" fill="#0b0c0b" stroke="#6a512a" stroke-width="2"/>
+   <rect x="25" y="83" width="240" height="348" rx="3" fill="url(#scene)"/>
+   <path d="M25 276h240M145 83v348" stroke="#eee6d0" opacity=".28"/>
+   <path d="M25 83h240v348H25z" fill="none" stroke="#d6c58f" opacity=".28"/>
+   <rect x="92" y="28" width="106" height="26" rx="13" fill="#181a16" stroke="#9b7839"/>
+   <text x="145" y="46" text-anchor="middle" fill="#e7d7ae" font-family="Georgia" font-size="11" letter-spacing="2">LATITUDE</text>
+   <circle cx="145" cy="495" r="37" fill="#090a09" stroke="url(#brass)" stroke-width="6"/>
+   <circle cx="145" cy="495" r="24" fill="none" stroke="#ead18b" stroke-width="1.5"/>
+   <rect x="38" y="474" width="38" height="38" rx="7" fill="#1a1b18" stroke="#a6803d"/><rect x="44" y="480" width="26" height="26" fill="#8b9a82"/>
+   <circle cx="246" cy="493" r="20" fill="#1a1b18" stroke="#a6803d"/>
+  </g>
+  <g id="quietTop">
+   <circle cx="45" cy="68" r="14" fill="#1a1b18" stroke="#a6803d"/><text x="45" y="72" text-anchor="middle" fill="#e6d4a7" font-family="Georgia" font-size="11">↺</text>
+   <circle cx="245" cy="68" r="14" fill="#1a1b18" stroke="#a6803d"/><text x="245" y="72" text-anchor="middle" fill="#e6d4a7" font-family="Georgia" font-size="10">···</text>
+  </g>
+ </defs>
+ <rect width="1800" height="1200" fill="url(#paper)"/>
+ <text x="900" y="104" text-anchor="middle" fill="#29261e" font-family="Georgia" font-size="50" letter-spacing="7">LATITUDE / QUIET MECHANICS</text>
+ <text x="900" y="144" text-anchor="middle" fill="#625a4b" font-family="Georgia" font-size="20" letter-spacing="2">THE FRAME IS SACRED. CONTROLS LIVE IN THE BODY, THEN ARRIVE ONLY WHEN CALLED.</text>
+ <!-- A -->
+ <g transform="translate(120 245)" filter="url(#shadow)"><use href="#camera"/><use href="#quietTop"/>
+   <rect x="95" y="445" width="100" height="20" rx="10" fill="#201e18" stroke="#a6803d"/><text x="145" y="459" text-anchor="middle" fill="#e8d9af" font-family="Georgia" font-size="9" letter-spacing="1">1×  ·  RAW</text>
+   <circle cx="245" cy="493" r="15" fill="url(#brass)"/><path d="M245 478v30" stroke="#392710" stroke-width="2"/>
+   <text x="145" y="610" text-anchor="middle" fill="#302a20" font-family="Georgia" font-size="20">01 · QUIET FINDER</text><text x="145" y="637" text-anchor="middle" fill="#645949" font-family="Georgia" font-size="13">Nothing on the image. Tap the crown.</text>
+ </g>
+ <!-- B -->
+ <g transform="translate(450 245)" filter="url(#shadow)"><use href="#camera"/><use href="#quietTop"/>
+   <rect x="273" y="173" width="34" height="177" rx="17" fill="url(#brass)"/><rect x="279" y="184" width="22" height="155" rx="11" fill="url(#knurl)"/><path d="M277 246h26" stroke="#241b0c" stroke-width="3"/><text x="252" y="188" text-anchor="end" fill="#f0e5c5" font-family="Georgia" font-size="10">ISO 400</text>
+   <text x="145" y="610" text-anchor="middle" fill="#302a20" font-family="Georgia" font-size="20">02 · EDGE WHEEL</text><text x="145" y="637" text-anchor="middle" fill="#645949" font-family="Georgia" font-size="13">Drag the side wheel. One value at a time.</text>
+ </g>
+ <!-- C -->
+ <g transform="translate(780 245)" filter="url(#shadow)"><use href="#camera"/><use href="#quietTop"/>
+   <path d="M25 438h240v32H25z" fill="#25251f" stroke="#9c793c"/><circle cx="74" cy="454" r="12" fill="url(#brass)"/><circle cx="145" cy="454" r="12" fill="url(#brass)"/><circle cx="216" cy="454" r="12" fill="url(#brass)"/><text x="74" y="458" text-anchor="middle" font-family="Georgia" font-size="8">ISO</text><text x="145" y="458" text-anchor="middle" font-family="Georgia" font-size="8">S</text><text x="216" y="458" text-anchor="middle" font-family="Georgia" font-size="8">WB</text>
+   <text x="145" y="610" text-anchor="middle" fill="#302a20" font-family="Georgia" font-size="20">03 · FOOTPLATE</text><text x="145" y="637" text-anchor="middle" fill="#645949" font-family="Georgia" font-size="13">Three physical selectors below the frame.</text>
+ </g>
+ <!-- D -->
+ <g transform="translate(1110 245)" filter="url(#shadow)"><use href="#camera"/><use href="#quietTop"/>
+   <rect x="25" y="385" width="240" height="46" fill="#171915" stroke="#9b7839"/><path d="M48 408h194" stroke="#d1ae62" stroke-width="2"/><circle cx="88" cy="408" r="12" fill="url(#brass)"/><circle cx="145" cy="408" r="12" fill="url(#brass)"/><circle cx="202" cy="408" r="12" fill="url(#brass)"/><text x="88" y="411" text-anchor="middle" font-family="Georgia" font-size="8">.5</text><text x="145" y="411" text-anchor="middle" font-family="Georgia" font-size="8">1</text><text x="202" y="411" text-anchor="middle" font-family="Georgia" font-size="8">2</text>
+   <text x="145" y="610" text-anchor="middle" fill="#302a20" font-family="Georgia" font-size="20">04 · LENS RAIL</text><text x="145" y="637" text-anchor="middle" fill="#645949" font-family="Georgia" font-size="13">Available lenses slide in the lower bezel.</text>
+ </g>
+ <!-- E -->
+ <g transform="translate(1440 245)" filter="url(#shadow)"><use href="#camera"/><use href="#quietTop"/>
+   <rect x="25" y="83" width="240" height="348" fill="url(#scene)"/><rect x="25" y="381" width="240" height="50" fill="#11130f" opacity=".92"/><circle cx="57" cy="406" r="18" fill="url(#brass)"/><path d="M57 389v34" stroke="#3b2a10" stroke-width="2"/><text x="83" y="404" fill="#ebdcba" font-family="Georgia" font-size="11">ISO 400</text><text x="83" y="419" fill="#b8aa8d" font-family="Georgia" font-size="9">wheel to change · press next</text>
+   <text x="145" y="610" text-anchor="middle" fill="#302a20" font-family="Georgia" font-size="20">05 · SINGLE COMMAND</text><text x="145" y="637" text-anchor="middle" fill="#645949" font-family="Georgia" font-size="13">One dial, contextual readout, then it vanishes.</text>
+ </g>
+ <path d="M95 735H1705" stroke="#7c694d"/>
+ <text x="900" y="790" text-anchor="middle" fill="#302a20" font-family="Georgia" font-size="25" letter-spacing="2">COMMON RULES FOR ALL FIVE</text>
+ <text x="900" y="836" text-anchor="middle" fill="#5d5547" font-family="Georgia" font-size="18">No persistent controls inside the live image · one action per gesture · controls stay where fingers naturally rest</text>
+ <text x="900" y="875" text-anchor="middle" fill="#5d5547" font-family="Georgia" font-size="18">Brass appears only as feedback and focus · physical motion has detents and a soft mechanical haptic · the shutter never moves</text>
+ <text x="900" y="1040" text-anchor="middle" fill="#302a20" font-family="Georgia" font-size="22" letter-spacing="2">RECOMMENDED FOUNDATION: 01 QUIET FINDER + 02 EDGE WHEEL + 04 LENS RAIL</text>
+ <text x="900" y="1080" text-anchor="middle" fill="#5d5547" font-family="Georgia" font-size="17">It preserves the cleanest viewfinder while making manual control feel like operating a well-made camera body.</text>
+</svg>

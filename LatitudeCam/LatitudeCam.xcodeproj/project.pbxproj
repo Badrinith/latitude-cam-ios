@@ -28,6 +28,7 @@
 		A019 /* FilmKnob.swift in Sources */ = {isa = PBXBuildFile; fileRef = B019 /* FilmKnob.swift */; };
 		A020 /* RotaryDial.swift in Sources */ = {isa = PBXBuildFile; fileRef = B020 /* RotaryDial.swift */; };
 		A021 /* Barrel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B021 /* Barrel.swift */; };
+		A022 /* ViewfinderControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = B022 /* ViewfinderControls.swift */; };
 		A100 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B100 /* Assets.xcassets */; };
 		A200 /* FilmProfileTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200 /* FilmProfileTests.swift */; };
 		A201 /* ExposureControlTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B201 /* ExposureControlTests.swift */; };
@@ -74,6 +75,7 @@
 		B019 /* FilmKnob.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilmKnob.swift; sourceTree = "<group>"; };
 		B020 /* RotaryDial.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RotaryDial.swift; sourceTree = "<group>"; };
 		B021 /* Barrel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Barrel.swift; sourceTree = "<group>"; };
+		B022 /* ViewfinderControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewfinderControls.swift; sourceTree = "<group>"; };
 		B100 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		B200 /* FilmProfileTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilmProfileTests.swift; sourceTree = "<group>"; };
 		B201 /* ExposureControlTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExposureControlTests.swift; sourceTree = "<group>"; };
@@ -105,6 +107,7 @@
 				B019 /* FilmKnob.swift */,
 				B020 /* RotaryDial.swift */,
 				B021 /* Barrel.swift */,
+				B022 /* ViewfinderControls.swift */,
 			);
 			path = UI;
 			sourceTree = "<group>";
@@ -269,6 +272,7 @@
 				A019 /* FilmKnob.swift in Sources */,
 				A020 /* RotaryDial.swift in Sources */,
 				A021 /* Barrel.swift in Sources */,
+				A022 /* ViewfinderControls.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -1,0 +1,560 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Latitude Cam — Ten Viewfinders</title>
+
+<style>
+:root{
+  --ink:#0D0D0D; --raised:#161616; --card:#1C1C1E;
+  --tone:#F2EFE8; --amber:#D98A52; --amber-deep:#8A5A34;
+  --brass:#B08D5B; --leather:#241C14; --steel:#2A2A2C;
+  --hair:rgba(255,255,255,.12); --hair-2:rgba(255,255,255,.06);
+  --t2:rgba(255,255,255,.55); --t3:rgba(255,255,255,.40);
+  --serif:"Bodoni 72","Didot","Hoefler Text",Georgia,serif;
+  --mono:"SF Mono",ui-monospace,"JetBrains Mono",Menlo,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  background:
+    radial-gradient(1200px 700px at 50% -10%, #17130f 0%, transparent 60%),
+    var(--ink);
+  color:var(--tone); font-family:var(--serif);
+  padding:56px 28px 90px; -webkit-font-smoothing:antialiased;
+}
+/* film grain, fixed so it never repaints on scroll */
+body::after{
+  content:""; position:fixed; inset:0; pointer-events:none; z-index:99; opacity:.16;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/></filter><rect width='140' height='140' filter='url(%23n)' opacity='.5'/></svg>");
+}
+
+/* ── masthead ─────────────────────────────────────────── */
+header{max-width:1360px;margin:0 auto 54px;text-align:center}
+.rule{height:1px;background:linear-gradient(90deg,transparent,var(--hair) 22%,var(--hair) 78%,transparent);margin:22px 0}
+h1{font-size:52px;font-weight:400;letter-spacing:.055em;line-height:1.05}
+h1 em{font-style:italic;color:var(--amber)}
+.kicker{font-family:var(--mono);font-size:9.5px;letter-spacing:.42em;color:var(--t3);text-transform:uppercase;margin-bottom:16px}
+.lede{max-width:660px;margin:14px auto 0;font-size:15.5px;line-height:1.75;color:var(--t2);font-style:italic}
+
+/* ── grid ─────────────────────────────────────────────── */
+.grid{max-width:1360px;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(376px,1fr));gap:46px 34px}
+.concept{display:flex;flex-direction:column}
+
+/* phone shell */
+.phone{
+  position:relative;width:100%;max-width:360px;aspect-ratio:9/19; margin:0 auto;
+  border-radius:38px; overflow:hidden; background:#000;
+  border:1px solid rgba(255,255,255,.09);
+  box-shadow:0 26px 60px rgba(0,0,0,.72), inset 0 0 0 1px rgba(255,255,255,.03);
+}
+/* the "scene" behind the glass */
+.scene{position:absolute;inset:0;
+  background:
+    radial-gradient(120% 80% at 30% 18%, rgba(122,140,150,.35), transparent 62%),
+    linear-gradient(#243038 0%, #2f3a3c 34%, #4a4136 62%, #6b5233 82%, #7d5c34 100%);
+  filter:saturate(.72) contrast(1.04);
+}
+.scene::after{ /* horizon + soft sun, keeps controls readable over something real */
+  content:"";position:absolute;inset:0;
+  background:
+    radial-gradient(90px 90px at 74% 30%, rgba(255,214,150,.5), transparent 70%),
+    linear-gradient(transparent 58%, rgba(0,0,0,.34) 100%);
+}
+.vig{position:absolute;inset:0;box-shadow:inset 0 0 120px 34px rgba(0,0,0,.62);pointer-events:none}
+
+/* frame lines */
+.framelines{position:absolute;inset:26px 18px;border:1px solid rgba(242,239,232,.22);pointer-events:none}
+.framelines::before,.framelines::after{content:"";position:absolute;background:rgba(242,239,232,.3)}
+.framelines::before{left:50%;top:-6px;width:1px;height:12px;transform:translateX(-50%)}
+.framelines::after{left:50%;bottom:-6px;width:1px;height:12px;transform:translateX(-50%)}
+
+/* top status strip, shared */
+.hud{position:absolute;top:0;left:0;right:0;display:flex;justify-content:space-between;
+  padding:14px 18px;font-family:var(--mono);font-size:8px;letter-spacing:.2em;color:rgba(242,239,232,.7);z-index:4}
+.hud b{font-weight:500;color:var(--amber)}
+
+/* ── the knob ─────────────────────────────────────────── */
+.knob{
+  position:relative;border-radius:50%;cursor:grab;touch-action:none;flex:none;
+  background:
+    repeating-conic-gradient(from 0deg, #343434 0deg 2.6deg, #191919 2.6deg 5.2deg),
+    radial-gradient(circle at 34% 28%, #454545, #101010 72%);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.16), inset 0 -2px 6px rgba(0,0,0,.7),
+    0 6px 16px rgba(0,0,0,.66);
+  transition:transform .12s cubic-bezier(.34,1.56,.64,1);
+}
+.knob:active{cursor:grabbing;transform:scale(.965)}
+.knob::before{ /* brass cap */
+  content:"";position:absolute;inset:22%;border-radius:50%;
+  background:radial-gradient(circle at 36% 30%, rgba(255,235,200,.55), transparent 58%),
+    linear-gradient(150deg, var(--brass), #6d5533 70%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.4), 0 1px 3px rgba(0,0,0,.6);
+}
+.knob .pointer{ /* the index line, rotates with value */
+  position:absolute;inset:0;border-radius:50%;
+}
+.knob .pointer::after{
+  content:"";position:absolute;left:50%;top:7%;width:2px;height:22%;
+  transform:translateX(-50%);border-radius:1px;
+  background:var(--amber);box-shadow:0 0 7px rgba(217,138,82,.85);
+}
+.knob.sm{width:54px;height:54px}
+.knob.md{width:74px;height:74px}
+.knob.lg{width:96px;height:96px}
+
+/* engraved tick ring around a knob */
+.ticks{position:absolute;inset:-13px;border-radius:50%;pointer-events:none}
+.ticks span{position:absolute;left:50%;top:0;width:1px;height:6px;background:rgba(242,239,232,.32);transform-origin:50% 62px}
+.ticks.small span{transform-origin:50% 40px}
+
+/* readout */
+.readout{font-family:var(--mono);font-size:9.5px;letter-spacing:.24em;color:var(--tone);text-align:center}
+.readout small{display:block;font-size:7px;letter-spacing:.3em;color:var(--t3);margin-bottom:3px}
+
+/* shutter release, shared */
+.release{
+  width:66px;height:66px;border-radius:50%;flex:none;position:relative;cursor:pointer;
+  background:radial-gradient(circle at 36% 30%, #f6f2ea, #b9b2a5 62%, #6f6a60 100%);
+  box-shadow:0 6px 18px rgba(0,0,0,.7), inset 0 -3px 8px rgba(0,0,0,.4), inset 0 2px 0 rgba(255,255,255,.55);
+  transition:transform .1s ease;
+}
+.release:active{transform:scale(.94)}
+.release::after{content:"";position:absolute;inset:14px;border-radius:50%;border:1px solid rgba(0,0,0,.28)}
+
+/* generic control plate */
+.plate{
+  background:linear-gradient(#232323,#141414);
+  border:1px solid var(--hair); border-radius:14px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.08), 0 10px 26px rgba(0,0,0,.6);
+}
+.leatherette{
+  background-color:var(--leather);
+  background-image:radial-gradient(rgba(255,255,255,.045) .5px, transparent .5px);
+  background-size:4px 4px;
+}
+
+/* caption block */
+.meta{margin:22px 4px 0}
+.no{font-family:var(--mono);font-size:9px;letter-spacing:.34em;color:var(--amber)}
+.name{font-size:23px;letter-spacing:.02em;margin:7px 0 9px}
+.desc{font-size:13.6px;line-height:1.68;color:var(--t2)}
+.spec{margin-top:13px;border-top:1px solid var(--hair-2);padding-top:11px;display:grid;gap:6px}
+.spec div{display:flex;gap:10px;font-size:11.5px;line-height:1.5}
+.spec dt{font-family:var(--mono);font-size:8px;letter-spacing:.2em;color:var(--t3);text-transform:uppercase;flex:none;width:62px;padding-top:3px}
+.spec dd{color:rgba(242,239,232,.82)}
+
+/* stow / reveal toggle */
+.toggle{
+  margin:14px auto 0;display:block;font-family:var(--mono);font-size:8.5px;letter-spacing:.26em;
+  text-transform:uppercase;color:var(--t2);background:transparent;cursor:pointer;
+  border:1px solid var(--hair);border-radius:999px;padding:8px 17px;transition:.22s;
+}
+.toggle:hover{color:var(--tone);border-color:var(--amber);background:rgba(217,138,82,.09)}
+
+/* ══ per-concept staging ══════════════════════════════════ */
+.stage{position:absolute;inset:0;z-index:3}
+.stow{transition:transform .5s cubic-bezier(.22,1,.36,1), opacity .34s ease}
+
+/* 01 collar */
+.c1-wrap{position:absolute;left:50%;bottom:44px;transform:translateX(-50%);width:190px;height:190px;display:grid;place-items:center}
+.c1-ring{position:absolute;inset:0;border-radius:50%;border:1px solid rgba(242,239,232,.2);
+  background:conic-gradient(from -90deg, rgba(217,138,82,.2), transparent 62%);}
+.c1-chip{position:absolute;font-family:var(--mono);font-size:8px;letter-spacing:.14em;color:rgba(242,239,232,.82);
+  background:rgba(13,13,13,.74);border:1px solid var(--hair);border-radius:999px;padding:4px 9px;backdrop-filter:blur(7px)}
+.stowed .c1-ring{transform:scale(.42);opacity:0}
+.stowed .c1-chip{opacity:0;transform:scale(.6)}
+
+/* 02 top plate */
+.c2-plate{position:absolute;top:0;left:0;right:0;padding:20px 18px 22px;display:flex;justify-content:space-around;align-items:flex-start;
+  border-radius:0 0 20px 20px;border-bottom:1px solid var(--hair)}
+.stowed .c2-plate{transform:translateY(-102%)}
+.c2-tab{position:absolute;top:0;left:50%;transform:translateX(-50%);width:64px;height:5px;border-radius:0 0 6px 6px;background:rgba(242,239,232,.34);margin-top:0}
+
+/* 03 radial summon */
+.c3-radial{position:absolute;left:50%;top:52%;transform:translate(-50%,-50%);width:210px;height:210px;border-radius:50%;
+  display:grid;place-items:center;background:radial-gradient(circle,rgba(13,13,13,.9),rgba(13,13,13,.45) 62%,transparent 72%);backdrop-filter:blur(3px)}
+.c3-petal{position:absolute;font-family:var(--mono);font-size:8px;letter-spacing:.16em;color:rgba(242,239,232,.9);
+  width:52px;height:52px;border-radius:50%;display:grid;place-items:center;border:1px solid var(--hair);background:rgba(28,28,30,.94)}
+.c3-hint{position:absolute;left:50%;bottom:120px;transform:translateX(-50%);font-family:var(--mono);font-size:8px;letter-spacing:.26em;color:rgba(242,239,232,.5)}
+.stowed .c3-radial{opacity:0;transform:translate(-50%,-50%) scale(.55)}
+.stowed .c3-hint{opacity:1}
+.c3-hint{opacity:0;transition:opacity .3s}
+
+/* 04 bellows drawer */
+.c4-drawer{position:absolute;left:0;right:0;bottom:0;padding:18px 16px 24px;border-radius:20px 20px 0 0;border-top:1px solid var(--hair);
+  display:flex;justify-content:space-between;align-items:center;gap:10px}
+.c4-pleat{position:absolute;top:8px;left:0;right:0;height:9px;
+  background:repeating-linear-gradient(90deg,rgba(255,255,255,.07) 0 2px,transparent 2px 7px)}
+.stowed .c4-drawer{transform:translateY(78%)}
+
+/* 05 rangefinder corner fan */
+.c5-fan{position:absolute;right:20px;bottom:96px;display:flex;flex-direction:column;gap:9px;align-items:flex-end}
+.c5-item{display:flex;align-items:center;gap:9px;transition:.42s cubic-bezier(.22,1,.36,1)}
+.c5-label{font-family:var(--mono);font-size:8px;letter-spacing:.18em;color:rgba(242,239,232,.78);
+  background:rgba(13,13,13,.72);border:1px solid var(--hair);border-radius:999px;padding:4px 9px}
+.stowed .c5-item{opacity:0;transform:translate(26px,26px) scale(.7)}
+.stowed .c5-item:nth-child(2){transition-delay:.03s}
+.stowed .c5-item:nth-child(3){transition-delay:.06s}
+
+/* 06 waist-level hood */
+.c6-flap{position:absolute;top:0;bottom:0;width:78px;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:18px;
+  border:1px solid var(--hair)}
+.c6-l{left:0;border-radius:0 16px 16px 0;transform-origin:left center}
+.c6-r{right:0;border-radius:16px 0 0 16px;transform-origin:right center}
+.stowed .c6-l{transform:perspective(600px) rotateY(-92deg)}
+.stowed .c6-r{transform:perspective(600px) rotateY(92deg)}
+
+/* 07 barrel rings */
+.c7-rings{position:absolute;left:0;right:0;bottom:0;height:210px;overflow:hidden}
+.c7-ring{position:absolute;left:50%;transform:translateX(-50%);border-radius:50%;border:1px solid var(--hair);
+  background:conic-gradient(from 200deg,rgba(255,255,255,.07),transparent 40%)}
+.c7-a{width:420px;height:420px;bottom:-232px}
+.c7-b{width:330px;height:330px;bottom:-196px}
+.c7-mark{position:absolute;font-family:var(--mono);font-size:7.5px;letter-spacing:.16em;color:rgba(242,239,232,.72)}
+.stowed .c7-ring{transform:translateX(-50%) translateY(58%)}
+.stowed .c7-mark{opacity:0}
+
+/* 08 engraved bezel */
+.c8-edge{position:absolute;font-family:var(--mono);font-size:7.5px;letter-spacing:.3em;color:rgba(242,239,232,.6);
+  display:flex;align-items:center;justify-content:center;gap:8px}
+.c8-top{top:44px;left:0;right:0}
+.c8-bot{bottom:112px;left:0;right:0}
+.c8-lft{left:-46px;top:50%;transform:translateY(-50%) rotate(-90deg)}
+.c8-rgt{right:-46px;top:50%;transform:translateY(-50%) rotate(90deg)}
+.c8-track{width:120px;height:2px;background:linear-gradient(90deg,transparent,var(--amber),transparent);border-radius:2px}
+.stowed .c8-edge{opacity:.18}
+.stowed .c8-track{opacity:0}
+
+/* 09 advance lever */
+.c9-lever{position:absolute;right:14px;top:50%;width:92px;height:26px;transform-origin:right center;
+  border-radius:14px 4px 4px 14px;display:flex;align-items:center;padding-left:12px;gap:8px;
+  transition:transform .44s cubic-bezier(.34,1.4,.5,1)}
+.c9-bank{position:absolute;left:20px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:14px;transition:.4s}
+.stowed .c9-lever{transform:rotate(-34deg)}
+.stowed .c9-bank{opacity:0;transform:translateY(-50%) translateX(-16px)}
+
+/* 10 crown */
+.c10-crown{position:absolute;right:-12px;top:118px;width:34px;height:70px;border-radius:8px;
+  background:repeating-linear-gradient(0deg,#3a3a3a 0 2px,#161616 2px 4px);
+  border:1px solid var(--hair);box-shadow:-3px 0 10px rgba(0,0,0,.6);transition:.34s}
+.c10-panel{position:absolute;right:34px;top:96px;width:150px;padding:14px;border-radius:14px 4px 4px 14px;transition:.42s cubic-bezier(.22,1,.36,1)}
+.stowed .c10-crown{transform:translateX(9px)}
+.stowed .c10-panel{opacity:0;transform:translateX(26px) scale(.92)}
+
+footer{max-width:820px;margin:82px auto 0;text-align:center;color:var(--t3);font-size:12.5px;line-height:1.8;font-style:italic}
+</style>
+
+<header>
+  <div class="kicker">Latitude Cam · Viewfinder Study</div>
+  <h1>Ten ways to <em>put the controls away</em></h1>
+  <div class="rule"></div>
+  <p class="lede">A camera should show you the picture, not the software. Each concept below hides
+  every setting until it is asked for, and brings it back as something with knurling on it — a knob,
+  a collar, a lever — that you turn rather than tap. Drag any knob to feel it.</p>
+</header>
+
+<div class="grid" id="grid"></div>
+
+<footer>
+  Shared across all ten: the release never moves, the frame lines never rotate,<br>
+  and nothing that isn't a picture survives more than three seconds of not being touched.
+</footer>
+
+<script>
+/* ─────────────────────────────────────────────────────────
+   Ten concepts. Each supplies the markup that lives inside
+   the phone; the shell, scene, HUD and caption are shared.
+   ───────────────────────────────────────────────────────── */
+
+const CONCEPTS = [
+{
+  no:"01", name:"The Lens Collar",
+  desc:"A collar sits around the release like the aperture ring on a lens. Twist the collar and the current setting's values ride around it; let go and it shrinks back into a hairline ring.",
+  gesture:"Twist the ring around the shutter",
+  hides:"Collapses to a 1px ring flush with the release",
+  reads:"Value rides at the top of the arc, under the thumb",
+  stage:`
+    <div class="c1-wrap stow">
+      <div class="c1-ring"></div>
+      <div class="c1-chip" style="left:-6px;top:52%">200</div>
+      <div class="c1-chip" style="left:16px;top:14%">400</div>
+      <div class="c1-chip" style="right:16px;top:14%">800</div>
+      <div class="c1-chip" style="right:-6px;top:52%">1600</div>
+      <div class="release"></div>
+    </div>
+    <div class="readout" style="position:absolute;left:0;right:0;bottom:20px"><small>ISO</small>400</div>`
+},
+{
+  no:"02", name:"The Top Plate",
+  desc:"Pull down from the top edge and a machined plate slides over the frame, carrying two real dials — shutter on the left, ISO on the right — engraved the way they are on the body of an M6.",
+  gesture:"Pull down from the top edge",
+  hides:"Slides up under the bezel, leaving a 5px tab",
+  reads:"Both dials legible at once, no mode switching",
+  stage:`
+    <div class="c2-tab"></div>
+    <div class="c2-plate plate stow">
+      <div style="display:grid;gap:9px;justify-items:center">
+        <div class="knob md" data-knob data-min="1" data-max="4000" data-val="250"><div class="pointer"></div></div>
+        <div class="readout"><small>SHUTTER</small><span data-out>1/250</span></div>
+      </div>
+      <div style="display:grid;gap:9px;justify-items:center">
+        <div class="knob md" data-knob data-min="50" data-max="6400" data-val="400"><div class="pointer"></div></div>
+        <div class="readout"><small>ISO</small><span data-out>400</span></div>
+      </div>
+    </div>`
+},
+{
+  no:"03", name:"Ground Glass",
+  desc:"Nothing is on screen at all. Press and hold anywhere and the controls bloom around your thumb, wherever it happens to be — the knob comes to the hand instead of the hand going to the knob.",
+  gesture:"Press and hold anywhere on the frame",
+  hides:"Completely — the screen is only ever the picture",
+  reads:"Petals orbit the thumb; slide to one, roll to set",
+  stage:`
+    <div class="c3-hint">PRESS AND HOLD</div>
+    <div class="c3-radial stow">
+      <div class="c3-petal" style="top:6px;left:50%;transform:translateX(-50%)">ISO</div>
+      <div class="c3-petal" style="right:6px;top:50%;transform:translateY(-50%)">SHTR</div>
+      <div class="c3-petal" style="bottom:6px;left:50%;transform:translateX(-50%)">WB</div>
+      <div class="c3-petal" style="left:6px;top:50%;transform:translateY(-50%)">EV</div>
+      <div class="knob md" data-knob data-min="-3" data-max="3" data-val="0" data-fmt="ev"><div class="pointer"></div></div>
+    </div>`
+},
+{
+  no:"04", name:"The Bellows Drawer",
+  desc:"A leatherette drawer with pleated edges rises from the bottom rail carrying three small knobs in a row. Swipe it down and it tucks away with only its pleats showing, like a folded bellows.",
+  gesture:"Swipe up from the bottom rail",
+  hides:"Drops to 22% height — pleats still visible as a handle",
+  reads:"Three knobs side by side, always the same three",
+  stage:`
+    <div class="c4-drawer leatherette stow">
+      <div class="c4-pleat"></div>
+      <div style="display:grid;gap:7px;justify-items:center;margin-top:6px">
+        <div class="knob sm" data-knob data-min="50" data-max="6400" data-val="400"><div class="pointer"></div></div>
+        <div class="readout"><small>ISO</small><span data-out>400</span></div>
+      </div>
+      <div class="release" style="margin-top:6px"></div>
+      <div style="display:grid;gap:7px;justify-items:center;margin-top:6px">
+        <div class="knob sm" data-knob data-min="2700" data-max="9000" data-val="5200" data-fmt="k"><div class="pointer"></div></div>
+        <div class="readout"><small>WHITE</small><span data-out>5200K</span></div>
+      </div>
+    </div>`
+},
+{
+  no:"05", name:"The Rangefinder Patch",
+  desc:"Controls hide behind the frame line's bottom-right corner. Tap the corner and they fan out diagonally on their own little tabs, the way a rangefinder patch sits over the scene rather than beside it.",
+  gesture:"Tap the frame-line corner",
+  hides:"Folds into the corner mark, 26px of travel",
+  reads:"Fans on a diagonal — never covers the centre third",
+  stage:`
+    <div class="c5-fan">
+      <div class="c5-item stow"><span class="c5-label">ISO 400</span>
+        <div class="knob sm" data-knob data-min="50" data-max="6400" data-val="400"><div class="pointer"></div></div></div>
+      <div class="c5-item stow"><span class="c5-label">1/250</span>
+        <div class="knob sm" data-knob data-min="1" data-max="4000" data-val="250"><div class="pointer"></div></div></div>
+      <div class="c5-item stow"><span class="c5-label">f/2.8</span>
+        <div class="knob sm" data-knob data-min="14" data-max="160" data-val="28" data-fmt="f"><div class="pointer"></div></div></div>
+    </div>
+    <div class="release" style="position:absolute;left:50%;bottom:26px;transform:translateX(-50%)"></div>`
+},
+{
+  no:"06", name:"The Waist-Level Hood",
+  desc:"Two flaps hinge open from the left and right edges like the folding hood of a TLR. The knobs are mounted on the inside faces, so opening the hood is what puts them within reach.",
+  gesture:"Swipe inward from either edge",
+  hides:"Folds flat against the bezel — 92° hinge",
+  reads:"Left flap exposure, right flap look; thumb reaches both",
+  stage:`
+    <div class="c6-flap c6-l plate leatherette stow">
+      <div class="knob sm" data-knob data-min="50" data-max="6400" data-val="400"><div class="pointer"></div></div>
+      <div class="readout"><small>ISO</small><span data-out>400</span></div>
+      <div class="knob sm" data-knob data-min="-3" data-max="3" data-val="0" data-fmt="ev"><div class="pointer"></div></div>
+      <div class="readout"><small>EV</small><span data-out>0.0</span></div>
+    </div>
+    <div class="c6-flap c6-r plate leatherette stow">
+      <div class="knob sm" data-knob data-min="0" data-max="9" data-val="3" data-fmt="film"><div class="pointer"></div></div>
+      <div class="readout"><small>FILM</small><span data-out>PORCELAIN</span></div>
+      <div class="knob sm" data-knob data-min="0" data-max="100" data-val="72"><div class="pointer"></div></div>
+      <div class="readout"><small>GRAIN</small><span data-out>72</span></div>
+    </div>
+    <div class="release" style="position:absolute;left:50%;bottom:26px;transform:translateX(-50%)"></div>`
+},
+{
+  no:"07", name:"Barrel Rings",
+  desc:"Two enormous concentric arcs pass through the bottom of the frame — you are looking at the focus and aperture rings of a lens barrel from above. Drag along an arc and it turns under your thumb.",
+  gesture:"Drag along either arc",
+  hides:"Both arcs sink below the bottom edge",
+  reads:"Huge travel — 400px of arc for fine, slow adjustment",
+  stage:`
+    <div class="c7-rings">
+      <div class="c7-ring c7-a stow"></div>
+      <div class="c7-ring c7-b stow"></div>
+      <div class="c7-mark stow" style="left:26px;bottom:88px">0.7m</div>
+      <div class="c7-mark stow" style="left:50%;bottom:126px;transform:translateX(-50%);color:var(--amber)">1.4m</div>
+      <div class="c7-mark stow" style="right:26px;bottom:88px">∞</div>
+      <div class="c7-mark stow" style="left:50%;bottom:56px;transform:translateX(-50%)">f/2.8</div>
+    </div>
+    <div class="release" style="position:absolute;left:50%;bottom:-4px;transform:translateX(-50%)"></div>`
+},
+{
+  no:"08", name:"The Engraved Bezel",
+  desc:"Each edge of the frame is a control surface, engraved with its name in the way a lens is engraved around its barrel. Run a thumb along the top edge for exposure, the right edge for ISO.",
+  gesture:"Drag along any edge of the frame",
+  hides:"Engraving stays, but dims to 18% — the frame keeps its lettering",
+  reads:"An amber track lights under the thumb as it moves",
+  stage:`
+    <div class="c8-edge c8-top"><span>EXPOSURE</span><span class="c8-track stow"></span><span>+0.3</span></div>
+    <div class="c8-edge c8-bot"><span>FILM</span><span class="c8-track stow"></span><span>PORCELAIN</span></div>
+    <div class="c8-edge c8-lft"><span>SHUTTER · 1/250</span></div>
+    <div class="c8-edge c8-rgt"><span>ISO · 400</span></div>
+    <div class="release" style="position:absolute;left:50%;bottom:26px;transform:translateX(-50%)"></div>`
+},
+{
+  no:"09", name:"The Advance Lever",
+  desc:"A thumb lever sits where the film advance would be. Each stroke cocks it to the next bank of controls — exposure, then look, then format — and it springs back with a detent you can feel.",
+  gesture:"Thumb the lever; each stroke advances a bank",
+  hides:"Lever rests at −34°, bank slides out left",
+  reads:"One bank at a time; the lever's angle is the position",
+  stage:`
+    <div class="c9-bank stow" style="display:flex">
+      <div style="display:grid;gap:7px;justify-items:center">
+        <div class="knob sm" data-knob data-min="50" data-max="6400" data-val="400"><div class="pointer"></div></div>
+        <div class="readout"><small>ISO</small><span data-out>400</span></div>
+      </div>
+      <div style="display:grid;gap:7px;justify-items:center">
+        <div class="knob sm" data-knob data-min="1" data-max="4000" data-val="250"><div class="pointer"></div></div>
+        <div class="readout"><small>SHUTTER</small><span data-out>1/250</span></div>
+      </div>
+    </div>
+    <div class="c9-lever plate stow">
+      <span style="font-family:var(--mono);font-size:7px;letter-spacing:.2em;color:var(--t2)">EXPOSURE</span>
+    </div>
+    <div class="release" style="position:absolute;left:50%;bottom:26px;transform:translateX(-50%)"></div>`
+},
+{
+  no:"10", name:"The Crown",
+  desc:"One knurled crown on the right edge, borrowed from a watch. Press it to choose what it drives, then roll it to set the value — a single control that never grows and never needs a second one.",
+  gesture:"Press the crown to pick, roll to set",
+  hides:"Crown sits flush; panel retracts entirely",
+  reads:"One value at a time, always in the same place",
+  stage:`
+    <div class="c10-panel plate stow">
+      <div style="display:grid;gap:10px;justify-items:center">
+        <div class="knob md" data-knob data-min="50" data-max="6400" data-val="400"><div class="pointer"></div></div>
+        <div class="readout"><small>ISO</small><span data-out>400</span></div>
+      </div>
+    </div>
+    <div class="c10-crown"></div>
+    <div class="release" style="position:absolute;left:50%;bottom:26px;transform:translateX(-50%)"></div>`
+}
+];
+
+/* ── build ─────────────────────────────────────────────── */
+const grid = document.getElementById("grid");
+
+CONCEPTS.forEach(c => {
+  const el = document.createElement("div");
+  el.className = "concept";
+  el.innerHTML = `
+    <div class="phone stowed">
+      <div class="scene"></div>
+      <div class="hud"><span>LATITUDE</span><span><b>1/250</b> · f/2.8 · 400</span></div>
+      <div class="framelines"></div>
+      <div class="stage">${c.stage}</div>
+      <div class="vig"></div>
+    </div>
+    <button class="toggle">Reveal controls</button>
+    <div class="meta">
+      <div class="no">${c.no}</div>
+      <div class="name">${c.name}</div>
+      <p class="desc">${c.desc}</p>
+      <div class="spec">
+        <div><dt>Gesture</dt><dd>${c.gesture}</dd></div>
+        <div><dt>Stowed</dt><dd>${c.hides}</dd></div>
+        <div><dt>Reading</dt><dd>${c.reads}</dd></div>
+      </div>
+    </div>`;
+  grid.appendChild(el);
+
+  const phone = el.querySelector(".phone");
+  const btn = el.querySelector(".toggle");
+  btn.addEventListener("click", () => {
+    const stowed = phone.classList.toggle("stowed");
+    btn.textContent = stowed ? "Reveal controls" : "Stow controls";
+  });
+  // tapping the frame itself reveals too — that is the point of the study
+  phone.addEventListener("click", e => {
+    if (e.target.closest("[data-knob]")) return;
+    const stowed = phone.classList.toggle("stowed");
+    btn.textContent = stowed ? "Reveal controls" : "Stow controls";
+  });
+});
+
+/* ── knob behaviour: drag to turn, value follows ───────── */
+const FILMS = ["NEUTRAL","VERMILION","MERIDIAN","PORCELAIN","HARBOUR","LEDGER","ASH","AMBER","SLATE","IRON"];
+
+function format(v, fmt, min, max){
+  switch(fmt){
+    case "ev":   return (v>=0?"+":"") + v.toFixed(1);
+    case "k":    return Math.round(v/50)*50 + "K";
+    case "f":    return "f/" + (v/10).toFixed(1);
+    case "film": return FILMS[Math.round(v)] || FILMS[0];
+    default:
+      if (max > 3000 && min === 1) {            // shutter
+        return "1/" + Math.max(1, Math.round(v));
+      }
+      return Math.round(v);
+  }
+}
+
+document.querySelectorAll("[data-knob]").forEach(knob => {
+  const min = parseFloat(knob.dataset.min);
+  const max = parseFloat(knob.dataset.max);
+  const fmt = knob.dataset.fmt;
+  let val = parseFloat(knob.dataset.val);
+
+  // the readout that belongs to this knob, if it has one
+  const out = knob.parentElement.querySelector("[data-out]");
+
+  // engraved tick ring
+  const ticks = document.createElement("div");
+  ticks.className = "ticks" + (knob.classList.contains("sm") ? " small" : "");
+  for (let i = 0; i < 24; i++){
+    const s = document.createElement("span");
+    s.style.transform = `rotate(${i * 15}deg)`;
+    ticks.appendChild(s);
+  }
+  knob.appendChild(ticks);
+
+  const pointer = knob.querySelector(".pointer");
+  const norm = v => (v - min) / (max - min);
+  const paint = () => {
+    pointer.style.transform = `rotate(${-140 + norm(val) * 280}deg)`;
+    if (out) out.textContent = format(val, fmt, min, max);
+  };
+  paint();
+
+  let dragging = false, lastAngle = null;
+  const angleOf = e => {
+    const r = knob.getBoundingClientRect();
+    return Math.atan2(e.clientY - (r.top + r.height/2), e.clientX - (r.left + r.width/2)) * 180 / Math.PI;
+  };
+
+  knob.addEventListener("pointerdown", e => {
+    e.stopPropagation();                 // never toggle the phone from a knob
+    dragging = true; lastAngle = angleOf(e);
+    knob.setPointerCapture(e.pointerId);
+  });
+  knob.addEventListener("pointermove", e => {
+    if (!dragging) return;
+    const a = angleOf(e);
+    let delta = a - lastAngle;
+    if (delta > 180) delta -= 360;       // wrap at the seam
+    if (delta < -180) delta += 360;
+    lastAngle = a;
+    val = Math.min(max, Math.max(min, val + (delta / 280) * (max - min)));
+    paint();
+  });
+  const stop = e => { dragging = false; if (knob.hasPointerCapture?.(e.pointerId)) knob.releasePointerCapture(e.pointerId); };
+  knob.addEventListener("pointerup", stop);
+  knob.addEventListener("pointercancel", stop);
+  knob.addEventListener("click", e => e.stopPropagation());
+});
+</script>

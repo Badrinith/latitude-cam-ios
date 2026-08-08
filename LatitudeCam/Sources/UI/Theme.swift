@@ -214,6 +214,7 @@ enum Pref {
     static let captureResolution = "settings.captureResolution"
     static let proMode = "settings.proMode"
     static let galleryLayout = "settings.galleryLayout"
+    static let viewfinderControls = "settings.viewfinderControls"
     /// Set once the entry flow has been completed, so later cold launches go
     /// straight from the splash to the viewfinder.
     static let onboarded = "app.onboarded"
@@ -237,6 +238,10 @@ enum Pref {
     /// Archive (drawers by family), Storyboard (unequal panels, newest gets the
     /// big one), and Darkroom (prints clipped to a line).
     static let galleryLayoutOptions = ["Organizer", "Contact Roll", "Archive", "Storyboard", "Darkroom"]
+    /// How the viewfinder presents its settings. Classic is the barrel deck the
+    /// app shipped with; the other two put everything away until asked and hand
+    /// it back as something you turn.
+    static let viewfinderControlOptions = ["Classic", "Bellows Drawer", "Crown"]
 
     static func string(_ key: String, default fallback: String) -> String {
         UserDefaults.standard.string(forKey: key) ?? fallback

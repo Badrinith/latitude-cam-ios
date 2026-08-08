@@ -211,6 +211,7 @@ struct SettingsScreen: View {
     @AppStorage(Pref.haptics) private var haptics = true
     @AppStorage(Pref.hapticStrength) private var hapticStrength = "Strong"
     @AppStorage(Pref.galleryLayout) private var galleryLayout = "Organizer"
+    @AppStorage(Pref.viewfinderControls) private var viewfinderControls = "Classic"
     @AppStorage(Pref.mirrorToPhotos) private var mirrorToPhotos = true
 
     var body: some View {
@@ -284,6 +285,12 @@ struct SettingsScreen: View {
                                   isLast: true) {
                             app.resetControls()
                         }
+                    }
+
+                    SettingsGroup(header: "Viewfinder") {
+                        OptionRow(title: "Controls",
+                                  options: Pref.viewfinderControlOptions, selection: $viewfinderControls,
+                                  isLast: true)
                     }
 
                     SettingsGroup(header: "Library") {
