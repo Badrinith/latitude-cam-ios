@@ -1,9 +1,13 @@
 # Latitude Cam iOS — Handover
 
 **Status:** Live camera pipeline and full-resolution RAW capture working on device.
-220 tests passing.
+351 tests passing. Currently on build **1.0.1 (40)**.
 
 **Deployment:** Debug builds install and run on device. Not yet submitted to TestFlight.
+
+**Branch:** `feat/camera-pipeline-dials-splash` — **68 commits ahead of `origin/main`, none pushed.**
+The remote has only `main`, and that commit is already contained in this branch. All of this work
+exists on one machine; pushing is the single highest-value thing an incoming maintainer can do.
 
 ---
 
@@ -41,7 +45,7 @@ SIMCTL_CHILD_LAT_SCREEN=viewfinder SIMCTL_CHILD_LAT_SHEET=pro xcrun simctl launc
 
 ---
 
-## Three architectural constraints
+## Four architectural constraints
 
 These are load-bearing. Each was arrived at by breaking the app first; violating any of them
 reproduces a specific failure that took a long time to diagnose.
@@ -129,7 +133,10 @@ LatitudeCam/Sources/
 │   ├── Haptics.swift            The whole haptic vocabulary + strength levels
 │   ├── SplashScreen.swift       Cold-launch sequence: SplashDirector, IrisAperture, glyphs
 │   ├── EntryScreens.swift       Onboarding, Login
-│   ├── ViewfinderScreen.swift   Camera screen, HUD, aspect mask, Pro sheet
+│   ├── ViewfinderScreen.swift   Camera screen, HUD, aspect mask, Pro sheet, control-style routing
+│   ├── ViewfinderControls.swift KnobMath, Knob, Bellows Drawer, Crown, the Top Plate deck
+│   │                            (PlateDial · DialBarrel · FilmCardStack · PlateLensRow),
+│   │                            LeafShutterButton + LeafShutterGeometry, DevelopingOverlay
 │   ├── LibraryScreens.swift     Film Sim, Library grid, Edit screen + PhotoEditor
 │   └── ReviewSettingsScreens.swift  Review, ShareSheet, Export sheet, Settings
 ├── CameraManager.swift          Capture session, FrameBuffer, RenderSettings, GPU pipeline
@@ -204,14 +211,27 @@ returning after the exposure.
 | Every control except the live feed was dead | `.id(UUID())` on the screen rebuilt the whole tree 30×/second (see constraint 1) |
 | ~5s between frames | Per-pixel Swift film transforms + a `CIContext` per frame (see constraint 2) |
 | Capture erased the frame just taken | `PhotoGallery.loadPhotos()` assigned `photos = loaded`, clobbering an in-memory capture that landed before the first disk read finished. Now merges on id. |
+| Landscape photos came out rotated | Four attempts. The first three all went through AVFoundation's connection angle and EXIF, and the third revealed why none could work: `CIImage(data:)` silently discards EXIF orientation unless `.applyOrientationProperty` is set, so the correctly-rotated buffer was decoded back to sensor orientation on every capture. Current build bakes rotation into the pixels from the same `DeviceOrientation` angle that drives the UI. |
+| ISO and shutter dials did nothing | They wrote `app.iso`/`app.shutter` directly while auto-exposure was still on, so the camera ignored them and the readouts kept saying `AUTO`/`ISO A`. The classic barrels already dropped out of A in their index setters; the plate's dials bypassed that path. Touching either dial now leaves A. |
+| Landscape controls stopped responding | The film strip was appended to a `VStack` that had already consumed the full height, so it overflowed and pushed the shutter row off-screen. Now an overlay — an overlay cannot push what it sits over. |
+| Landscape bands overlapped the plate and the shutter | `.top`/`.bottom` are not the sky and ground edges when the body is turned, and a band measured against the *screen* is the whole screen tall. Bands are now placed by physical edge inside a `viewfinderRegion` bounded by the plate and the release. |
+| Rotated switch labels clipped to "PORTI", "GR", "3:" | A rotated word needs its width in the frame's height. Switches are 54pt squares with glyphs now. |
+| Gallery delete removed nothing | `deletePhotos` derives Photos asset ids and bails when there are none, but `addPhoto` creates frames with `assetID: nil` until the roll reloads. Correct behaviour — an unmirrored frame has nothing to delete — but the tests were written against the old immediate-removal contract and had to be rewritten, not forced back. |
 | Gallery back button did nothing | Grid cells sized the `Image` directly, so a 1080px photo laid out far larger than its cell. `.clipped()` hides overflow but **hit testing still used the full bounds** — the top row swallowed taps meant for the back button. Fixed with `Color.clear` + `overlay` + `contentShape`. |
 
 ---
 
 ## Verified vs not
 
-**Verified:** all 220 tests; every screen rendered and inspected via `LAT_SCREEN`; the live camera
+**Verified:** all 351 tests; every screen rendered and inspected via `LAT_SCREEN`; the live camera
 feed, film look, and RAW + JPEG capture reaching Apple Photos, all confirmed on device by the owner.
+
+**A note on how this session went, because it matters for the next one.** Several bugs took three or
+four attempts because they were verified by screenshot rather than by test: landscape geometry and
+capture rotation especially. The pattern that finally worked was to extract the arithmetic into a
+pure type — `KnobMath`, `LeafShutterGeometry`, `skyEdge`, `viewfinderRegion` — and pin it. Layout and
+orientation bugs are invisible in code and obvious on glass; if you find yourself guessing at a
+constant, that is the signal to make it testable instead of trying another value.
 
 **Not covered by tests:** the whole photo-output path. `AVCapturePhotoOutput` needs real hardware,
 so `.photo` preset, the quality-prioritization ceiling, RAW availability and the Photos pairing are
@@ -238,10 +258,77 @@ With a working Simulator, `mcp__Claude_Code_iOS_Simulator__control` drives all o
 | Review screen is unreachable | Capture goes straight back to the viewfinder. `ReviewScreen`, `deleteCapture()` and `mirrorCaptureToPhotos()` are still built and still tested, but nothing routes to them. |
 | ProRAW toggle in the Pro sheet does nothing | RAW is driven by the Format chips. The toggle predates them and should be removed. |
 | "Share…" has no custom activity | Presents the standard `UIActivityViewController` with the `UIImage`. |
-| Edit saves a new frame | `PhotoGallery` has no update method; edits are non-destructive by adding. The roll grows with each save. |
+| ~~Edit saves a new frame~~ | **Fixed.** Edits now go onto the asset itself via PhotoKit adjustment data — see *Editing in place* below. |
 | `PreviewEngine` / `AdvancedFeatures` are off the hot path | Still contain main-thread `UIGraphics` and per-pixel loops. Harmless where they sit; do not call them per frame. |
-| No front camera | `configureAndStart()` requests the back wide-angle only. |
+| ~~No front camera~~ | **Fixed.** The front camera is a focal length in the lens row, past a divider — `camera.lenses` republishes on flip so the row only ever offers lengths that camera has. |
+| Landscape is faked, not real | The app stays portrait-locked: the camera preview is rotated 90° into portrait and the release must not move. Controls reposition themselves to the physically-correct edges instead. Three separate bugs came out of this (see below); if a fourth appears, the alternative is supporting real landscape interface orientation, which is a much larger change. |
 | Login is decorative | Both buttons and "Skip" all call `completeOnboarding()`. No auth. |
+
+---
+
+## Viewfinder control styles
+
+The viewfinder has four selectable presentations, chosen in **Settings → Viewfinder → Controls**
+(`Pref.viewfinderControls`). They differ only in how the *settings* around the camera are arranged —
+every style keeps the release, the roll, PRO and the lens selector, because those are how the camera
+is operated at all.
+
+| Style | Shape |
+|---|---|
+| **Film Label** (default) | The original barrel deck. Nothing changes for an existing user unless they opt in. |
+| **Bellows Drawer** | A leatherette drawer under the shutter row holding ISO/shutter/WB knobs. Stows to its pleats, which double as the handle. Closes on flick *velocity*, not distance. |
+| **Crown** | One knurled crown on the right edge. Roll to adjust, tap to cycle target, retires after 3.5s. Rolling works whether or not the panel is showing — the panel reports, it is not a prerequisite. |
+| **Top Plate** | The design handoff's screen: a 222pt metal plate with five knurled dials, a film-card carousel and a glass HUD. |
+
+**Top Plate is structurally different from the other three.** It replaces the chrome outright rather
+than hanging a deck beneath it, so it is the only style that insets the picture — the plate is opaque
+and the frame starts below it. `TopPlateBand.height(proOpen:)` is the single source for both the band
+and that inset; if they ever disagree the frame slides under metal and tap-to-meter lands off the
+thumb. Pinned by test.
+
+- **PRO opens the plate.** With PRO off there are no dials at all: the camera is on auto and every
+  dial would read `AUTO`, and a control displaying a value it is not setting is worse than none.
+  PRO on drops the five dials and a reset beside them.
+- **Turning a dial drops a barrel.** A 44pt dial is good to grab and poor to land a value with, so
+  `DialBarrel` slides out with real travel and detents, and is itself draggable (260pt covers the
+  ladder). It carries an `ActiveDial.Key` so scrubbing writes back to the right control.
+- **Shutter and ISO leave auto when touched**, the way the ring on a real body does. Aperture, WB
+  and EV deliberately do not — dragging the camera out of auto as a side effect of nudging white
+  balance would be a worse bug than the one that fixed.
+- **Landscape repositions rather than rotates.** `skyEdge` is the opposite of the ground edge
+  `DeviceOrientation` reports; bands are laid inside `viewfinderRegion`, bounded by the plate above
+  and the release below.
+
+`KnobMath` and `LeafShutterGeometry` are pure enums for exactly one reason: a knob that runs
+backwards, or blades that fail to meet at full closure, look fine on the page and broken in the hand.
+
+---
+
+## Editing in place
+
+Saving an edit used to call `gallery.addPhoto`, filing a *second* frame beside the first — the roll
+grew by one per save and Apple Photos never heard about it. The asset is now edited through the same
+adjustment-data mechanism Photos' own editor uses.
+
+| Method | Does |
+|---|---|
+| `applyEdit(to:image:filmID:)` | Requests `PHContentEditingInput`, writes the rendered JPEG to `output.renderedContentURL`, attaches `PHAdjustmentData` stamped `com.latitude.cam.edit` / `1.0`, commits via `PHAssetChangeRequest.contentEditingOutput`. |
+| `revertEdit(_:)` | `revertAssetContentToOriginal()`. Photos still holds the original, so this discards the edit rather than reconstructing anything — and it survives quitting the app. |
+| `hasEdit(_:)` | Asks Photos whether the asset carries adjustment data. Asked rather than remembered, because the user can also edit or revert in Photos itself. Drives whether the editor offers **Revert**. |
+
+**`options.canHandleAdjustmentData` returning true for our own identifier is load-bearing.** Without
+it, Photos treats a previously-edited frame as un-editable and hands back the *rendered* result as
+though it were the original — a second edit stacks on the first and Revert undoes only half.
+
+`DevelopingOverlay` covers the write: the print comes up desaturated with a soft amber line sweeping
+down it, then settles into a checkmark. The write is genuinely not instant (Photos renders and swaps),
+and a save that shows nothing reads as a tap that missed.
+
+**Device-only.** Everything past the "frame has no asset" guard needs a real photo library. Tests
+cover the identifier contract, both not-yet-in-Photos failure paths, and that editing still writes
+nothing into app storage — the single-copy invariant. Whether an edit lands in Photos, and whether
+Revert restores it, has to be checked on the phone. **Untested on RAW**: how adjustments interact
+with a DNG/JPEG pair is unknown.
 
 ---
 
@@ -266,7 +353,12 @@ and the id to both the group `children` and the target's `files`.
 | `HapticsAndDetentTests` | Detent/value agreement, dial indices, haptic strength |
 | `SplashTests` | Sequence timing, skip, cold-launch flow, iris geometry |
 | `EditScreenTests` · `SettingsTests` · `LiveHistogramTests` | Editor geometry, preference mapping, histogram |
-| `PreviewEngineTests` · `Phase0_4_AllTests` | Legacy pipeline, gallery, permissions |
+| `PreviewEngineTests` · `Phase0_4_AllTests` | Legacy pipeline, gallery, permissions, in-place editing |
+| `KnobMathTests` · `LeafShutterGeometryTests` | Knob direction, ends, seam crossing, detents; blade closure and overlap |
+| `ViewfinderControlStyleTests` · `TopPlateCollapseTests` · `PlateSwitchTests` | Style list and default, plate open/closed heights vs the picture inset, switch sizing |
+| `LandscapeEdgeTests` · `ViewfinderRegionTests` | Sky/ground edge arithmetic; bands staying inside the picture |
+| `DialEngagesExposureTests` | Shutter and ISO leaving auto; the other dials not disturbing it |
+| `CaptureExifOrientationTests` | The orientation tag written for each capture rotation |
 
 `testEveryFilterNameResolves` exists because CoreImage returns the input **unchanged** for an unknown
 filter name. A typo would present as a dead toggle rather than a build error.
