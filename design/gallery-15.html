@@ -1,0 +1,400 @@
+<title>Latitude Cam — Fifteen Galleries</title>
+<style>
+:root{
+  --ink:#0D0D0D; --raised:#161616; --card:#1C1C1E;
+  --tone:#F2EFE8; --amber:#D98A52; --amber-deep:#8A5A34;
+  --dim:rgba(242,239,232,.55); --faint:rgba(242,239,232,.35); --rule:rgba(242,239,232,.12);
+  --page-bg:#100F0D; --page-panel:#191714;
+  --mono: ui-monospace,"SF Mono",Menlo,monospace;
+  --serif: ui-serif,"New York",Georgia,serif;
+  --body: -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;
+}
+@media (prefers-color-scheme: light){:root{--page-bg:#EAE6DD;--page-panel:#F5F2EB;--rule:rgba(20,17,14,.14);}}
+:root[data-theme="light"]{--page-bg:#EAE6DD;--page-panel:#F5F2EB;--rule:rgba(20,17,14,.14);}
+:root[data-theme="dark"]{--page-bg:#100F0D;--page-panel:#191714;--rule:rgba(242,239,232,.12);}
+*{box-sizing:border-box}
+body{background:var(--page-bg);color:var(--tone);font-family:var(--body);margin:0;-webkit-font-smoothing:antialiased;}
+.wrap{max-width:1280px;margin:0 auto;padding:56px 24px 100px;display:flex;flex-direction:column;gap:64px;}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--amber);}
+h1{font-family:var(--serif);font-weight:500;font-size:clamp(30px,5vw,52px);line-height:1.05;letter-spacing:-.02em;margin:14px 0 12px;color:var(--tone);}
+h1 em{font-style:italic;color:var(--amber);}
+.stand{font-size:16px;color:var(--dim);max-width:70ch;line-height:1.6;}
+.rule{height:1px;background:var(--rule);border:0;}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:28px;}
+.card{display:flex;flex-direction:column;gap:11px;}
+.chead{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;}
+.n{font-family:var(--mono);font-size:10px;color:var(--amber);letter-spacing:.1em;}
+.chead h3{margin:0;font-size:15.5px;font-weight:650;color:var(--tone);}
+.card p{margin:0;font-size:12.5px;color:var(--dim);line-height:1.5;}
+.edittag{font-family:var(--mono);font-size:8px;letter-spacing:.14em;color:var(--faint);text-transform:uppercase;}
+
+.phone{width:240px;aspect-ratio:240/460;border-radius:30px;background:#0A0A09;position:relative;overflow:hidden;margin:0 auto;
+  box-shadow:0 0 0 1.2px rgba(255,255,255,.09),0 0 0 6px #050504,0 16px 34px rgba(0,0,0,.5);}
+.hd{display:flex;align-items:center;justify-content:space-between;padding:10px 12px 0;font-family:var(--mono);font-size:7px;letter-spacing:.08em;color:var(--faint);}
+.hd b{color:var(--amber);}
+.body{position:absolute;inset:0;padding-top:26px;}
+
+/* shared frame textures */
+.f{background:linear-gradient(160deg,#6b5a47,#2a2117);position:relative;overflow:hidden;}
+.f.v{background:linear-gradient(150deg,#4e7a88,#1c2f36);}
+.f.r{background:linear-gradient(150deg,#9c3f2e,#33130d);}
+.f.m{background:linear-gradient(150deg,#8f8f8f,#1c1c1c);}
+.f.p{background:linear-gradient(150deg,#b08d74,#3a2a1e);}
+
+/* ============ 01 CONTACT ROLL ============ */
+.g01 .roll{position:absolute;inset:26px 0 0;display:flex;flex-direction:column;overflow:hidden;}
+.g01 .sprock{height:6px;background-image:repeating-linear-gradient(to right,rgba(255,255,255,.14) 0 4px,transparent 4px 11px);}
+.g01 .strip{display:flex;flex-direction:column;gap:2px;padding:2px 0;flex:1;overflow:hidden;}
+.g01 .fr{height:70px;position:relative;}
+.g01 .fr span{position:absolute;left:6px;top:4px;font-family:var(--mono);font-size:6px;color:rgba(255,255,255,.55);}
+
+/* ============ 02 LIGHT TABLE ============ */
+.g02 .table{position:absolute;inset:26px 8px 0;background:#e8e2d0;border-radius:4px;overflow:hidden;}
+.g02 .table::after{content:"";position:absolute;inset:0;background:repeating-linear-gradient(0deg,rgba(0,0,0,.05) 0 1px,transparent 1px 14px),repeating-linear-gradient(90deg,rgba(0,0,0,.05) 0 1px,transparent 1px 14px);}
+.g02 .sl{position:absolute;width:74px;height:52px;border:3px solid #fff;box-shadow:0 3px 10px rgba(0,0,0,.35);}
+
+/* ============ 03 LOUPE STACK ============ */
+.g03 .stage{position:absolute;inset:26px 0 0;display:grid;place-items:center;}
+.g03 .loupe{width:170px;height:170px;border-radius:50%;overflow:hidden;position:relative;
+  box-shadow:0 0 0 6px #1c1c1c,0 0 0 8px rgba(255,255,255,.14),0 10px 26px rgba(0,0,0,.5);}
+.g03 .stackcard{position:absolute;inset:0;}
+.g03 .peek{position:absolute;bottom:-40px;left:50%;transform:translateX(-50%);width:150px;height:44px;border-radius:8px;opacity:.5;filter:blur(1px);}
+
+/* ============ 04 DARKROOM LINE ============ */
+.g04 .line{position:absolute;top:34px;left:10px;right:10px;height:1px;background:rgba(255,255,255,.3);}
+.g04 .peg{position:absolute;width:70px;height:88px;border-radius:2px;box-shadow:0 5px 12px rgba(0,0,0,.4);}
+.g04 .clip{position:absolute;top:-5px;left:50%;transform:translateX(-50%);width:10px;height:14px;background:#caa227;border-radius:2px;}
+
+/* ============ 05 NEGATIVE STRIP ============ */
+.g05 .neg{position:absolute;inset:26px 16px 0;background:#1a1a16;border-radius:6px;overflow:hidden;display:flex;flex-direction:column;}
+.g05 .row{flex:1;position:relative;filter:invert(1) hue-rotate(180deg) saturate(.6);border-bottom:2px solid #0a0a08;}
+.g05 .row.pos{filter:none;box-shadow:0 0 0 2px var(--amber) inset;}
+.g05 .tag{position:absolute;left:5px;bottom:3px;font-family:var(--mono);font-size:6px;color:#fff;text-shadow:0 1px 2px #000;}
+
+/* ============ 06 DEEP ZOOM CANVAS ============ */
+.g06 .canvas{position:absolute;inset:26px 0 0;overflow:hidden;}
+.g06 .tile{position:absolute;width:33.4%;height:25%;}
+.g06 .lens{position:absolute;border:1.5px solid var(--amber);border-radius:10px;box-shadow:0 0 0 800px rgba(0,0,0,.55);}
+
+/* ============ 07 REEL TIMELINE ============ */
+.g07 .track{position:absolute;left:0;right:0;top:44px;height:1px;background:rgba(255,255,255,.25);}
+.g07 .tick{position:absolute;top:38px;width:1px;height:13px;background:rgba(255,255,255,.3);}
+.g07 .tick.on{background:var(--amber);height:17px;top:36px;}
+.g07 .film{position:absolute;left:16px;right:16px;top:64px;height:150px;border-radius:8px;overflow:hidden;box-shadow:0 8px 20px rgba(0,0,0,.4);}
+.g07 .counter{position:absolute;top:6px;right:12px;font-family:var(--mono);font-size:7px;color:var(--amber);}
+
+/* ============ 08 PROJECTOR CAROUSEL ============ */
+.g08 .wheel{position:absolute;inset:26px 0 0;display:grid;place-items:center;}
+.g08 .drum{width:190px;height:190px;border-radius:50%;position:relative;
+  background:conic-gradient(from 0deg,#2b2b2e,#141416 20deg,#3a3a40 60deg,#161619 100deg,#2b2b2e 360deg);
+  box-shadow:inset 0 0 0 .5px rgba(255,255,255,.18);}
+.g08 .slot{position:absolute;width:46px;height:34px;left:50%;top:50%;margin:-17px 0 0 -23px;border-radius:2px;overflow:hidden;box-shadow:0 0 0 2px #0d0d0d;}
+.g08 .win{position:absolute;left:50%;bottom:16px;transform:translateX(-50%);width:66px;height:48px;border-radius:3px;overflow:hidden;box-shadow:0 0 0 4px #0a0a0a,0 6px 16px rgba(0,0,0,.5);}
+
+/* ============ 09 ARCHIVE DRAWERS ============ */
+.g09 .cabinet{position:absolute;inset:26px 10px 0;display:flex;flex-direction:column;gap:6px;}
+.g09 .drawer{border-radius:6px;background:linear-gradient(#2c2b28,#18170f);box-shadow:inset 0 1px 0 rgba(255,255,255,.1),0 3px 8px rgba(0,0,0,.3);height:44px;position:relative;display:flex;align-items:center;padding:0 12px;gap:8px;}
+.g09 .pull{width:24px;height:3px;border-radius:2px;background:var(--amber);}
+.g09 .label{font-family:var(--mono);font-size:8px;letter-spacing:.1em;color:var(--dim);}
+.g09 .drawer.open{height:96px;align-items:flex-start;padding-top:10px;flex-direction:column;}
+.g09 .thumbs{display:flex;gap:4px;padding-left:32px;margin-top:4px;}
+.g09 .thumbs div{width:26px;height:26px;border-radius:3px;}
+
+/* ============ 10 DIPTYCH ============ */
+.g10 .split{position:absolute;inset:26px 0 0;display:flex;}
+.g10 .half{flex:1;position:relative;overflow:hidden;}
+.g10 .half:first-child{clip-path:polygon(0 0,100% 0,88% 100%,0 100%);}
+.g10 .cap{position:absolute;bottom:6px;font-family:var(--mono);font-size:6px;letter-spacing:.1em;color:rgba(255,255,255,.7);}
+
+/* ============ 11 STORYBOARD ============ */
+.g11 .board{position:absolute;inset:26px 8px 0;display:grid;grid-template-columns:2fr 1fr;grid-template-rows:1fr 1fr 0.8fr;gap:5px;}
+.g11 .p1{grid-row:1/3;}
+.g11 .p4{grid-column:1/3;}
+.g11 .board>div{border-radius:5px;position:relative;overflow:hidden;box-shadow:0 0 0 1px rgba(255,255,255,.08);}
+.g11 .num{position:absolute;top:3px;left:4px;font-family:var(--mono);font-size:6px;color:#fff;background:rgba(0,0,0,.5);padding:1px 3px;border-radius:2px;}
+
+/* ============ 12 RUBBER STAMP INDEX ============ */
+.g12 .idx{position:absolute;inset:26px 10px 0;display:grid;grid-template-columns:repeat(3,1fr);gap:8px 6px;align-content:start;}
+.g12 .cell{aspect-ratio:1;border-radius:2px;position:relative;transform:rotate(var(--r));box-shadow:0 3px 7px rgba(0,0,0,.35),0 0 0 4px #eee2c8;}
+.g12 .stamp{position:absolute;inset:-6px;border:1.4px solid #b23b2e;border-radius:50%;opacity:.75;display:grid;place-items:center;transform:rotate(-12deg);}
+.g12 .stamp span{font-family:var(--mono);font-size:5px;color:#b23b2e;letter-spacing:.05em;}
+
+/* ============ 13 LEDGER ROWS ============ */
+.g13 .ledger{position:absolute;inset:26px 0 0;display:flex;flex-direction:column;}
+.g13 .row{display:flex;align-items:center;gap:9px;padding:7px 12px;border-bottom:.5px solid rgba(255,255,255,.08);}
+.g13 .thumb{width:34px;height:34px;border-radius:5px;flex:none;}
+.g13 .meta{display:flex;flex-direction:column;gap:2px;}
+.g13 .meta b{font-family:var(--body);font-size:10px;font-weight:600;color:var(--tone);}
+.g13 .meta span{font-family:var(--mono);font-size:7px;color:var(--faint);}
+
+/* ============ 14 ORBIT RING ============ */
+.g14 .orbit{position:absolute;inset:26px 0 0;display:grid;place-items:center;}
+.g14 .center{width:96px;height:96px;border-radius:50%;overflow:hidden;box-shadow:0 0 0 3px var(--amber),0 10px 24px rgba(0,0,0,.5);z-index:2;}
+.g14 .sat{position:absolute;width:36px;height:36px;border-radius:50%;overflow:hidden;box-shadow:0 0 0 2px rgba(255,255,255,.2);opacity:.75;}
+
+/* ============ 15 CASCADE ============ */
+.g15 .cascade{position:absolute;inset:26px 8px 0;display:flex;gap:5px;}
+.g15 .col{flex:1;display:flex;flex-direction:column;gap:5px;}
+.g15 .col div{border-radius:5px;box-shadow:0 0 0 1px rgba(255,255,255,.08);}
+
+.rec{display:grid;grid-template-columns:32px minmax(0,1fr);gap:13px;padding:15px 2px;border-bottom:1px solid var(--rule);}
+.rec:first-child{border-top:1px solid var(--rule);}
+.rec .n{font-family:var(--mono);font-size:10px;color:var(--amber);padding-top:2px;}
+.rec h4{margin:0 0 3px;font-size:14.5px;color:var(--tone);}
+.rec p{margin:0;font-size:13px;color:var(--dim);line-height:1.5;}
+.foot{font-size:12.5px;color:var(--faint);border-top:1px solid var(--rule);padding-top:16px;line-height:1.6;max-width:70ch;}
+</style>
+
+<div class="wrap">
+<header>
+  <div class="eyebrow">Latitude Cam / Gallery, rebuilt / Fifteen directions</div>
+  <h1>Not a grid with a viewer bolted on — <em>fifteen different ideas</em> of what a roll of film is.</h1>
+  <p class="stand">The broken gallery was a photo-app grid wearing the app's colours. These fifteen start from what the app already is — a camera with a film shelf, sprockets, a loupe, a light table — and ask what a gallery for <em>that</em> object looks like. Each pairs a gallery structure with its own edit entry point, noted below the mockup rather than built as a second full screen fifteen times over.</p>
+</header>
+
+<hr class="rule">
+
+<div class="grid">
+
+<article class="card">
+  <div class="chead"><span class="n">01</span><h3>Contact roll</h3></div>
+  <p>The whole roll as one continuous filmstrip, sprockets down both edges, frames stacked and scrollable. Tapping a frame lifts it out; edit opens as a loupe over that one frame.</p>
+  <div class="phone"><div class="hd"><span>LIBRARY</span><b>42 FRAMES</b></div>
+    <div class="body g01"><div class="roll">
+      <div class="sprock"></div>
+      <div class="strip">
+        <div class="fr f"><span>001 · AMBER</span></div>
+        <div class="fr v"><span>002 · HARBOUR</span></div>
+        <div class="fr r"><span>003 · RUST</span></div>
+        <div class="fr m"><span>004 · MONO</span></div>
+        <div class="fr p"><span>005 · PORCELAIN</span></div>
+      </div>
+      <div class="sprock"></div>
+    </div></div>
+  </div>
+  <div class="edittag">Edit → loupe over the lifted frame</div>
+</article>
+
+<article class="card">
+  <div class="chead"><span class="n">02</span><h3>Light table</h3></div>
+  <p>Slides scattered on a lightbox, overlapping like they were just tipped out of a box. Drag to arrange, pinch the whole table to zoom in on a cluster. Edit is a grease-pencil crop right on the slide.</p>
+  <div class="phone"><div class="hd"><span>LIBRARY</span><b>SCATTERED</b></div>
+    <div class="body g02"><div class="table">
+      <div class="sl f" style="left:14px;top:18px;transform:rotate(-8deg)"></div>
+      <div class="sl v" style="left:74px;top:52px;transform:rotate(5deg)"></div>
+      <div class="sl r" style="left:36px;top:96px;transform:rotate(-3deg)"></div>
+      <div class="sl m" style="left:96px;top:134px;transform:rotate(9deg)"></div>
+    </div></div>
+  </div>
+  <div class="edittag">Edit → grease-pencil markup on the slide itself</div>
+</article>
+
+<article class="card">
+  <div class="chead"><span class="n">03</span><h3>Loupe stack</h3></div>
+  <p>A physical stack seen through a circular loupe — only the loupe's circle is sharp, the stack blurs at the edges of frame. Swipe to riffle through, and the loupe itself becomes the crop tool in edit.</p>
+  <div class="phone"><div class="hd"><span>LIBRARY</span><b>◐ 03</b></div>
+    <div class="body g03"><div class="stage">
+      <div class="peek f" style="filter:blur(2px)"></div>
+      <div class="loupe"><div class="stackcard v"></div></div>
+    </div></div>
+  </div>
+  <div class="edittag">Edit → loupe becomes the crop circle, drag to reframe</div>
+</article>
+
+<article class="card">
+  <div class="chead"><span class="n">04</span><h3>Darkroom line</h3></div>
+  <p>Prints clipped to a washing line, swaying gently, freshly developed. Newest print hangs at the right, still slightly translucent as if wet. Edit unclips one print onto a workbench below.</p>
+  <div class="phone"><div class="hd"><span>LIBRARY</span><b>DRYING</b></div>
+    <div class="body g04"><div class="line"></div>
+      <div class="peg f" style="left:12px;top:44px"><div class="clip"></div></div>
+      <div class="peg r" style="left:90px;top:50px;transform:rotate(2deg)"><div class="clip"></div></div>
+      <div class="peg m" style="left:168px;top:46px;transform:rotate(-3deg)"><div class="clip"></div></div>
+    </div>
+  </div>
+  <div class="edittag">Edit → unclip the print onto a workbench panel</div>
+</article>
+
+<article class="card">
+  <div class="chead"><span class="n">05</span><h3>Negative strip</h3></div>
+  <p>The roll shown as negatives — inverted, orange-cast, true to what actually comes off a scanner. Tap one frame and it flips to positive in place, which <em>is</em> the preview-before-edit gesture.</p>
+  <div class="phone"><div class="hd"><span>LIBRARY</span><b>NEG · 06</b></div>
+    <div class="body g05"><div class="neg">
+      <div class="row f"><span class="tag">001</span></div>
+      <div class="row pos v"><span class="tag" style="color:#111">002</span></div>
+      <div class="row r"><span class="tag">003</span></div>
+      <div class="row m"><span class="tag">004</span></div>
+    </div></div>
+  </div>
+  <div class="edittag">Edit → the flip to positive opens straight into Light tab</div>
+</article>
+
+<article class="card">
+  <div class="chead"><span class="n">06</span><h3>Deep-zoom canvas</h3></div>
+  <p>Every photo you've ever taken as one continuous canvas, like a map — pinch anywhere to zoom from a wall of thumbnails down to a single frame, no grid boundaries to cross.</p>
+  <div class="phone"><div class="hd"><span>LIBRARY</span><b>ALL TIME</b></div>
+    <div class="body g06"><div class="canvas">
+      <div class="tile f" style="left:0;top:0"></div><div class="tile v" style="left:33.4%;top:0"></div><div class="tile r" style="left:66.8%;top:0"></div>
+      <div class="tile m" style="left:0;top:25%"></div><div class="tile p" style="left:33.4%;top:25%"></div><div class="tile f" style="left:66.8%;top:25%"></div>
+      <div class="tile v" style="left:0;top:50%"></div><div class="tile r" style="left:33.4%;top:50%"></div><div class="tile m" style="left:66.8%;top:50%"></div>
+      <div class="lens" style="left:33.4%;top:25%;width:33.4%;height:25%"></div>
+    </div></div>
+  </div>
+  <div class="edittag">Edit → the zoomed-in lens region opens directly</div>
+</article>
+
+<article class="card">
+  <div class="chead"><span class="n">07</span><h3>Reel timeline</h3></div>
+  <p>A horizontal tape-transport scale above the frame — tick per shot, taller amber tick for the one on screen — scrubbed like a video reel rather than paged like a carousel.</p>
+  <div class="phone"><div class="hd"><span>LIBRARY</span><b>SCRUB</b></div>
+    <div class="body g07"><div class="track"></div>
+      <div class="tick" style="left:20px"></div><div class="tick" style="left:44px"></div><div class="tick on" style="left:68px"></div>
+      <div class="tick" style="left:92px"></div><div class="tick" style="left:116px"></div><div class="tick" style="left:140px"></div><div class="tick" style="left:164px"></div>
+      <div class="film v"><div class="counter">FRAME 03/42</div></div>
+    </div>
+  </div>
+  <div class="edittag">Edit → scale converts to the barrel-bank stack in place</div>
+</article>
+
+<article class="card">
+  <div class="chead"><span class="n">08</span><h3>Projector carousel</h3></div>
+  <p>A slide-projector drum, tilted, each slot holding one frame — turn it to advance, the loaded slide sits proud in a lit gate below. The most literal "carousel" of the fifteen.</p>
+  <div class="phone"><div class="hd"><span>LIBRARY</span><b>PROJECTING</b></div>
+    <div class="body g08"><div class="wheel"><div class="drum">
+      <div class="slot f" style="transform:translate(-52px,-6px)"></div>
+      <div class="slot v" style="transform:translate(-16px,-56px)"></div>
+      <div class="slot r" style="transform:translate(36px,-46px)"></div>
+      <div class="slot m" style="transform:translate(52px,10px)"></div>
+    </div><div class="win p"></div></div></div>
+  </div>
+  <div class="edittag">Edit → the lit gate frame is the canvas, controls below it</div>
+</article>
+
+<article class="card">
+  <div class="chead"><span class="n">09</span><h3>Archive drawers</h3></div>
+  <p>A filing cabinet, one drawer per film family. Closed drawers show just a brass pull and a typed label; pulling one open spills its thumbnails into view. The family grouping <em>is</em> the furniture.</p>
+  <div class="phone"><div class="hd"><span>LIBRARY</span><b>5 DRAWERS</b></div>
+    <div class="body g09"><div class="cabinet">
+      <div class="drawer open"><div style="display:flex;align-items:center;gap:8px;padding-left:0"><div class="pull"></div><span class="label">REVERSAL</span></div>
+        <div class="thumbs"><div class="f"></div><div class="v"></div><div class="r"></div></div></div>
+      <div class="drawer"><div class="pull"></div><span class="label">PRINT</span></div>
+      <div class="drawer"><div class="pull"></div><span class="label">MONOCHROME</span></div>
+    </div></div>
+  </div>
+  <div class="edittag">Edit → drawer stays open behind a raised print</div>
+</article>
+
+<article class="card">
+  <div class="chead"><span class="n">10</span><h3>Diptych compare</h3></div>
+  <p>Two frames at a time, torn edge between them like a perforated ticket stub — built for choosing between two takes of one moment rather than browsing a whole roll.</p>
+  <div class="phone"><div class="hd"><span>LIBRARY</span><b>COMPARE</b></div>
+    <div class="body g10"><div class="split">
+      <div class="half f"><span class="cap">TAKE 1</span></div>
+      <div class="half v"><span class="cap">TAKE 2</span></div>
+    </div></div>
+  </div>
+  <div class="edittag">Edit → the kept half expands full-width</div>
+</article>
+
+<article class="card">
+  <div class="chead"><span class="n">11</span><h3>Storyboard</h3></div>
+  <p>Panels of unequal size, one dominant frame and three supporting — the newest shot always gets the big panel. Reads as a sequence of moments rather than a uniform archive.</p>
+  <div class="phone"><div class="hd"><span>LIBRARY</span><b>TODAY</b></div>
+    <div class="body g11"><div class="board">
+      <div class="f p1"><span class="num">01</span></div>
+      <div class="v"><span class="num">02</span></div>
+      <div class="r"><span class="num">03</span></div>
+      <div class="m p4"><span class="num">04</span></div>
+    </div></div>
+  </div>
+  <div class="edittag">Edit → the big panel is already the canvas</div>
+</article>
+
+<article class="card">
+  <div class="chead"><span class="n">12</span><h3>Rubber-stamp index</h3></div>
+  <p>Prints on cream index cards, each stamped with its film family in red ink at a slight tilt — a librarian's accession system rather than a photo grid. Colour tells you the family before you read anything.</p>
+  <div class="phone"><div class="hd"><span>LIBRARY</span><b>INDEXED</b></div>
+    <div class="body g12"><div class="idx">
+      <div class="cell f" style="--r:-2deg"><div class="stamp"><span>REV</span></div></div>
+      <div class="cell v" style="--r:1.5deg"><div class="stamp"><span>PRT</span></div></div>
+      <div class="cell r" style="--r:-1deg"><div class="stamp"><span>REV</span></div></div>
+      <div class="cell m" style="--r:2deg"><div class="stamp"><span>MON</span></div></div>
+      <div class="cell p" style="--r:-1.5deg"><div class="stamp"><span>REV</span></div></div>
+      <div class="cell f" style="--r:1deg"><div class="stamp"><span>SIG</span></div></div>
+    </div></div>
+  </div>
+  <div class="edittag">Edit → card flips over to its worksheet side</div>
+</article>
+
+<article class="card">
+  <div class="chead"><span class="n">13</span><h3>Ledger rows</h3></div>
+  <p>A logbook — small thumbnail, then the shoot data set as type: stock, ISO, shutter, timestamp. For someone who thinks about their roll as records, not pictures.</p>
+  <div class="phone"><div class="hd"><span>LIBRARY</span><b>LOG</b></div>
+    <div class="body g13"><div class="ledger">
+      <div class="row"><div class="thumb f"></div><div class="meta"><b>Amber · ISO 400</b><span>1/125 · 07:42</span></div></div>
+      <div class="row"><div class="thumb v"></div><div class="meta"><b>Harbour · ISO 200</b><span>1/250 · 07:44</span></div></div>
+      <div class="row"><div class="thumb r"></div><div class="meta"><b>Rust · ISO 800</b><span>1/60 · 08:03</span></div></div>
+      <div class="row"><div class="thumb m"></div><div class="meta"><b>Mono · ISO 1600</b><span>1/125 · 08:11</span></div></div>
+    </div></div>
+  </div>
+  <div class="edittag">Edit → row expands in place into the barrel stack</div>
+</article>
+
+<article class="card">
+  <div class="chead"><span class="n">14</span><h3>Orbit ring</h3></div>
+  <p>The current photo large at the centre, its nearest neighbours in the roll circling it like moons. Rotate the ring to bring a neighbour to centre — motion that mirrors the film barrel's own logic.</p>
+  <div class="phone"><div class="hd"><span>LIBRARY</span><b>◉ 04/42</b></div>
+    <div class="body g14"><div class="orbit">
+      <div class="center v"></div>
+      <div class="sat f" style="left:22px;top:18px"></div>
+      <div class="sat r" style="right:22px;top:18px"></div>
+      <div class="sat m" style="left:14px;bottom:26px"></div>
+      <div class="sat p" style="right:14px;bottom:26px"></div>
+    </div></div>
+  </div>
+  <div class="edittag">Edit → the centre photo enlarges in place, ring fades</div>
+</article>
+
+<article class="card">
+  <div class="chead"><span class="n">15</span><h3>Cascade</h3></div>
+  <p>Uneven columns cascading down like prints spilling from a tray — no grid alignment, each column its own rhythm. The nearest thing here to a browsing gallery rather than a system.</p>
+  <div class="phone"><div class="hd"><span>LIBRARY</span><b>SPILL</b></div>
+    <div class="body g15"><div class="cascade">
+      <div class="col"><div class="f" style="height:64px"></div><div class="v" style="height:88px"></div><div class="r" style="height:52px"></div></div>
+      <div class="col" style="margin-top:22px"><div class="m" style="height:78px"></div><div class="p" style="height:60px"></div><div class="f" style="height:70px"></div></div>
+      <div class="col"><div class="v" style="height:56px"></div><div class="r" style="height:92px"></div></div>
+    </div></div>
+  </div>
+  <div class="edittag">Edit → tapped print lifts out of the cascade to full size</div>
+</article>
+
+</div>
+
+<hr class="rule">
+
+<section>
+  <h1 style="font-size:24px">What I'd actually build</h1>
+  <div class="rec">
+    <div class="n">01</div>
+    <div><h4>Contact roll — the honest default</h4>
+    <p>It's the same object the film barrel already is: sprockets, a strip, one continuous surface. It reuses the visual language you already trust in this app rather than inventing a new one, and a filmstrip scales to any roll length without redesigning. This is what I'd ship first.</p></div>
+  </div>
+  <div class="rec">
+    <div class="n">09</div>
+    <div><h4>Archive drawers — if organisation matters more than browsing</h4>
+    <p>The family grouping already exists in the two-tier film selector; drawers are that same idea turned into furniture. Best for someone with hundreds of frames who thinks "where are my Rust shots" before "show me everything."</p></div>
+  </div>
+  <div class="rec">
+    <div class="n">05</div>
+    <div><h4>Negative strip — the boldest, and worth prototyping</h4>
+    <p>No camera app does this. It's true to what the sensor actually produced before any processing, and the tap-to-flip-positive gesture doubles as the transition into editing rather than needing a separate "open" action. Higher risk: negatives read as broken images to anyone unfamiliar with film.</p></div>
+  </div>
+  <div class="rec">
+    <div class="n">15</div>
+    <div><h4>Cascade is the one I'd avoid</h4>
+    <p>Handsome, but it's the same masonry every photo app already runs. Least specific to what this app is.</p></div>
+  </div>
+</section>
+
+<p class="foot">Each mockup uses the app's shipped tokens — Ink, Tone, Accent, the eleven film swatches, SF Mono for data, a serif for headers matching the editor's own headers. Nothing here is built. Say a number (or two — gallery and edit can come from different rows) and I'll build it against the real PhotoGallery/Photos-backed data, fixing the load-order bug in the same pass.</p>
+
+</div>
