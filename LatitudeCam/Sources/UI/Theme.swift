@@ -161,6 +161,35 @@ extension UIImage {
         guard let cropped = cg.cropping(to: rect) else { return self }
         return UIImage(cgImage: cropped, scale: scale, orientation: imageOrientation)
     }
+
+    /// Rotates the pixels themselves by re-rendering into a new bitmap.
+    ///
+    /// Not an EXIF/orientation-tag change — three attempts at rotating through
+    /// AVFoundation's connection angle and the file's orientation metadata all
+    /// failed on device, because there was never a way to confirm what either
+    /// mechanism actually did to the file. Baking the rotation into the pixels
+    /// here is fully within this code, in the same units already verified
+    /// correct for the on-screen dial/control rotation.
+    func rotatedForCapture(byDegrees degrees: Double) -> UIImage {
+        let normalized = degrees.truncatingRemainder(dividingBy: 360)
+        guard normalized != 0 else { return self }
+
+        let radians = CGFloat(normalized * .pi / 180)
+        let swapsDimensions = Int(normalized.rounded()) % 180 != 0
+        let newSize = swapsDimensions
+            ? CGSize(width: size.height, height: size.width)
+            : size
+
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = scale
+        format.opaque = true
+        let renderer = UIGraphicsImageRenderer(size: newSize, format: format)
+        return renderer.image { context in
+            context.cgContext.translateBy(x: newSize.width / 2, y: newSize.height / 2)
+            context.cgContext.rotate(by: radians)
+            draw(in: CGRect(x: -size.width / 2, y: -size.height / 2, width: size.width, height: size.height))
+        }
+    }
 }
 
 // MARK: - Preferences
@@ -616,8 +645,12 @@ final class AppState: ObservableObject {
     /// The saved photo comes from `AVCapturePhotoOutput`, not from the preview
     /// stream. The preview is 2MP and only ever a viewfinder — saving it was what
     /// made every file 250KB.
+    /// `rotationDegrees` is the physical device rotation at the moment the
+    /// shutter was pressed — the same value already driving the on-screen
+    /// dial/control rotation — so a photo taken with the phone turned
+    /// sideways is rotated upright before it is saved.
     @discardableResult
-    func capture() -> Bool {
+    func capture(rotationDegrees: Double = 0) -> Bool {
         guard cameraManager.status.isLive else {
             lastSaveMessage = "No frame yet — camera still starting"
             clearMessageSoon()
@@ -636,7 +669,7 @@ final class AppState: ObservableObject {
             wantsProcessed: wantsProcessed,
             targetMegapixels: Pref.megapixels(resolution)
         ) { [weak self] still in
-            self?.store(still, requestedFormat: format)
+            self?.store(still, requestedFormat: format, rotationDegrees: rotationDegrees)
         }
         return true
     }
@@ -647,7 +680,7 @@ final class AppState: ObservableObject {
     /// Confirms as soon as the frame is in the roll rather than waiting on the
     /// library. Encoding and the Photos write take a moment and the shutter should
     /// not be held hostage to either; only a failure revises the message.
-    private func store(_ still: CameraManager.CapturedStill, requestedFormat: String) {
+    private func store(_ still: CameraManager.CapturedStill, requestedFormat: String, rotationDegrees: Double) {
         guard still.raw != nil || still.image != nil else {
             lastSaveMessage = "Capture failed"
             clearMessageSoon()
@@ -661,8 +694,14 @@ final class AppState: ObservableObject {
         // the main queue, unlike the encode below.
         // Falling back to the preview frame keeps the shot in the roll when the
         // full-resolution develop fails; an empty grid was the worse outcome.
+        //
+        // Cropped to the aspect ratio first, in the same fixed orientation the
+        // viewfinder's aspect mask was drawn against, then rotated upright —
+        // rotating first would crop against the wrong edges whenever the phone
+        // was held sideways.
         let full = (still.image ?? cameraManager.capturePhoto())?
             .centerCropped(toHeightOverWidth: Pref.aspectRatio(aspect))
+            .rotatedForCapture(byDegrees: rotationDegrees)
 
         if let full {
             capturedImage = full

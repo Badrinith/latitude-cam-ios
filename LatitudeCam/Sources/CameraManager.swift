@@ -127,19 +127,6 @@ public final class CameraManager: NSObject, ObservableObject {
     /// Drives the render-side mirror. Read on the camera queue, written there too.
     private(set) var isFrontCamera = false
 
-    /// Computes the correct still-capture rotation from the device and camera
-    /// position directly, updating live as the phone turns.
-    ///
-    /// This replaces a hand-built UIDeviceOrientation → angle table that was
-    /// still wrong after two attempts to reason it out by hand — the mapping is
-    /// exactly the kind of thing that is easy to get backwards and hard to
-    /// notice from reading the code, only from a photo that comes out sideways.
-    /// RotationCoordinator is the API Apple ships specifically to replace that
-    /// guesswork; it accounts for camera position and mirroring on its own,
-    /// which is also why this now needs no separate front/back case — the coordinator
-    /// already knows the difference.
-    private var rotationCoordinator: AVCaptureDevice.RotationCoordinator?
-
     /// True where the hardware can hand back a matte. Published so the control
     /// can hide itself on a body that cannot do it rather than fail on tap.
     @Published public private(set) var supportsPortrait = false
@@ -506,7 +493,6 @@ public final class CameraManager: NSObject, ObservableObject {
 
             self.videoDevice = next
             self.isFrontCamera = target == .front
-            self.rotationCoordinator = AVCaptureDevice.RotationCoordinator(device: next, previewLayer: nil)
             self.publishLenses(for: next)
             self.applyDeviceFocus(self.settings)
             self.applyDeviceExposure(self.settings)
@@ -582,7 +568,6 @@ public final class CameraManager: NSObject, ObservableObject {
         self.videoDevice = camera
         self.videoOutput = output
         self.photoOutput = photoOutput
-        self.rotationCoordinator = AVCaptureDevice.RotationCoordinator(device: camera, previewLayer: nil)
 
         publishLenses(for: camera)
         applyDeviceFocus(settings)
@@ -781,19 +766,14 @@ public final class CameraManager: NSObject, ObservableObject {
             settings.maxPhotoDimensions = dimensions
         }
 
-        // The preview connection stays at its fixed portrait angle — the
-        // viewfinder is UI-locked and must never visually rotate. The still
-        // connection is different: it is read from the coordinator at the moment
-        // of capture, which is why a photo taken with the phone physically
-        // sideways now comes out the right way round regardless of which camera
-        // is active.
-        if let coordinator = rotationCoordinator,
-           let stillConnection = photoOutput.connection(with: .video) {
-            let angle = coordinator.videoRotationAngleForHorizonLevelCapture
-            if stillConnection.isVideoRotationAngleSupported(angle) {
-                stillConnection.videoRotationAngle = angle
-            }
-        }
+        // The still connection is left at the same fixed angle `orient()` gave
+        // it at setup — the same one already proven correct for the preview.
+        // A per-capture angle read from AVCaptureDevice.RotationCoordinator
+        // used to be set here instead; on device it made no visible difference
+        // across three attempts, which only makes sense if that angle was
+        // never actually reaching the saved file. Physical rotation is now
+        // compensated for afterwards, in software, on pixels this code
+        // actually controls — see AppState.store's rotatedForCapture call.
 
         // Focus peaking is a viewfinder aid, not part of the photograph — its edge
         // highlights have no business in a saved frame, and a CIEdges pass over a

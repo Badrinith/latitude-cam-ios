@@ -572,7 +572,7 @@ struct ViewfinderScreen: View {
     /// A heavy thump when a frame is taken, a warning when there was nothing to
     /// take. The two must not feel the same.
     private func fire() {
-        if app.capture() {
+        if app.capture(rotationDegrees: orientation.angle.degrees) {
             Haptics.shutter()
         } else {
             Haptics.blocked()

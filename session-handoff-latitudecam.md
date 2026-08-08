@@ -111,3 +111,13 @@ xcodebuild test -scheme LatitudeCam -configuration Debug \
 ```
 
 Tests need a concrete simulator UDID; `generic/platform=iOS Simulator` is rejected. `xcodebuild` must run from `LatitudeCam/`, not the repo root.
+
+## Latest session (commit `4acf481`)
+
+Three user-reported bugs, each root-caused before touching code (per systematic-debugging — two prior rotation attempts had failed by guessing at the angle instead):
+
+1. **Landscape capture still rotated**, third report. Root cause: `CameraManager.captureStill`'s `StillCaptureDelegate` decodes the processed photo with `CIImage(data: processed)` — this silently drops EXIF orientation unless told to apply it. The `AVCaptureConnection.videoRotationAngle` set right before capture (`CameraManager.swift` ~line 790) was actually writing correct orientation into the file the whole time; both earlier fixes (hand-built angle table, then `RotationCoordinator`) changed *that* line and could never have worked, because the very next step throws the result away. Fix: `CIImage(data: processed, options: [.applyOrientationProperty: true])`. One line, once the actual pipeline was traced.
+2. **Swipe-up-for-metadata not registering.** It was a `DragGesture`/`.simultaneousGesture` on `ZoomableImage`, which lives inside `TabView(selection:)`. TabView(.page)'s own paging pan gesture is a `UIScrollView` under the hood, outside SwiftUI's gesture arena, and routinely wins the touch regardless of `.simultaneousGesture`. Moved the swipe+tap handler onto the "SWIPE UP FOR DETAILS" row in `PhotoViewer`, which is a sibling of the TabView, not a descendant — no more gesture to compete with.
+3. **Gallery slow to populate.** `PhotoGallery.loadPhotos()`'s grid-thumbnail `PHImageRequestOptions` had `isNetworkAccessAllowed = true`, so every thumbnail — even for photos this app just captured and that are almost always already local — queued behind an iCloud availability check. Set to `false` for the grid pass only; `loadFullImage(for:)` (full-res, on open) correctly keeps it `true`.
+
+**Verification limits, stated plainly:** builds succeeded, all 275 tests pass, install to device UDID `854CD202-7808-597B-A70F-6A6628AED263` succeeded. None of that is the same as watching the camera take a landscape photo or timing the gallery — there is no tool available in this environment that operates the phone's camera or observes rendered UI on-device. All three fixes are argued from tracing the actual code path to a concrete, demonstrable defect, not from re-guessing at symptoms, but they are unverified on hardware until the user confirms.
