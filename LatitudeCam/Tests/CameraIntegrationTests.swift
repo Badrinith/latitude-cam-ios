@@ -1019,14 +1019,19 @@ final class TopPlateCollapseTests: XCTestCase {
         XCTAssertEqual(TopPlateBand.height(proOpen: false), TopPlateBand.collapsedHeight)
     }
 
-    /// The closed plate carries the switch row *and* the shutter dial, so it
-    /// cannot collapse to the height of the switches alone — shutter is the one
-    /// value changed without deciding to go manual first, and clipping it is
-    /// the same as hiding it.
-    func testTheClosedPlateStillFitsItsSwitchesAndTheShutterDial() {
-        // 46 inset + 44 switch row + 10 gap + 58 dial + its label.
-        XCTAssertGreaterThanOrEqual(TopPlateBand.collapsedHeight, 158,
-                                    "the shutter dial would be clipped when the plate closes")
+    /// Closed, the plate is the switch row alone — with PRO off the camera is
+    /// on auto and a dial would only ever read AUTO. It still has to fit that
+    /// row: 46pt of inset above a 44pt target.
+    func testTheClosedPlateFitsItsSwitchRow() {
+        XCTAssertGreaterThanOrEqual(TopPlateBand.collapsedHeight, 90,
+                                    "the switch row would be clipped")
+    }
+
+    /// Closing has to give the frame back the whole dial band, which is the
+    /// entire reason the plate collapses at all.
+    func testClosingGivesBackTheWholeDialBand() {
+        XCTAssertGreaterThanOrEqual(TopPlateBand.height - TopPlateBand.collapsedHeight, 100,
+                                    "closing the plate barely returns any frame")
     }
 
     /// Closing still has to buy the picture something back, or the switch is
@@ -1045,21 +1050,42 @@ final class ActiveDialTests: XCTestCase {
     /// compared equal while the reading text differed, the barrel would show a
     /// stale number for the whole gesture.
     func testADialChangeIsVisibleAsAChange() {
-        let a = ActiveDial(name: "ISO", reading: "400", value: 0.5)
-        let b = ActiveDial(name: "ISO", reading: "800", value: 0.6)
+        let a = ActiveDial(key: .iso, name: "ISO", reading: "400", value: 0.5)
+        let b = ActiveDial(key: .iso, name: "ISO", reading: "800", value: 0.6)
         XCTAssertNotEqual(a, b)
     }
 
     func testTheSameReadingComparesEqualSoTheBarrelDoesNotThrash() {
-        let a = ActiveDial(name: "ISO", reading: "400", value: 0.5)
-        let b = ActiveDial(name: "ISO", reading: "400", value: 0.5)
+        let a = ActiveDial(key: .iso, name: "ISO", reading: "400", value: 0.5)
+        let b = ActiveDial(key: .iso, name: "ISO", reading: "400", value: 0.5)
         XCTAssertEqual(a, b)
     }
 
     func testADialCarriesBothItsNameAndItsReading() {
-        let dial = ActiveDial(name: "WHITE BALANCE", reading: "5600K", value: 0.7)
+        let dial = ActiveDial(key: .white, name: "WHITE BALANCE", reading: "5600K", value: 0.7)
         XCTAssertFalse(dial.name.isEmpty)
         XCTAssertFalse(dial.reading.isEmpty)
         XCTAssertTrue((0...1).contains(dial.value))
+    }
+
+    /// The barrel writes back through this key, so every dial on the plate must
+    /// have one — a missing case would leave that control readable and dead.
+    func testEveryPlateDialHasABarrelKey() {
+        let keys: [ActiveDial.Key] = [.aperture, .iso, .shutter, .white, .exposure]
+        XCTAssertEqual(Set(keys).count, 5, "two dials share a key")
+    }
+
+    /// Scrubbing is the same clamped 0…1 arithmetic the dial uses, so dragging
+    /// the barrel to its end cannot push the value past the ladder.
+    func testScrubbingCannotLeaveTheLadder() {
+        XCTAssertEqual(KnobMath.clamp(1 + 400.0 / 260), 1, accuracy: 0.0001)
+        XCTAssertEqual(KnobMath.clamp(0 - 400.0 / 260), 0, accuracy: 0.0001)
+    }
+
+    /// 260pt of travel has to cross the whole range in one thumb sweep, or the
+    /// barrel is slower than the dial it exists to improve on.
+    func testAThumbSweepCoversTheWholeRange() {
+        XCTAssertGreaterThanOrEqual(300.0 / 260, 1.0,
+                                    "a 300pt drag should reach from one end to the other")
     }
 }

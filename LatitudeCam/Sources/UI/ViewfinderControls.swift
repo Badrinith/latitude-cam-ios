@@ -517,6 +517,11 @@ struct CrownControl: View {
 /// The barrel is the other half of that trade: coarse in the hand, precise on
 /// the scale, and gone again the moment you stop.
 struct ActiveDial: Equatable {
+    /// Which control the barrel is currently attached to. The barrel is a live
+    /// control, not a readout, so it has to be able to say what it is driving.
+    enum Key: String { case aperture, iso, shutter, white, exposure }
+
+    var key: Key
     var name: String
     var reading: String
     /// 0…1, drives the barrel's travel so the ticks move with the dial.
@@ -531,6 +536,7 @@ struct PlateDial: View {
     /// Shown inside the dial face. Only the big centre dial uses it.
     var inlineReading: String?
     /// What the barrel calls this control, and what it reads out.
+    var barrelKey: ActiveDial.Key
     var barrelName: String
     var barrelReading: String
     @Binding var value: Double
@@ -558,7 +564,8 @@ struct PlateDial: View {
             let step = 1.0 / Double(max(stops, 1))
             value = KnobMath.clamp(value + (direction == .increment ? step : -step))
             Haptics.detent()
-            onTurn(ActiveDial(name: barrelName, reading: barrelReading, value: value))
+            onTurn(ActiveDial(key: barrelKey, name: barrelName,
+                              reading: barrelReading, value: value))
         }
     }
 
@@ -632,7 +639,8 @@ struct PlateDial: View {
                     lastDetent = detent
                     Haptics.detent()
                 }
-                onTurn(ActiveDial(name: barrelName, reading: barrelReading, value: value))
+                onTurn(ActiveDial(key: barrelKey, name: barrelName,
+                                  reading: barrelReading, value: value))
             }
             .onEnded { _ in lastAngle = nil; lastDetent = nil }
     }
@@ -647,6 +655,12 @@ struct PlateDial: View {
 struct DialBarrel: View {
     var dial: ActiveDial
     var rotation: Angle = .zero
+    /// Dragging the barrel drives the same value the dial does. The dial is for
+    /// grabbing, the barrel is for landing — a scale you cannot move is just a
+    /// label, and this one is long enough to be the better of the two.
+    var onScrub: (Double) -> Void = { _ in }
+
+    @State private var lastX: CGFloat?
 
     var body: some View {
         ZStack {
@@ -706,8 +720,21 @@ struct DialBarrel: View {
                 .strokeBorder(Tone.hairline, lineWidth: 0.5)
         }
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
+        .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .gesture(
+            DragGesture(minimumDistance: 2)
+                .onChanged { drag in
+                    defer { lastX = drag.location.x }
+                    guard let previous = lastX else { return }
+                    // 260pt of travel covers the range: long enough that a stop
+                    // is a deliberate movement, short enough to cross the whole
+                    // ladder without lifting a thumb.
+                    onScrub(Double(drag.location.x - previous) / 260)
+                }
+                .onEnded { _ in lastX = nil }
+        )
+        .accessibilityLabel(dial.name)
+        .accessibilityValue(dial.reading)
     }
 }
 
@@ -716,7 +743,16 @@ struct DialBarrel: View {
 struct FilmCardStack: View {
     @EnvironmentObject var app: AppState
     var rotation: Angle = .zero
+    /// Turned, the strip sits on the ground-facing edge and its lettering comes
+    /// up the other way — so the names take an extra half turn to face the
+    /// reader. The cards themselves keep the plain rotation; it is only the
+    /// text that was upside down.
+    var invertNames: Bool = false
     var onOpen: () -> Void
+
+    private var nameRotation: Angle {
+        invertNames ? rotation + .degrees(180) : rotation
+    }
 
     @State private var drag: CGFloat = 0
 
@@ -735,7 +771,7 @@ struct FilmCardStack: View {
                 .font(.mono(8, .semibold))
                 .kerning(1.4)
                 .foregroundStyle(Color.white.opacity(0.34))
-                .rotationEffect(rotation)
+                .rotationEffect(nameRotation)
         }
         .contentShape(Rectangle())
         .onTapGesture { Haptics.tap(); onOpen() }
@@ -781,6 +817,7 @@ struct FilmCardStack: View {
                 .foregroundStyle(Color(hex: 0xFFF6E8).opacity(0.94))
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
+                .rotationEffect(invertNames ? .degrees(180) : .zero)
         }
         .padding(5)
         .frame(width: 54, height: 74)
@@ -818,6 +855,7 @@ struct FilmCardStack: View {
                     .foregroundStyle(Color.white.opacity(0.72))
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
+                    .rotationEffect(invertNames ? .degrees(180) : .zero)
             }
             .padding(4)
             .frame(width: 40, height: 58)
@@ -925,10 +963,11 @@ struct TopPlateBand: View {
 
     /// Open, with all five dials showing.
     static let height: CGFloat = 210
-    /// Closed. Not bare: the shutter dial stays, because shutter is the one
-    /// value a photographer changes without deciding to "go manual" first, and
-    /// hiding it behind PRO put a tap in front of the most common adjustment.
-    static let collapsedHeight: CGFloat = 164
+    /// Closed — the switch strip alone. No dials, because with PRO off the
+    /// camera is on auto and every one of them would read AUTO: a control that
+    /// displays a value it is not setting is worse than no control, and it was
+    /// costing the frame 70pt to say so.
+    static let collapsedHeight: CGFloat = 96
 
     static func height(proOpen: Bool) -> CGFloat { proOpen ? height : collapsedHeight }
 
@@ -961,10 +1000,6 @@ struct TopPlateBand: View {
                         .padding(.top, 8)
                         .padding(.horizontal, 6)
                         .transition(.opacity.combined(with: .offset(y: -14)))
-                } else {
-                    shutterDialOnly
-                        .padding(.top, 10)
-                        .transition(.opacity)
                 }
             }
         }
@@ -986,6 +1021,16 @@ struct TopPlateBand: View {
             utility(text: "GRID", on: false, label: "Grid", action: onCycleGrid)
             utility(text: aspect, on: false, label: "Aspect ratio", action: onCycleAspect)
             utility(systemImage: "gearshape", on: false, label: "Settings", action: onSettings)
+
+            // Only while the dials are out. With PRO off there is nothing
+            // manual set, so there is nothing to put back.
+            if app.proMode {
+                utility(systemImage: "arrow.counterclockwise", on: false,
+                        label: "Reset controls") {
+                    app.resetControls()
+                }
+                .transition(.opacity.combined(with: .scale(scale: 0.8)))
+            }
         }
     }
 
@@ -999,18 +1044,18 @@ struct TopPlateBand: View {
         } label: {
             Group {
                 if let systemImage {
-                    Image(systemName: systemImage).font(.system(size: 13, weight: .medium))
+                    Image(systemName: systemImage).font(.system(size: 17, weight: .medium))
                 } else if let text {
                     Text(text).font(.mono(8, .semibold)).kerning(0.9)
                 }
             }
             .foregroundStyle(on ? Ink.base : Color(hex: 0xA09A8D))
             .rotationEffect(rotation)
-            .frame(minWidth: 28, minHeight: 28)
-            .padding(.horizontal, 9)
-            // 28pt of paint, 44 of target: these sit on a metal plate where the
-            // spec's own sizing is tight, and a miss here costs the shot.
-            .frame(minHeight: 44)
+            // One width for every switch on the plate. The gear used to be an
+            // icon in a 28pt box beside a much wider PORTRAIT, which read as
+            // two classes of control when they are the same class — and made
+            // the most-used one the hardest to hit.
+            .frame(minWidth: 74, minHeight: 44)
             .background {
                 RoundedRectangle(cornerRadius: 7, style: .continuous)
                     .fill(on ? Accent.amber : Color.black.opacity(0.34))
@@ -1026,44 +1071,35 @@ struct TopPlateBand: View {
         .accessibilityLabel(label)
     }
 
-    /// What the closed plate carries. Same control as the centre dial, a size
-    /// down — it is alone, so it does not need to hold rank against four others.
-    private var shutterDialOnly: some View {
-        PlateDial(label: "SHUTTER", inlineReading: app.shutterLabel,
-                  barrelName: "SHUTTER", barrelReading: app.shutterLabel,
-                  value: $app.shutter, stops: AppState.shutterStops.count,
-                  diameter: 58, highlighted: true, rotation: rotation, onTurn: onDialTurn)
-    }
-
     private var dials: some View {
         HStack(alignment: .bottom, spacing: 0) {
             Group {
                 PlateDial(label: AppState.apertureLabels[app.apertureIndex],
-                          barrelName: "APERTURE",
+                          barrelKey: .aperture, barrelName: "APERTURE",
                           barrelReading: AppState.apertureLabels[app.apertureIndex],
                           value: apertureBinding,
                           stops: AppState.apertureStops.count,
                           diameter: 44, rotation: rotation, onTurn: onDialTurn)
 
                 PlateDial(label: app.isoLabel,
-                          barrelName: "ISO", barrelReading: app.isoLabel,
+                          barrelKey: .iso, barrelName: "ISO", barrelReading: app.isoLabel,
                           value: $app.iso,
                           stops: AppState.isoStops.count,
                           diameter: 50, rotation: rotation, onTurn: onDialTurn)
 
                 PlateDial(label: "SHUTTER", inlineReading: app.shutterLabel,
-                          barrelName: "SHUTTER", barrelReading: app.shutterLabel,
+                          barrelKey: .shutter, barrelName: "SHUTTER", barrelReading: app.shutterLabel,
                           value: $app.shutter, stops: AppState.shutterStops.count,
                           diameter: 70, highlighted: true, rotation: rotation, onTurn: onDialTurn)
 
                 PlateDial(label: app.kelvinLabel,
-                          barrelName: "WHITE BALANCE", barrelReading: app.kelvinLabel,
+                          barrelKey: .white, barrelName: "WHITE BALANCE", barrelReading: app.kelvinLabel,
                           value: $app.whiteBalance,
                           stops: AppState.whiteBalanceStops.count,
                           diameter: 50, rotation: rotation, onTurn: onDialTurn)
 
                 PlateDial(label: String(format: "%+.1fEV", app.evValue),
-                          barrelName: "EXPOSURE",
+                          barrelKey: .exposure, barrelName: "EXPOSURE",
                           barrelReading: String(format: "%+.1f EV", app.evValue),
                           value: $app.exposureComp, stops: AppState.evDetents,
                           diameter: 44, rotation: rotation, onTurn: onDialTurn)
@@ -1120,7 +1156,7 @@ struct TopPlateDeck: View {
     /// four values. Two sets of controls for one set of numbers is one set too
     /// many, so the cluster is gone from here and film keeps the band.
     private var filmBand: some View {
-        FilmCardStack(rotation: rotation, onOpen: onFilmSim)
+        FilmCardStack(rotation: rotation, invertNames: landscape, onOpen: onFilmSim)
             .padding(.bottom, 14)
     }
 

@@ -373,14 +373,70 @@ struct ViewfinderScreen: View {
         // through. The controls themselves do not move when the body turns.
         .overlay(alignment: .top) {
             if let activeDial {
-                DialBarrel(dial: activeDial, rotation: orientation.angle)
+                DialBarrel(dial: activeDial, rotation: orientation.angle,
+                           onScrub: { scrub(activeDial.key, by: $0) })
                     .padding(.horizontal, 12)
-                    .padding(.top, TopPlateBand.height(proOpen: app.proMode) + 10)
+                    // Turned, it goes to the very top of the glass rather than
+                    // under the plate — that edge is the one nearest the eye
+                    // when the body is sideways, and it keeps the barrel off
+                    // the middle of the frame.
+                    .padding(.top, orientation.edge == .bottom
+                             ? TopPlateBand.height(proOpen: app.proMode) + 10
+                             : 8)
                     .transition(.opacity.combined(with: .offset(y: -10)))
+                    .zIndex(4)
             }
         }
         .animation(.spring(response: 0.34, dampingFraction: 0.84), value: app.proMode)
         .animation(.easeOut(duration: 0.22), value: activeDial)
+    }
+
+    /// Dragging the barrel drives the same value its dial does. The key is
+    /// carried on the active dial so this does not have to guess which control
+    /// is on screen.
+    private func scrub(_ key: ActiveDial.Key, by delta: Double) {
+        switch key {
+        case .aperture:
+            let last = AppState.apertureStops.count - 1
+            let current = last > 0 ? Double(app.apertureIndex) / Double(last) : 0
+            let next = KnobMath.clamp(current + delta)
+            let index = min(last, max(0, Int((next * Double(last)).rounded())))
+            if index != app.apertureIndex {
+                app.apertureIndex = index
+                Haptics.detent()
+            }
+        case .iso:      step(\.iso, by: delta, stops: AppState.isoStops.count)
+        case .shutter:  step(\.shutter, by: delta, stops: AppState.shutterStops.count)
+        case .white:    step(\.whiteBalance, by: delta, stops: AppState.whiteBalanceStops.count)
+        case .exposure: step(\.exposureComp, by: delta, stops: AppState.evDetents)
+        }
+        refreshBarrel(key)
+    }
+
+    /// Clicks only when the detent actually changes, so the barrel ticks in step
+    /// with the number rather than on every pixel of travel.
+    private func step(_ path: ReferenceWritableKeyPath<AppState, Double>, by delta: Double, stops: Int) {
+        let before = KnobMath.detent(app[keyPath: path], stops: stops)
+        app[keyPath: path] = KnobMath.clamp(app[keyPath: path] + delta)
+        if KnobMath.detent(app[keyPath: path], stops: stops) != before { Haptics.detent() }
+    }
+
+    /// Keeps the reading under the index current while the barrel is dragged,
+    /// and restarts the clock that retires it.
+    private func refreshBarrel(_ key: ActiveDial.Key) {
+        let reading: String
+        let value: Double
+        switch key {
+        case .aperture:
+            reading = AppState.apertureLabels[app.apertureIndex]
+            let last = Double(AppState.apertureStops.count - 1)
+            value = last > 0 ? Double(app.apertureIndex) / last : 0
+        case .iso:      reading = app.isoLabel;     value = app.iso
+        case .shutter:  reading = app.shutterLabel; value = app.shutter
+        case .white:    reading = app.kelvinLabel;  value = app.whiteBalance
+        case .exposure: reading = String(format: "%+.1f EV", app.evValue); value = app.exposureComp
+        }
+        showBarrel(ActiveDial(key: key, name: activeDial?.name ?? "", reading: reading, value: value))
     }
 
     /// Shows the barrel for the dial being turned, and starts the clock that
