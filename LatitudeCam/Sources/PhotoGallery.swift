@@ -96,22 +96,65 @@ public final class PhotoGallery: NSObject, ObservableObject {
     public static func filename(for id: String) -> String { "\(id).jpg" }
 
     public func deletePhoto(_ id: String) {
-        let assetID = photos.first { $0.id == id }?.assetID
+        deletePhotos([id])
+    }
 
-        DispatchQueue.main.async { [weak self] in
-            self?.photos.removeAll { $0.id == id }
+    /// Deletes the corresponding Photos assets in one transaction. The roll is
+    /// updated only after Photos confirms success; optimistic removal made a
+    /// failed delete look successful until the next app launch reloaded the album.
+    public func deletePhotos(
+        _ ids: Set<String>, completion: @escaping (Bool, String?) -> Void = { _, _ in }
+    ) {
+        guard !ids.isEmpty else { return }
+        let assetIDs = Set(photos.compactMap { ids.contains($0.id) ? $0.assetID : nil })
+
+        guard !assetIDs.isEmpty else {
+            completion(false, "The selected frames are still being added to Apple Photos. Please wait a moment and try again.")
+            return
         }
 
-        // The asset has to go too, or the next load brings it straight back. Photos
-        // asks the user to confirm, which is right: this is their library now, not
-        // ours to quietly empty.
-        guard let assetID else { return }
         ioQueue.async {
-            let assets = PHAsset.fetchAssets(withLocalIdentifiers: [assetID], options: nil)
-            guard assets.count > 0 else { return }
+            let assets = PHAsset.fetchAssets(withLocalIdentifiers: Array(assetIDs), options: nil)
+            guard assets.count > 0 else {
+                DispatchQueue.main.async {
+                    completion(false, "Photos could not find the selected frames.")
+                }
+                return
+            }
+
+            // This is the same one-way PhotoKit transaction used by the earlier
+            // working single-frame delete. On this beta, the completion callback
+            // can stall even after the system applies a change, so verify the
+            // underlying assets instead of treating that callback as the truth.
             PHPhotoLibrary.shared().performChanges {
                 PHAssetChangeRequest.deleteAssets(assets)
             }
+            self.verifyDeletion(assetIDs: assetIDs, frameIDs: ids, attempt: 0, completion: completion)
+        }
+    }
+
+    private func verifyDeletion(
+        assetIDs: Set<String>, frameIDs: Set<String>, attempt: Int,
+        completion: @escaping (Bool, String?) -> Void
+    ) {
+        let remaining = PHAsset.fetchAssets(withLocalIdentifiers: Array(assetIDs), options: nil).count
+        if remaining == 0 {
+            DispatchQueue.main.async { [weak self] in
+                self?.photos.removeAll { frameIDs.contains($0.id) }
+                completion(true, nil)
+            }
+            return
+        }
+
+        guard attempt < 16 else {
+            DispatchQueue.main.async {
+                completion(false, "Apple Photos did not apply the deletion. No frames were removed.")
+            }
+            return
+        }
+
+        ioQueue.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            self?.verifyDeletion(assetIDs: assetIDs, frameIDs: frameIDs, attempt: attempt + 1, completion: completion)
         }
     }
 

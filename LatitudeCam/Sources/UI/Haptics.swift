@@ -98,6 +98,18 @@ enum Haptics {
         }
     }
 
+    /// A deliberate, irreversible batch action such as dropping frames into Delete.
+    static func destructive() {
+        guard isEnabled else { return }
+        heavy.impactOccurred(intensity: 1.0)
+
+        guard strength == .strong else { return }
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(75))
+            rigid.impactOccurred(intensity: 0.9)
+        }
+    }
+
     static func success() {
         guard isEnabled else { return }
         notice.notificationOccurred(.success)

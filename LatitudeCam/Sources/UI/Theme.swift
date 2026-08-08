@@ -209,6 +209,8 @@ enum Pref {
     static let hapticStrength = "settings.hapticStrength"
     static let mirrorToPhotos = "settings.mirrorToPhotos"
     static let captureFormat = "settings.captureFormat"
+    static let rawCaptureSource = "settings.rawCaptureSource"
+    static let rawProgressDesign = "settings.rawProgressDesign"
     static let captureResolution = "settings.captureResolution"
     static let proMode = "settings.proMode"
     static let galleryLayout = "settings.galleryLayout"
@@ -223,6 +225,11 @@ enum Pref {
     static let histogramStyleOptions = ["Luma", "RGB"]
     static let hapticStrengthOptions = ["Subtle", "Standard", "Strong"]
     static let captureFormatOptions = ["RAW Only", "JPEG Only", "RAW + JPEG"]
+    static let rawCaptureSourceOptions = ["Sensor RAW", "Apple ProRAW"]
+    static let rawProgressDesignOptions = [
+        "01 Aperture Bloom", "02 Film Advance", "03 Amber Scanline",
+        "05 Darkroom Bath", "07 Sensor Mosaic", "10 Quiet Progress"
+    ]
     static let captureResolutionOptions = ["4MP", "8MP", "12MP", "Full"]
     /// Organizer is the grid every photo app has — everything visible at once,
     /// no metaphor to learn. The other four are picks from the fifteen gallery
@@ -318,6 +325,9 @@ final class AppState: ObservableObject {
     /// Bumped on every release. The pro cluster watches this to close itself,
     /// which it used to do by watching the save banner that no longer exists.
     @Published private(set) var captureTick = 0
+    @Published private(set) var rawCaptureInProgress = false
+    @Published private(set) var rawCaptureProgress = 0.0
+    private var rawProgressTimer: Timer?
 
     // Every control below feeds the render pipeline, so each one syncs on write.
     @Published var selectedFilm: FilmPreset = FilmPreset.all[0] { didSet { syncCamera() } }
@@ -594,8 +604,36 @@ final class AppState: ObservableObject {
         cameraManager.lenses.first { $0.id == lensID } ?? cameraManager.lenses.first
     }
 
+    private var isSensorRAWActive: Bool {
+        Pref.string(Pref.captureFormat, default: "RAW + JPEG") != "JPEG Only"
+            && Pref.string(Pref.rawCaptureSource, default: "Sensor RAW") == "Sensor RAW"
+    }
+
+    private func supportsActiveCaptureMode(_ lens: CameraManager.Lens) -> Bool {
+        // This iPhone's Bayer DNG path accepts only the primary wide sensor at
+        // native 1x. Apple ProRAW and JPEG keep their full lens ladder.
+        !isSensorRAWActive || lens.id == "wide"
+    }
+
+    private var sensorRAWAvailableFocalLengths: String {
+        let labels = cameraManager.lenses
+            .filter { $0.id == "wide" }
+            .map(\.label)
+        return labels.isEmpty ? "the primary wide camera" : labels.joined(separator: " and ")
+    }
+
+    private func showSensorRAWLensMessage() {
+        lastSaveMessage = "Sensor RAW is available at \(sensorRAWAvailableFocalLengths). Use JPEG or Apple ProRAW for the other lenses."
+        clearMessageSoon()
+    }
+
     func selectLens(_ lens: CameraManager.Lens) {
         guard lens.id != lensID else { return }
+        guard supportsActiveCaptureMode(lens) else {
+            Haptics.tap()
+            showSensorRAWLensMessage()
+            return
+        }
         Haptics.detent()
         lensID = lens.id
         zoom = Double(lens.zoom)
@@ -605,13 +643,23 @@ final class AppState: ObservableObject {
     /// feel heavy at the wide end and skittish at the long one.
     func pinchZoom(by scale: Double) {
         let range = cameraManager.zoomRange
-        let next = min(max(zoom * scale, Double(range.lowerBound)), Double(range.upperBound))
+        var next = min(max(zoom * scale, Double(range.lowerBound)), Double(range.upperBound))
+        if isSensorRAWActive {
+            let allowed = cameraManager.lenses.filter(supportsActiveCaptureMode)
+            if let low = allowed.map(\.zoom).min(), let high = allowed.map(\.zoom).max() {
+                let constrained = min(max(next, Double(low)), Double(high))
+                if abs(constrained - next) > 0.0001 {
+                    showSensorRAWLensMessage()
+                }
+                next = constrained
+            }
+        }
         guard abs(next - zoom) > 0.0001 else { return }
         zoom = next
 
         // The selector follows the pinch to the nearest marked lens, so the two
         // never disagree about what you are looking through.
-        if let nearest = cameraManager.lenses.min(by: {
+        if let nearest = cameraManager.lenses.filter(supportsActiveCaptureMode).min(by: {
             abs(Double($0.zoom) - next) < abs(Double($1.zoom) - next)
         }), nearest.id != lensID {
             lensID = nearest.id
@@ -633,8 +681,14 @@ final class AppState: ObservableObject {
             // the full field on the front — so the selector lands somewhere real
             // whichever camera answered.
             self.lensID = "wide"
-            // The front camera has no RAW and a narrower exposure range, so the
-            // pipeline needs the settings pushed at it again.
+            // The front camera cannot deliver either DNG or ProRAW. Switching to
+            // JPEG prevents a stale rear-camera RAW choice from reaching the
+            // capture path while the Pro sheet also disables those choices.
+            if front, Pref.string(Pref.captureFormat, default: "RAW + JPEG") != "JPEG Only" {
+                UserDefaults.standard.set("JPEG Only", forKey: Pref.captureFormat)
+                self.lastSaveMessage = "Selfie camera uses JPEG. RAW and Apple ProRAW require a rear camera."
+                self.clearMessageSoon()
+            }
             self.syncCamera()
         }
     }
@@ -658,16 +712,35 @@ final class AppState: ObservableObject {
         }
 
         let format = Pref.string(Pref.captureFormat, default: "RAW + JPEG")
+        let rawCaptureSource = Pref.string(Pref.rawCaptureSource, default: "Sensor RAW")
         let resolution = Pref.string(Pref.captureResolution, default: "Full")
         let wantsRAW = format != "JPEG Only"
         let wantsProcessed = format != "RAW Only"
 
+        guard !self.usingFrontCamera || !wantsRAW else {
+            lastSaveMessage = "RAW and Apple ProRAW are unavailable on the selfie camera. Select JPEG Only."
+            clearMessageSoon()
+            return false
+        }
+
+        if isSensorRAWActive,
+           let lens = currentLens,
+           !supportsActiveCaptureMode(lens) {
+            showSensorRAWLensMessage()
+            return false
+        }
+
         captureTick &+= 1
+        if wantsRAW { beginRAWProgress() }
 
         cameraManager.captureStill(
             wantsRAW: wantsRAW,
             wantsProcessed: wantsProcessed,
-            targetMegapixels: Pref.megapixels(resolution)
+            targetMegapixels: Pref.megapixels(resolution),
+            rawCaptureSource: CameraManager.RawCaptureSource(rawValue: rawCaptureSource) ?? .sensor,
+            captureLensID: lensID,
+            captureZoomFactor: 1,
+            rotationDegrees: rotationDegrees
         ) { [weak self] still in
             self?.store(still, requestedFormat: format, rotationDegrees: rotationDegrees)
         }
@@ -681,33 +754,37 @@ final class AppState: ObservableObject {
     /// library. Encoding and the Photos write take a moment and the shutter should
     /// not be held hostage to either; only a failure revises the message.
     private func store(_ still: CameraManager.CapturedStill, requestedFormat: String, rotationDegrees: Double) {
+        if still.rawUnavailable && requestedFormat != "JPEG Only" {
+            lastSaveMessage = "Selected RAW source is unavailable on this active camera; no processed substitute was saved"
+            clearMessageSoon()
+            finishRAWProgress()
+            return
+        }
         guard still.raw != nil || still.image != nil else {
             lastSaveMessage = "Capture failed"
             clearMessageSoon()
+            finishRAWProgress()
             return
         }
 
-        let aspect = Pref.string(Pref.aspect, default: "3:2")
         let quality = Pref.compressionQuality(Pref.string(Pref.jpegQuality, default: "Maximum"))
+        proRAW = still.raw != nil
+        let exportsProcessedImage = requestedFormat != "RAW Only"
 
-        // cropping() on a CGImage is a reference, not a copy — cheap enough for
-        // the main queue, unlike the encode below.
-        // Falling back to the preview frame keeps the shot in the roll when the
-        // full-resolution develop fails; an empty grid was the worse outcome.
+        // The capture output already has the hardware-derived orientation. Keep
+        // the full sensor frame for the master export: the viewfinder aspect is a
+        // framing guide, not permission to discard camera pixels.
         //
-        // Cropped to the aspect ratio first, in the same fixed orientation the
-        // viewfinder's aspect mask was drawn against, then rotated upright —
-        // rotating first would crop against the wrong edges whenever the phone
-        // was held sideways.
-        let full = (still.image ?? cameraManager.capturePhoto())?
-            .centerCropped(toHeightOverWidth: Pref.aspectRatio(aspect))
-            .rotatedForCapture(byDegrees: rotationDegrees)
+        // A preview frame is never a valid export fallback. It is intentionally
+        // 2MP, so using it here is exactly how a full-quality capture became a
+        // visibly soft photo in Apple Photos.
+        let full = still.image
 
         if let full {
             capturedImage = full
             // The roll is a contact sheet and holds a display-sized copy. The
-            // masters go to Apple Photos and to the DNG folder — keeping 48MP
-            // frames in the photos array is what exhausted memory and emptied it.
+            // master lives in Apple Photos. Keeping 48MP frames in the photos
+            // array is what exhausted memory and emptied the roll.
             savedPhotoID = gallery.addPhoto(
                 PhotoGallery.downscaled(full, maxEdge: PhotoGallery.inMemoryEdge),
                 filmID: selectedFilm.id,
@@ -727,7 +804,10 @@ final class AppState: ObservableObject {
 
         exportQueue.async { [weak self] in
             guard let self else { return }
-            guard mirrorEnabled else { return }
+            guard mirrorEnabled else {
+                self.finishRAWProgress()
+                return
+            }
 
             // A full-resolution encode is far too slow for the main queue; running
             // it there froze the whole viewfinder for the duration.
@@ -735,14 +815,51 @@ final class AppState: ObservableObject {
             // The DNG no longer goes to a folder of its own either — it rides with
             // the JPEG into Photos, so a frame exists once on the phone rather than
             // three times.
-            let jpeg = frame?.jpegData(compressionQuality: quality)
-            PhotoExporter.saveCapture(jpeg: jpeg, dng: still.raw, filename: filename) { ok, problem in
-                guard !ok else { return }
+            // RAW Only writes the untouched DNG. A RAW request is never silently
+            // replaced with a processed image; the caller has already rejected an
+            // unavailable RAW source above.
+            let jpeg = exportsProcessedImage ? frame?.jpegData(compressionQuality: quality) : nil
+            guard jpeg != nil || still.raw != nil else {
                 Task { @MainActor in
-                    self.lastSaveMessage = problem ?? "Could not save to Photos"
+                    self.lastSaveMessage = "Full-resolution capture could not be encoded"
                     self.clearMessageSoon()
+                    self.finishRAWProgress()
+                }
+                return
+            }
+            PhotoExporter.saveCapture(jpeg: jpeg, dng: still.raw, filename: filename) { ok, problem in
+                Task { @MainActor in
+                    if !ok {
+                        self.lastSaveMessage = problem ?? "Could not save to Photos"
+                        self.clearMessageSoon()
+                    }
+                    self.finishRAWProgress()
                 }
             }
+        }
+    }
+
+    private func beginRAWProgress() {
+        rawProgressTimer?.invalidate()
+        rawCaptureProgress = 0.08
+        rawCaptureInProgress = true
+        rawProgressTimer = Timer.scheduledTimer(withTimeInterval: 0.16, repeats: true) { [weak self] _ in
+            guard let self else { return }
+            self.rawCaptureProgress = min(0.92, self.rawCaptureProgress + 0.045)
+        }
+    }
+
+    private func finishRAWProgress() {
+        guard Thread.isMainThread else {
+            DispatchQueue.main.async { [weak self] in self?.finishRAWProgress() }
+            return
+        }
+        rawProgressTimer?.invalidate()
+        rawProgressTimer = nil
+        rawCaptureProgress = 1
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.28) { [weak self] in
+            self?.rawCaptureInProgress = false
+            self?.rawCaptureProgress = 0
         }
     }
 

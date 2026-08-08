@@ -209,6 +209,7 @@ struct ViewfinderScreen: View {
     @AppStorage(Pref.grid) private var gridStyle = "Rule of Thirds"
     @AppStorage(Pref.aspect) private var aspect = "3:2"
     @AppStorage(Pref.histogramStyle) private var histogramStyle = "Luma"
+    @AppStorage(Pref.rawProgressDesign) private var rawProgressDesign = "01 Aperture Bloom"
 
     @StateObject private var orientation = DeviceOrientation()
     @State private var reticle: CGPoint?
@@ -263,6 +264,15 @@ struct ViewfinderScreen: View {
             }
 
             chrome
+
+            if app.rawCaptureInProgress {
+                RAWCaptureProgressOverlay(
+                    design: rawProgressDesign,
+                    progress: app.rawCaptureProgress
+                )
+                .allowsHitTesting(false)
+                .zIndex(4)
+            }
 
             if let message = app.lastSaveMessage {
                 Text(message)
@@ -541,21 +551,21 @@ struct ViewfinderScreen: View {
             }
         } label: {
             Text("PRO")
-                .font(.mono(13, .bold))
+                .font(.mono(14, .bold))
                 .kerning(0.9)
                 .foregroundStyle(app.proMode ? Ink.base : Tone.secondary)
                 .rotationEffect(orientation.angle)
-                .frame(width: 52, height: 36)
+                .frame(width: 68, height: 46)
                 .background {
                     if app.proMode {
-                        Capsule().fill(Accent.amber)
+                        RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Accent.amber)
                     } else {
-                        Capsule().fill(.ultraThinMaterial)
-                            .overlay { Capsule().fill(Color.black.opacity(0.2)) }
-                            .overlay { Capsule().strokeBorder(Tone.hairline, lineWidth: 0.5) }
+                        RoundedRectangle(cornerRadius: 12, style: .continuous).fill(.ultraThinMaterial)
+                            .overlay { RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.black.opacity(0.2)) }
+                            .overlay { RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Tone.hairline, lineWidth: 0.5) }
                     }
                 }
-                .contentShape(Capsule())
+                .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Pro controls")
@@ -653,6 +663,163 @@ struct ViewfinderScreen: View {
     }
 }
 
+// MARK: - RAW capture progress
+
+private struct RAWCaptureProgressOverlay: View {
+    let design: String
+    let progress: Double
+    @State private var animated = false
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.28).ignoresSafeArea()
+
+            VStack(spacing: 18) {
+                animation
+                    .frame(width: 174, height: 174)
+
+                VStack(spacing: 6) {
+                    Text(status)
+                        .font(.mono(11, .bold))
+                        .kerning(1.7)
+                        .foregroundStyle(Tone.primary)
+                    Text("ORIGINAL DNG · \(Int(progress * 100))%")
+                        .font(.mono(9, .medium))
+                        .kerning(1.1)
+                        .foregroundStyle(Accent.amber)
+                }
+
+                Capsule()
+                    .fill(Color.white.opacity(0.16))
+                    .frame(width: 190, height: 3)
+                    .overlay(alignment: .leading) {
+                        Capsule()
+                            .fill(Accent.amber)
+                            .frame(width: 190 * progress, height: 3)
+                    }
+            }
+            .padding(.horizontal, 30)
+            .padding(.vertical, 26)
+            .glass(radius: 24)
+        }
+        .onAppear { animated = true }
+    }
+
+    @ViewBuilder
+    private var animation: some View {
+        switch design.prefix(2) {
+        case "01": apertureBloom
+        case "02": filmAdvance
+        case "03": amberScanline
+        case "05": darkroomBath
+        case "07": sensorMosaic
+        default: quietProgress
+        }
+    }
+
+    private var status: String {
+        switch design.prefix(2) {
+        case "01": return "CAPTURING SENSOR RAW"
+        case "02": return "ADVANCING ORIGINAL FRAME"
+        case "03": return "READING SENSOR DATA"
+        case "05": return "DEVELOPING ORIGINAL DNG"
+        case "07": return "BUILDING RAW PREVIEW"
+        default: return "SAVING ORIGINAL DNG"
+        }
+    }
+
+    private var apertureBloom: some View {
+        ZStack {
+            Circle().stroke(Tone.hairline, lineWidth: 2)
+            Circle().trim(from: 0, to: 0.78)
+                .stroke(Accent.amber, style: StrokeStyle(lineWidth: 7, lineCap: .round))
+                .rotationEffect(.degrees(animated ? 360 : 0))
+                .animation(.linear(duration: 1.45).repeatForever(autoreverses: false), value: animated)
+            ForEach(0..<6, id: \.self) { index in
+                Capsule().fill(Accent.amber.opacity(0.7))
+                    .frame(width: 22, height: 68)
+                    .offset(y: -38)
+                    .rotationEffect(.degrees(Double(index) * 60 + (animated ? 28 : 0)))
+            }
+            Circle().fill(Ink.base).frame(width: 52, height: 52)
+        }
+    }
+
+    private var filmAdvance: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 12).fill(Color.black.opacity(0.64))
+            HStack(spacing: 8) {
+                ForEach(0..<5, id: \.self) { index in
+                    RoundedRectangle(cornerRadius: 5)
+                        .fill(index == 2 ? Accent.amber.opacity(0.7) : Color.white.opacity(0.18))
+                        .frame(width: 48, height: 88)
+                }
+            }
+            .offset(x: animated ? -28 : 28)
+            .animation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: animated)
+            VStack {
+                HStack(spacing: 16) { ForEach(0..<9, id: \.self) { _ in Rectangle().fill(Accent.amber).frame(width: 8, height: 9) } }
+                Spacer()
+                HStack(spacing: 16) { ForEach(0..<9, id: \.self) { _ in Rectangle().fill(Accent.amber).frame(width: 8, height: 9) } }
+            }
+            .padding(.vertical, 10)
+        }
+    }
+
+    private var amberScanline: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 14).fill(Color.white.opacity(0.09))
+            CompositionGrid(style: "Rule of Thirds").clipShape(RoundedRectangle(cornerRadius: 14))
+            Rectangle().fill(Accent.amber)
+                .frame(height: 3)
+                .shadow(color: Accent.amber, radius: 12)
+                .offset(y: animated ? 68 : -68)
+                .animation(.easeInOut(duration: 1.05).repeatForever(autoreverses: true), value: animated)
+        }
+    }
+
+    private var darkroomBath: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 16)
+                .fill(RadialGradient(colors: [Color.red.opacity(0.55), Ink.base], center: .center, startRadius: 2, endRadius: 115))
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Accent.amber.opacity(animated ? 0.8 : 0.25), lineWidth: 2)
+                .padding(22)
+                .scaleEffect(animated ? 0.94 : 0.76)
+                .opacity(animated ? 1 : 0.35)
+                .animation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true), value: animated)
+        }
+    }
+
+    private var sensorMosaic: some View {
+        let columns = Array(repeating: GridItem(.flexible(), spacing: 2), count: 8)
+        return LazyVGrid(columns: columns, spacing: 2) {
+            ForEach(0..<64, id: \.self) { index in
+                Rectangle()
+                    .fill([Color.red.opacity(0.68), Color.green.opacity(0.7), Color.blue.opacity(0.72), Accent.amber.opacity(0.75)][index % 4])
+                    .aspectRatio(1, contentMode: .fit)
+                    .opacity(animated ? 1 : 0.22)
+                    .animation(.easeOut(duration: 0.38).delay(Double(index % 8) * 0.035), value: animated)
+            }
+        }
+        .padding(8)
+        .background(Ink.base, in: RoundedRectangle(cornerRadius: 14))
+        .overlay { RoundedRectangle(cornerRadius: 14).strokeBorder(Accent.amber.opacity(0.45), lineWidth: 1) }
+    }
+
+    private var quietProgress: some View {
+        ZStack {
+            Circle().stroke(Tone.hairline, lineWidth: 5)
+            Circle().trim(from: 0, to: progress)
+                .stroke(Accent.amber, style: StrokeStyle(lineWidth: 5, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+            Circle().fill(Accent.amber.opacity(animated ? 0.95 : 0.38)).frame(width: 22, height: 22)
+                .shadow(color: Accent.amber, radius: animated ? 14 : 3)
+                .animation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: animated)
+        }
+    }
+}
+
 /// The most recent shot, so the corner button reflects the roll.
 struct LibraryThumbnail: View {
     @ObservedObject var gallery: PhotoGallery
@@ -667,11 +834,13 @@ struct LibraryThumbnail: View {
                 StripePattern.thumbnail
             }
         }
-        .frame(width: 34, height: 34)
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.5), lineWidth: 1.5)
+        .frame(width: 42, height: 42)
+        .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+        .padding(5)
+        .background {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color.white.opacity(0.07))
+                .overlay { RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Tone.hairline, lineWidth: 0.5) }
         }
     }
 }
@@ -682,6 +851,7 @@ struct ManualControlsSheet: View {
     @EnvironmentObject var app: AppState
 
     @AppStorage(Pref.captureFormat) private var captureFormat = "RAW + JPEG"
+    @AppStorage(Pref.rawCaptureSource) private var rawCaptureSource = "Sensor RAW"
     @AppStorage(Pref.captureResolution) private var captureResolution = "Full"
 
     private let columns = [GridItem(.flexible(), spacing: 14), GridItem(.flexible(), spacing: 14)]
@@ -722,11 +892,32 @@ struct ManualControlsSheet: View {
 
             ToggleRow(label: "Focus Peaking", isOn: $app.focusPeaking)
 
-            ChipRow(label: "Format", options: Pref.captureFormatOptions, selection: $captureFormat)
+            ChipRow(
+                label: "RAW Capture",
+                options: Pref.captureFormatOptions,
+                selection: $captureFormat,
+                disabledOptions: app.usingFrontCamera ? ["RAW Only", "RAW + JPEG"] : []
+            )
+            if app.usingFrontCamera {
+                Text("Selfie camera captures maximum-quality JPEG. Sensor RAW and Apple ProRAW require a rear camera.")
+                    .font(.ui(11))
+                    .foregroundStyle(Tone.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.top, 2)
+            } else if captureFormat != "JPEG Only" {
+                ChipRow(label: "RAW Source", options: Pref.rawCaptureSourceOptions, selection: $rawCaptureSource)
+                Text(rawCaptureSource == "Sensor RAW"
+                     ? "Sensor RAW saves a standard Bayer DNG without the Apple ProRAW capture path."
+                     : "Apple ProRAW uses Apple's computational RAW capture path.")
+                    .font(.ui(11))
+                    .foregroundStyle(Tone.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.top, 2)
+            }
             ChipRow(label: "Resolution", options: Pref.captureResolutionOptions, selection: $captureResolution)
 
-            if !app.cameraManager.supportsRAW {
-                Text("This camera has no RAW format — captures save as JPEG.")
+            if captureFormat != "JPEG Only" && !supportsSelectedRAWSource {
+                Text("This camera or lens cannot use \(rawCaptureSource). Select a RAW-capable camera or source; Latitude will not substitute HEIF.")
                     .font(.ui(11))
                     .foregroundStyle(Tone.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -736,6 +927,12 @@ struct ManualControlsSheet: View {
         // The highlight is a pointer, not a mode — it clears once the sheet has
         // done its job of showing you where the control lives.
         .onDisappear { app.proFocus = nil }
+    }
+
+    private var supportsSelectedRAWSource: Bool {
+        !app.usingFrontCamera && (rawCaptureSource == "Apple ProRAW"
+            ? app.cameraManager.supportsAppleProRAW
+            : app.cameraManager.supportsSensorRAW)
     }
 
     private var header: some View {

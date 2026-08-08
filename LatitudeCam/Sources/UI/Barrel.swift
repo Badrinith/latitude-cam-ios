@@ -84,6 +84,9 @@ struct Barrel: View {
     /// The film barrel uses the stock swatches so the engraving shows what the
     /// frame will look like, not just what it is called.
     var tints: [Color]?
+    /// Values that are shown for context but cannot be selected in the current
+    /// capture mode, such as focal lengths without Sensor RAW support.
+    var disabledIndices: Set<Int> = []
     /// Set when the barrel sits inside a scroll view.
     ///
     /// A barrel claims any drag that starts on it, vertical ones included — and
@@ -199,6 +202,9 @@ struct Barrel: View {
     }
 
     private func engravingColour(_ slot: Int) -> Color {
+        if disabledIndices.contains(slot) {
+            return Color(hex: 0xC9C2B6).opacity(0.2)
+        }
         // On a colour band the lettering has to go dark to survive; the band is
         // carrying the information now, so the type only has to be readable.
         if let tints, tints.indices.contains(slot) {
@@ -358,9 +364,11 @@ struct BarrelCluster: View {
     /// beside it. When the two disagreed the open cluster was drawn — and touched
     /// — over the shutter row below, so controls down there stopped responding
     /// while nothing looked wrong: a SwiftUI frame does not clip what overflows it.
-    static let expandedHeight: CGFloat = 150
+    static let expandedHeight: CGFloat = 196
 
     @EnvironmentObject var app: AppState
+    @AppStorage(Pref.captureFormat) private var captureFormat = "RAW + JPEG"
+    @AppStorage(Pref.rawCaptureSource) private var rawCaptureSource = "Sensor RAW"
 
     /// nil while collapsed.
     @State private var focus: String?
@@ -389,14 +397,19 @@ struct BarrelCluster: View {
     /// it does anything. A control that is present but inert teaches the wrong
     /// thing about every other control beside it.
     private var portraitRow: [Control] {
-        var row: [Control] = [
+        [
             .init(id: "ev", label: "EXPOSURE", chip: app.exposureLabel),
-            .init(id: "focus", label: "FOCUS", chip: app.focusLabel)
+            .init(id: "focus", label: "FOCUS", chip: app.focusLabel),
+            .init(id: "raw", label: "RAW CAPTURE", chip: rawChipLabel)
         ]
-        row.append(app.portrait
-            ? .init(id: "aperture", label: "APERTURE", chip: app.apertureLabel)
-            : .init(id: "metering", label: "METERING", chip: app.metering))
-        return row
+    }
+
+    private var rawChipLabel: String {
+        switch captureFormat {
+        case "RAW Only": return "RAW"
+        case "RAW + JPEG": return "RAW+"
+        default: return "JPEG"
+        }
     }
 
     private var controls: [Control] { rows.flatMap { $0 } }
@@ -436,13 +449,23 @@ struct BarrelCluster: View {
             }
             .padding(.horizontal, 2)
 
-            barrel(for: control.id)
-                .overlay(alignment: .top) {
-                    Triangle()
-                        .fill(Accent.amber)
-                        .frame(width: 9, height: 6)
-                        .offset(y: -4)
-                }
+            if control.id == "raw" {
+                rawCapturePicker
+                    .overlay(alignment: .top) {
+                        Triangle()
+                            .fill(Accent.amber)
+                            .frame(width: 9, height: 6)
+                            .offset(y: -4)
+                    }
+            } else {
+                barrel(for: control.id)
+                    .overlay(alignment: .top) {
+                        Triangle()
+                            .fill(Accent.amber)
+                            .frame(width: 9, height: 6)
+                            .offset(y: -4)
+                    }
+            }
         }
         .contentShape(Rectangle())
         .onTapGesture { restartIdle() }
@@ -490,6 +513,26 @@ struct BarrelCluster: View {
                 index: binding(get: { app.exposureIndex }, set: { app.exposureIndex = $0 })
             )
         }
+    }
+
+    private var rawCapturePicker: some View {
+        VStack(spacing: 4) {
+            ChipRow(
+                label: "Capture",
+                options: Pref.captureFormatOptions,
+                selection: $captureFormat,
+                disabledOptions: app.usingFrontCamera ? ["RAW Only", "RAW + JPEG"] : []
+            )
+            if app.usingFrontCamera {
+                Text("Selfie camera: JPEG only")
+                    .font(.mono(9, .semibold))
+                    .foregroundStyle(Tone.quaternary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else if captureFormat != "JPEG Only" {
+                ChipRow(label: "Source", options: Pref.rawCaptureSourceOptions, selection: $rawCaptureSource)
+            }
+        }
+        .padding(.top, 1)
     }
 
     /// Every turn restarts the idle timer, so a control cannot close under the thumb.
@@ -646,6 +689,19 @@ struct LensBarrel: View {
     var selected: String
     var onSelect: (CameraManager.Lens) -> Void
 
+    @AppStorage(Pref.captureFormat) private var captureFormat = "RAW + JPEG"
+    @AppStorage(Pref.rawCaptureSource) private var rawCaptureSource = "Sensor RAW"
+
+    private var unavailableLensIDs: Set<String> {
+        guard captureFormat != "JPEG Only", rawCaptureSource == "Sensor RAW" else {
+            return []
+        }
+        // The device's Bayer DNG path accepts only the primary wide sensor at
+        // its native field. A 2x video crop makes AVFoundation reject the RAW
+        // shutter request, so it is intentionally unavailable here.
+        return Set(camera.lenses.map(\.id).filter { $0 != "wide" })
+    }
+
     var body: some View {
         // One lens is not a choice, so it does not get a control.
         if camera.lenses.count > 1 {
@@ -661,7 +717,10 @@ struct LensBarrel: View {
                 height: 38,
                 pitch: 46,
                 pointsPerStop: 44,
-                radius: 8
+                radius: 8,
+                disabledIndices: Set(camera.lenses.indices.filter {
+                    unavailableLensIDs.contains(camera.lenses[$0].id)
+                })
             )
             .frame(width: 106)
             .overlay(alignment: .top) {

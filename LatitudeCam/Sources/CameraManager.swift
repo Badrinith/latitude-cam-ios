@@ -9,6 +9,7 @@ import Foundation
 import UIKit
 import AVFoundation
 import CoreImage
+import ImageIO
 import Metal
 
 // MARK: - Frame buffer
@@ -77,6 +78,13 @@ public struct RenderSettings: Equatable {
 
 public final class CameraManager: NSObject, ObservableObject {
 
+    /// The user chooses whether RAW means the camera's Bayer DNG or Apple's
+    /// computational ProRAW variant. They are deliberately separate choices.
+    public enum RawCaptureSource: String {
+        case sensor = "Sensor RAW"
+        case appleProRAW = "Apple ProRAW"
+    }
+
     public enum Status: Equatable {
         case idle
         case requestingPermission
@@ -99,8 +107,15 @@ public final class CameraManager: NSObject, ObservableObject {
     // Session
     private var captureSession: AVCaptureSession?
     private var videoDevice: AVCaptureDevice?
+    /// The virtual multi-camera device drives the normal viewfinder. A RAW
+    /// capture briefly substitutes its primary physical sensor, then restores it.
+    private var previewCamera: AVCaptureDevice?
+    private var restoresPreviewAfterRawCapture = false
     private var videoOutput: AVCaptureVideoDataOutput?
     private var photoOutput: AVCapturePhotoOutput?
+    /// Apple's capture rotation is based on the physical camera and gravity,
+    /// unlike the SwiftUI control angle, which is only presentation state.
+    private var rotationCoordinator: AVCaptureDevice.RotationCoordinator?
     private let cameraQueue = DispatchQueue(label: "com.latitude.camera", qos: .userInitiated)
 
     // Still capture. One delegate per capture, retained here for its lifetime —
@@ -251,14 +266,45 @@ public final class CameraManager: NSObject, ObservableObject {
     public var onLensesReady: ((CGFloat) -> Void)?
 
     static func camera(at position: AVCaptureDevice.Position) -> AVCaptureDevice? {
-        // A virtual device carries every lens behind one input, so changing lens
-        // costs a zoom rather than tearing down and rebuilding the session. Ordered
-        // widest-capability first; the first one that exists wins.
+        // The virtual device represents the lenses actually fitted to this iPhone
+        // and exposes its hand-over factors for the model-aware lens selector.
         let types: [AVCaptureDevice.DeviceType] = position == .front
             ? [.builtInTrueDepthCamera, .builtInWideAngleCamera]
             : [.builtInTripleCamera, .builtInDualWideCamera,
                .builtInDualCamera, .builtInWideAngleCamera]
 
+        let discovery = AVCaptureDevice.DiscoverySession(
+            deviceTypes: types, mediaType: .video, position: position
+        )
+        for type in types {
+            if let device = discovery.devices.first(where: { $0.deviceType == type }) {
+                return device
+            }
+        }
+        return discovery.devices.first
+    }
+
+    /// Bayer RAW formats are advertised by the physical imaging sensor rather
+    /// than every virtual multi-camera device. This is intentionally separate
+    /// from `camera(at:)`: the latter must remain the live multi-lens viewfinder.
+    static func rawCamera(
+        at position: AVCaptureDevice.Position,
+        lensID: String
+    ) -> AVCaptureDevice? {
+        let types: [AVCaptureDevice.DeviceType]
+        if position == .front {
+            types = [.builtInTrueDepthCamera, .builtInWideAngleCamera]
+        } else {
+            // 2x is a crop from the wide sensor. Ultra-wide and telephoto have
+            // distinct sensors, so RAW must target them directly rather than
+            // silently falling back to wide.
+            switch lensID {
+            case "ultra": types = [.builtInUltraWideCamera]
+            case "wide", "2x": types = [.builtInWideAngleCamera]
+            case "tele": types = [.builtInTelephotoCamera]
+            default: return nil
+            }
+        }
         let discovery = AVCaptureDevice.DiscoverySession(
             deviceTypes: types, mediaType: .video, position: position
         )
@@ -346,6 +392,92 @@ public final class CameraManager: NSObject, ObservableObject {
         }
     }
 
+    /// Changes the session's video input while preserving its outputs. It runs
+    /// exclusively on `cameraQueue`, before a RAW shutter request or after its
+    /// delegate completes, so the preview never exposes a stale input.
+    private func replaceVideoInput(with device: AVCaptureDevice) -> Bool {
+        guard let session = captureSession,
+              let newInput = try? AVCaptureDeviceInput(device: device) else {
+            return false
+        }
+
+        session.beginConfiguration()
+        let previousInputs = session.inputs
+        previousInputs.forEach(session.removeInput)
+
+        guard session.canAddInput(newInput) else {
+            previousInputs.forEach { if session.canAddInput($0) { session.addInput($0) } }
+            session.commitConfiguration()
+            return false
+        }
+        session.addInput(newInput)
+
+        if let photoOutput {
+            configurePhotoOutput(photoOutput, for: device)
+        }
+        let front = device.position == .front
+        orient(videoOutput?.connection(with: .video), front: front)
+        orient(photoOutput?.connection(with: .video), front: front)
+        if #available(iOS 17.0, *) {
+            rotationCoordinator = AVCaptureDevice.RotationCoordinator(
+                device: device,
+                previewLayer: nil
+            )
+        }
+        session.commitConfiguration()
+
+        if let photoOutput {
+            configurePhotoOutput(photoOutput, for: device)
+        }
+        videoDevice = device
+        isFrontCamera = front
+        applyDeviceFocus(settings)
+        applyDeviceExposure(settings)
+        return true
+    }
+
+    /// Uses the selected physical sensor for a DNG while retaining the virtual
+    /// device for every normal preview and lens selection.
+    private func activateRawCaptureCameraIfNeeded(
+        forLensID lensID: String,
+        captureZoomFactor: CGFloat
+    ) -> Bool {
+        guard let current = videoDevice,
+              current.position == .back,
+              let rawCamera = Self.rawCamera(at: .back, lensID: lensID) else {
+            return false
+        }
+        // A physical lens selected in the viewfinder can already be the capture
+        // input. An unknown or missing lens is unavailable, never an invitation
+        // to substitute the 1x wide camera.
+        guard rawCamera.uniqueID != current.uniqueID else {
+            applyZoom(captureZoomFactor)
+            return true
+        }
+
+        guard replaceVideoInput(with: rawCamera) else { return false }
+        // The 2x option is a crop from the physical wide sensor. Input swapping
+        // resets its zoom to 1x, so set the crop before the photo settings and
+        // shutter are configured.
+        applyZoom(captureZoomFactor)
+        previewCamera = current
+        restoresPreviewAfterRawCapture = true
+        return true
+    }
+
+    private func restorePreviewCameraIfNeeded() {
+        guard restoresPreviewAfterRawCapture,
+              let previewCamera else { return }
+        guard replaceVideoInput(with: previewCamera) else { return }
+
+        // Replacing a camera input also resets the virtual device's zoom. Restore
+        // the framed focal length rather than leaving the viewfinder at 1x.
+        applyZoom(CGFloat(settings.zoomFactor))
+        self.previewCamera = previewCamera
+        restoresPreviewAfterRawCapture = false
+        publishLenses(for: previewCamera)
+    }
+
     /// Everything about the photo output that depends on which camera is attached.
     /// Re-run after a switch: the two sensors advertise different photo sizes and
     /// different raw support, and a `maxPhotoDimensions` left over from the other
@@ -356,18 +488,18 @@ public final class CameraManager: NSObject, ObservableObject {
         // AVFoundation raises NSInvalidArgumentException, which crashed the shutter.
         output.maxPhotoQualityPrioritization = .quality
 
-        // Assigned from the support flag rather than guarded by it, so switching to
-        // a camera without the feature turns it back off instead of leaving the
-        // previous camera's answer in place.
+        // This is also refreshed after the session starts. Some physical cameras
+        // do not advertise their ProRAW formats until their output connection is
+        // live, so setting it only during session construction leaves RAW empty.
         output.isAppleProRAWEnabled = output.isAppleProRAWSupported
-        output.isZeroShutterLagEnabled = output.isZeroShutterLagSupported
-        // Responsive capture builds on zero shutter lag, and fast capture
-        // prioritization on responsive capture, so the order here matters.
-        output.isResponsiveCaptureEnabled = output.isResponsiveCaptureSupported
-        output.isFastCapturePrioritizationEnabled = output.isFastCapturePrioritizationSupported
+        // These modes trade image quality and/or settling time for shutter speed.
+        // Latitude's still mode deliberately takes the opposite trade-off.
+        output.isZeroShutterLagEnabled = false
+        output.isResponsiveCaptureEnabled = false
+        output.isFastCapturePrioritizationEnabled = false
 
         if #available(iOS 16.0, *),
-           let largest = device.activeFormat.supportedMaxPhotoDimensions.last {
+           let largest = largestPhotoDimensions(in: device.activeFormat.supportedMaxPhotoDimensions) {
             output.maxPhotoDimensions = largest
         }
 
@@ -489,9 +621,24 @@ public final class CameraManager: NSObject, ObservableObject {
             self.orient(self.videoOutput?.connection(with: .video), front: front)
             self.orient(self.photoOutput?.connection(with: .video), front: front)
 
+            if #available(iOS 17.0, *) {
+                self.rotationCoordinator = AVCaptureDevice.RotationCoordinator(
+                    device: next,
+                    previewLayer: nil
+                )
+            }
+
             session.commitConfiguration()
 
+            // Re-read capabilities from the live connection. This is where a
+            // physical camera publishes the RAW/ProRAW formats after a switch.
+            if let photoOutput = self.photoOutput {
+                self.configurePhotoOutput(photoOutput, for: next)
+            }
+
             self.videoDevice = next
+            self.previewCamera = next
+            self.restoresPreviewAfterRawCapture = false
             self.isFrontCamera = target == .front
             self.publishLenses(for: next)
             self.applyDeviceFocus(self.settings)
@@ -559,6 +706,13 @@ public final class CameraManager: NSObject, ObservableObject {
         session.addOutput(photoOutput)
         configurePhotoOutput(photoOutput, for: camera)
 
+        if #available(iOS 17.0, *) {
+            rotationCoordinator = AVCaptureDevice.RotationCoordinator(
+                device: camera,
+                previewLayer: nil
+            )
+        }
+
         orient(output.connection(with: .video), front: false)
         orient(photoOutput.connection(with: .video), front: false)
 
@@ -566,6 +720,7 @@ public final class CameraManager: NSObject, ObservableObject {
 
         self.captureSession = session
         self.videoDevice = camera
+        self.previewCamera = camera
         self.videoOutput = output
         self.photoOutput = photoOutput
 
@@ -574,6 +729,9 @@ public final class CameraManager: NSObject, ObservableObject {
         applyDeviceExposure(settings)
 
         session.startRunning()
+        // ProRAW capability is connection-dependent on physical devices. Refresh
+        // after startRunning so availableRawPhotoPixelFormatTypes is populated.
+        configurePhotoOutput(photoOutput, for: camera)
         setStatus(.running)
     }
 
@@ -705,6 +863,63 @@ public final class CameraManager: NSObject, ObservableObject {
         !(photoOutput?.availableRawPhotoPixelFormatTypes.isEmpty ?? true)
     }
 
+    /// A standard Bayer DNG is the closest AVFoundation exposes to the sensor
+    /// data. It avoids the ProRAW capture path, while still retaining normal DNG
+    /// calibration metadata required by a RAW editor.
+    public var supportsSensorRAW: Bool {
+        Self.rawPixelFormat(for: .sensor, in: photoOutput?.availableRawPhotoPixelFormatTypes ?? []) != nil
+    }
+
+    public var supportsAppleProRAW: Bool {
+        Self.rawPixelFormat(for: .appleProRAW, in: photoOutput?.availableRawPhotoPixelFormatTypes ?? []) != nil
+    }
+
+    static func rawPixelFormat(
+        for source: RawCaptureSource,
+        in formats: [OSType]
+    ) -> OSType? {
+        switch source {
+        case .sensor:
+            return formats.first(where: { !AVCapturePhotoOutput.isAppleProRAWPixelFormat($0) })
+        case .appleProRAW:
+            return formats.first(where: AVCapturePhotoOutput.isAppleProRAWPixelFormat)
+        }
+    }
+
+    /// The RAW sensor mosaic must remain untouched. Put its orientation in DNG
+    /// metadata, which every RAW-aware reader uses, rather than rasterizing it.
+    static func exifOrientation(forCaptureRotation degrees: Double) -> UInt32 {
+        let normalized = Int(degrees.rounded()) % 360
+        switch normalized {
+        case 90, -270: return CGImagePropertyOrientation.right.rawValue
+        case -90, 270: return CGImagePropertyOrientation.left.rawValue
+        case 180, -180: return CGImagePropertyOrientation.down.rawValue
+        default: return CGImagePropertyOrientation.up.rawValue
+        }
+    }
+
+    /// Applies Apple's device- and gravity-aware angle to the photo connection
+    /// immediately before the shutter. AVCapturePhotoOutput writes that angle as
+    /// orientation metadata that Photos honours for both JPEG and DNG assets.
+    private func configureCaptureRotation(
+        for output: AVCapturePhotoOutput,
+        fallbackDegrees: Double
+    ) -> Double {
+        let angle: Double
+        if #available(iOS 17.0, *), let rotationCoordinator {
+            angle = rotationCoordinator.videoRotationAngleForHorizonLevelCapture
+        } else {
+            angle = fallbackDegrees
+        }
+
+        guard let connection = output.connection(with: .video),
+              connection.isVideoRotationAngleSupported(angle) else {
+            return fallbackDegrees
+        }
+        connection.videoRotationAngle = angle
+        return angle
+    }
+
     /// Full-resolution still from `AVCapturePhotoOutput`.
     ///
     /// The preview stream is 2MP and is only ever a viewfinder; everything saved
@@ -713,6 +928,10 @@ public final class CameraManager: NSObject, ObservableObject {
         wantsRAW: Bool,
         wantsProcessed: Bool,
         targetMegapixels: Int?,
+        rawCaptureSource: RawCaptureSource,
+        captureLensID: String,
+        captureZoomFactor: CGFloat,
+        rotationDegrees: Double,
         completion: @escaping (CapturedStill) -> Void
     ) {
         guard let photoOutput else {
@@ -724,14 +943,41 @@ public final class CameraManager: NSObject, ObservableObject {
         // own settings object.
         let current = self.settings
 
+        // A Bayer DNG from this device is valid only at the physical wide
+        // sensor's native field. Guard at the capture boundary as well as in the
+        // UI: AVFoundation throws an Objective-C exception for a zoomed RAW
+        // request, which cannot be caught safely in Swift.
+        if wantsRAW, rawCaptureSource == .sensor, captureLensID != "wide" {
+            DispatchQueue.main.async { completion(CapturedStill(rawUnavailable: true)) }
+            return
+        }
+
+        if wantsRAW {
+            let activated = cameraQueue.sync { [weak self] in
+                self?.activateRawCaptureCameraIfNeeded(
+                    forLensID: captureLensID,
+                    captureZoomFactor: captureZoomFactor
+                ) ?? false
+            }
+            guard activated else {
+                DispatchQueue.main.async { completion(CapturedStill(rawUnavailable: true)) }
+                return
+            }
+        }
+
         let rawFormats = photoOutput.availableRawPhotoPixelFormatTypes
-        // Prefer ProRAW: it is demosaiced and carries Apple's tone mapping as
-        // metadata, so it opens sensibly in Photos as well as in a raw editor.
-        let rawType = rawFormats.first(where: { AVCapturePhotoOutput.isAppleProRAWPixelFormat($0) })
-            ?? rawFormats.first
-        let takingRAW = wantsRAW && rawType != nil
-        // Never leave a capture with nothing to deliver.
-        let takingProcessed = wantsProcessed || !takingRAW
+        let rawType = Self.rawPixelFormat(for: rawCaptureSource, in: rawFormats)
+        guard !wantsRAW || rawType != nil else {
+            if wantsRAW {
+                cameraQueue.async { [weak self] in self?.restorePreviewCameraIfNeeded() }
+            }
+            DispatchQueue.main.async {
+                completion(CapturedStill(rawUnavailable: true))
+            }
+            return
+        }
+        let takingRAW = wantsRAW
+        let takingProcessed = wantsProcessed
 
         let settings: AVCapturePhotoSettings
         if takingRAW, let rawType {
@@ -747,33 +993,31 @@ public final class CameraManager: NSObject, ObservableObject {
             settings = AVCapturePhotoSettings(format: [AVVideoCodecKey: AVVideoCodecType.hevc])
         }
 
-        // .balanced is the whole point of the setting: .quality fuses as many
-        // frames as it likes and you feel every one of them, .speed takes the first
-        // and leaves processing on the table. Balanced fuses when there is time and
-        // does not when there is not.
-        //
-        // It works because fast capture prioritisation is also on: under rapid fire
-        // the system drops quality on its own to keep pace, so the balance moves
-        // with how you are shooting rather than being fixed at the worst case.
-        settings.photoQualityPrioritization = .balanced
+        // AVCapturePhotoSettings rejects photo-quality prioritization for some
+        // RAW formats with an Objective-C exception. A DNG is already the sensor
+        // sample, so leave RAW settings at the hardware's native delivery mode;
+        // JPEG/HEIF captures retain the explicit maximum-quality priority.
+        if !takingRAW {
+            settings.photoQualityPrioritization = .quality
+        }
 
         if current.portrait, photoOutput.isPortraitEffectsMatteDeliveryEnabled {
             settings.isPortraitEffectsMatteDeliveryEnabled = true
             settings.embedsPortraitEffectsMatteInPhoto = true
         }
 
-        if #available(iOS 16.0, *), let dimensions = photoDimensions(targetMegapixels) {
+        // RAW formats define their own supported native dimensions. Asking a
+        // Bayer DNG to use a processed-photo dimension can be rejected by the
+        // camera, so only override dimensions for processed captures.
+        if !takingRAW,
+           #available(iOS 16.0, *), let dimensions = photoDimensions(targetMegapixels) {
             settings.maxPhotoDimensions = dimensions
         }
 
-        // The still connection is left at the same fixed angle `orient()` gave
-        // it at setup — the same one already proven correct for the preview.
-        // A per-capture angle read from AVCaptureDevice.RotationCoordinator
-        // used to be set here instead; on device it made no visible difference
-        // across three attempts, which only makes sense if that angle was
-        // never actually reaching the saved file. Physical rotation is now
-        // compensated for afterwards, in software, on pixels this code
-        // actually controls — see AppState.store's rotatedForCapture call.
+        let captureRotation = configureCaptureRotation(
+            for: photoOutput,
+            fallbackDegrees: rotationDegrees
+        )
 
         // Focus peaking is a viewfinder aid, not part of the photograph — its edge
         // highlights have no business in a saved frame, and a CIEdges pass over a
@@ -781,12 +1025,11 @@ public final class CameraManager: NSObject, ObservableObject {
         var renderSettings = self.settings
         renderSettings.focusPeaking = false
 
-        let rawWasRefused = wantsRAW && !takingRAW
-
         let wantsPortrait = current.portrait
         let aperture = current.aperture
 
-        let delegate = StillCaptureDelegate(id: settings.uniqueID) { [weak self] raw, processed, matte in
+        let rawOrientation = Self.exifOrientation(forCaptureRotation: captureRotation)
+        let delegate = StillCaptureDelegate(id: settings.uniqueID, rawOrientation: rawOrientation) { [weak self] raw, processed, matte in
             guard let self else { return }
             // Get off AVFoundation's callback queue before developing anything.
             // Holding it stalls the next capture, which is exactly what responsive
@@ -794,7 +1037,7 @@ public final class CameraManager: NSObject, ObservableObject {
             self.developQueue.async {
                 var result = CapturedStill()
                 result.raw = raw
-                result.rawUnavailable = rawWasRefused
+                result.rawUnavailable = wantsRAW && raw == nil
 
                 // Develop the full-resolution frame through the same pipeline the
                 // viewfinder uses, so the saved photo matches what was framed.
@@ -803,7 +1046,11 @@ public final class CameraManager: NSObject, ObservableObject {
                 // option that rotation is written to the file and then silently
                 // dropped right here, which is why both earlier rotation fixes
                 // never changed anything: neither ever reached this line.
-                if let processed, let decoded = CIImage(data: processed, options: [.applyOrientationProperty: true]) {
+                // RAW Only still needs a full-resolution review image, but the
+                // DNG itself remains untouched and is never replaced by this render.
+                let reviewData = processed ?? raw
+                if let reviewData,
+                   let decoded = CIImage(data: reviewData, options: [.applyOrientationProperty: true]) {
                     var source = self.mirroredForFrontCamera(decoded)
                     if wantsPortrait, let matte {
                         source = self.separate(source, matte: matte, aperture: aperture)
@@ -864,7 +1111,12 @@ public final class CameraManager: NSObject, ObservableObject {
     private func finishCapture(id: Int64) {
         delegateLock.lock()
         activeCaptures[id] = nil
+        let hasNoActiveCaptures = activeCaptures.isEmpty
         delegateLock.unlock()
+
+        if hasNoActiveCaptures {
+            cameraQueue.async { [weak self] in self?.restorePreviewCameraIfNeeded() }
+        }
     }
 
     /// The supported photo size closest to the requested megapixel count. Nil
@@ -873,12 +1125,19 @@ public final class CameraManager: NSObject, ObservableObject {
     private func photoDimensions(_ targetMegapixels: Int?) -> CMVideoDimensions? {
         guard let supported = videoDevice?.activeFormat.supportedMaxPhotoDimensions,
               !supported.isEmpty else { return nil }
-        guard let targetMegapixels else { return supported.last }
+        guard let targetMegapixels else { return largestPhotoDimensions(in: supported) }
 
         let target = targetMegapixels * 1_000_000
         return supported.min {
             abs(Int($0.width) * Int($0.height) - target)
                 < abs(Int($1.width) * Int($1.height) - target)
+        }
+    }
+
+    @available(iOS 16.0, *)
+    private func largestPhotoDimensions(in dimensions: [CMVideoDimensions]) -> CMVideoDimensions? {
+        dimensions.max {
+            Int($0.width) * Int($0.height) < Int($1.width) * Int($1.height)
         }
     }
 
@@ -920,16 +1179,24 @@ public final class CameraManager: NSObject, ObservableObject {
 // photo. Both halves are collected here and handed over together in
 // didFinishCaptureFor, which fires exactly once whether one arrived or two.
 
-final class StillCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegate {
+final class StillCaptureDelegate: NSObject,
+    AVCapturePhotoCaptureDelegate,
+    AVCapturePhotoFileDataRepresentationCustomizer {
     private let id: Int64
+    private let rawOrientation: UInt32
     private let completion: (_ raw: Data?, _ processed: Data?, _ matte: CIImage?) -> Void
 
     private var rawData: Data?
     private var processedData: Data?
     private var matte: CIImage?
 
-    init(id: Int64, completion: @escaping (Data?, Data?, CIImage?) -> Void) {
+    init(
+        id: Int64,
+        rawOrientation: UInt32,
+        completion: @escaping (Data?, Data?, CIImage?) -> Void
+    ) {
         self.id = id
+        self.rawOrientation = rawOrientation
         self.completion = completion
         super.init()
     }
@@ -943,12 +1210,21 @@ final class StillCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegate {
         if let matte = photo.portraitEffectsMatte {
             self.matte = CIImage(cvImageBuffer: matte.mattingImage)
         }
-        guard let data = photo.fileDataRepresentation() else { return }
         if photo.isRawPhoto {
-            rawData = data
+            rawData = photo.fileDataRepresentation(with: self) ?? photo.fileDataRepresentation()
         } else {
-            processedData = data
+            processedData = photo.fileDataRepresentation()
         }
+    }
+
+    func replacementMetadata(for photo: AVCapturePhoto) -> [String: Any]? {
+        guard photo.isRawPhoto else { return nil }
+        var metadata = photo.metadata
+        metadata[kCGImagePropertyOrientation as String] = rawOrientation
+        var tiff = metadata[kCGImagePropertyTIFFDictionary as String] as? [String: Any] ?? [:]
+        tiff[kCGImagePropertyTIFFOrientation as String] = rawOrientation
+        metadata[kCGImagePropertyTIFFDictionary as String] = tiff
+        return metadata
     }
 
     func photoOutput(

@@ -121,3 +121,33 @@ Three user-reported bugs, each root-caused before touching code (per systematic-
 3. **Gallery slow to populate.** `PhotoGallery.loadPhotos()`'s grid-thumbnail `PHImageRequestOptions` had `isNetworkAccessAllowed = true`, so every thumbnail — even for photos this app just captured and that are almost always already local — queued behind an iCloud availability check. Set to `false` for the grid pass only; `loadFullImage(for:)` (full-res, on open) correctly keeps it `true`.
 
 **Verification limits, stated plainly:** builds succeeded, all 275 tests pass, install to device UDID `854CD202-7808-597B-A70F-6A6628AED263` succeeded. None of that is the same as watching the camera take a landscape photo or timing the gallery — there is no tool available in this environment that operates the phone's camera or observes rendered UI on-device. All three fixes are argued from tracing the actual code path to a concrete, demonstrable defect, not from re-guessing at symptoms, but they are unverified on hardware until the user confirms.
+
+## Rotation, take 4 (commit `3c666ff`)
+
+The `applyOrientationProperty` fix above had **zero visible effect** on device — which is itself evidence: it means the still connection's `videoRotationAngle` (set from `AVCaptureDevice.RotationCoordinator`) was very likely never actually landing in the captured file's orientation metadata, on this hardware, despite being Apple's documented replacement API. Three attempts through that AVFoundation pathway (hand-built angle table → RotationCoordinator → apply-orientation-on-decode) is the "3+ fixes failed" signal — the mechanism itself, not the angle math, is the problem, and it's not independently inspectable from this environment.
+
+Changed approach entirely: `photoOutput`'s still connection is no longer touched per-capture and just keeps the same fixed angle `orient()` already gives it at session setup (identical to the preview connection, verified correct empirically per its own comment). Physical rotation is instead baked into the captured `UIImage`'s actual pixels in `AppState.store` (`Theme.swift`), via `UIImage.rotatedForCapture(byDegrees:)` (new, next to `centerCropped`), using the *same* `DeviceOrientation.angle` value (`Barrel.swift`) that already correctly drives the Pro-controls dial rotation in landscape — the one orientation signal in this codebase with a track record. `ViewfinderScreen.fire()` now reads `orientation.angle.degrees` and passes it through `AppState.capture(rotationDegrees:)` → `store(...)`. `AVCaptureDevice.RotationCoordinator` plumbing removed (`rotationCoordinator` property and its two allocation sites) since nothing reads it anymore.
+
+Still unverified on hardware — same caveat as above. If this also comes back wrong, the next diagnostic step should be to log `orientation.angle.degrees` at the moment of `fire()` and compare against what the resulting photo actually needed, rather than trying a fifth mechanism blind.
+
+## Release snapshot — 8 Aug 2026
+
+**Version:** `1.0.1 (32)`  
+**Branch:** `feat/camera-pipeline-dials-splash`
+
+### Confirmed on the connected iPhone
+
+- Landscape captures now appear with the correct orientation in Apple Photos.
+- Multi-select deletion works after the Photos deletion path was restored to a direct PhotoKit request and the library-change confirmation was made asynchronous.
+- The library keeps its in-app roll/editor workflow while Apple Photos remains the source of truth for stored image data.
+- Destructive deletion includes the existing heavy haptic feedback.
+
+### Included work
+
+- Hardware-aware camera lens selection, RAW/ProRAW availability handling, and high-quality JPEG/RAW capture paths.
+- Portrait/landscape capture orientation handling, Apple Photos export, gallery refresh, multi-select, swipe selection, and deletion recovery.
+- Gallery, editor, settings, Pro controls, RAW progress, haptic, and viewfinder control refinements.
+
+### Design follow-up
+
+Two untracked `designs/` mockup explorations remain local only and are intentionally excluded from this commit. They were rejected during review; no viewfinder redesign is being shipped in this handover.

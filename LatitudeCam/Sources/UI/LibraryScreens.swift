@@ -6,6 +6,15 @@
 //
 
 import SwiftUI
+import UniformTypeIdentifiers
+
+private struct SelectionCellFramesKey: PreferenceKey {
+    static var defaultValue: [String: CGRect] = [:]
+
+    static func reduce(value: inout [String: CGRect], nextValue: () -> [String: CGRect]) {
+        value.merge(nextValue(), uniquingKeysWith: { _, new in new })
+    }
+}
 
 // MARK: - Film Sim
 
@@ -132,28 +141,13 @@ struct LibraryScreen: View {
         ZStack {
             Ink.base.ignoresSafeArea()
 
-            if layout == "Organizer" {
-                // The one layout that wants its own ScrollView + LazyVGrid rather
-                // than the shared vertical list the other three share — a grid
-                // needs to own its own scrolling axis to pinch-zoom the column
-                // count without fighting an outer scroll view for the gesture.
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 0) {
-                        libraryHeader
-                        GalleryHost(gallery: app.gallery, layout: layout)
-                    }
+            VStack(alignment: .leading, spacing: 0) {
+                libraryHeader
                     .padding(.horizontal, 16)
                     .padding(.top, 12)
-                    .padding(.bottom, 32)
-                }
-            } else {
-                VStack(alignment: .leading, spacing: 0) {
-                    libraryHeader
-                        .padding(.horizontal, 16)
-                        .padding(.top, 12)
-                        .padding(.bottom, 16)
-                    GalleryHost(gallery: app.gallery, layout: layout)
-                }
+                    .padding(.bottom, 20)
+                GalleryHost(gallery: app.gallery, layout: layout)
+                    .padding(.horizontal, layout == "Organizer" ? 16 : 0)
             }
         }
     }
@@ -164,9 +158,16 @@ struct LibraryScreen: View {
             leading: AnyView(ViewfinderReturn { app.go(.viewfinder) })
         ) {
             Text("\(app.gallery.photos.count) FRAMES")
-                .font(.mono(9, .semibold))
+                .font(.mono(11, .semibold))
                 .kerning(1)
-                .foregroundStyle(Tone.quaternary)
+                .foregroundStyle(Tone.secondary)
+                .padding(.horizontal, 13)
+                .padding(.vertical, 11)
+                .background {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(Color.white.opacity(0.07))
+                        .overlay { RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Tone.hairline, lineWidth: 0.5) }
+                }
         }
     }
 }
@@ -211,9 +212,16 @@ struct PhotoViewer: View {
                 Spacer()
                 if photos.count > 1 {
                     Text("\(index + 1) OF \(photos.count)")
-                        .font(.mono(9, .semibold))
+                        .font(.mono(11, .semibold))
                         .kerning(1)
-                        .foregroundStyle(Tone.quaternary)
+                        .foregroundStyle(Tone.secondary)
+                        .padding(.horizontal, 13)
+                        .padding(.vertical, 11)
+                        .background {
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(Color.white.opacity(0.07))
+                                .overlay { RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Tone.hairline, lineWidth: 0.5) }
+                        }
                 }
             }
             .padding(.horizontal, 16)
@@ -272,39 +280,15 @@ struct PhotoViewer: View {
             // also where a thumb rests to swipe between pages — the two kept
             // competing for the same touches.
             HStack(spacing: 10) {
-                Button {
+                GalleryAction(title: "Delete", role: .destructive) {
                     Haptics.toggle()
                     if let photo = current(in: photos) { onDelete(photo) }
-                } label: {
-                    Text("DELETE")
-                        .font(.mono(11, .semibold))
-                        .kerning(1)
-                        .foregroundStyle(Color(hex: 0xE2685A))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 13)
-                        .background {
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .fill(Color(hex: 0xE2685A).opacity(0.12))
-                        }
                 }
-                .buttonStyle(.plain)
 
-                Button {
+                GalleryAction(title: "Edit", role: .primary) {
                     Haptics.tap()
                     if let photo = current(in: photos) { onEdit(photo) }
-                } label: {
-                    Text("EDIT")
-                        .font(.mono(11, .semibold))
-                        .kerning(1)
-                        .foregroundStyle(Ink.base)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 13)
-                        .background {
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .fill(Accent.amber)
-                        }
                 }
-                .buttonStyle(.plain)
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 20)
@@ -466,6 +450,17 @@ private struct GalleryHost: View {
     var layout: String
     @State private var filter = "All"
     @State private var viewing: PhotoGallery.Photo?
+    @State private var selectionMode = false
+    @State private var selectedIDs: Set<String> = []
+    @State private var showBulkDeleteConfirmation = false
+    @State private var isTrashTargeted = false
+    @State private var isDeletingSelection = false
+    @State private var deletionWatchdog: DispatchWorkItem?
+    @State private var selectionCellFrames: [String: CGRect] = [:]
+    @State private var swipedPhotoIDs: Set<String> = []
+    @State private var swipeSelects: Bool?
+    @State private var deletionFailure: String?
+    @State private var suppressNextOpenID: String?
 
     /// 2, 3 or 4 across. A pinch changes the count rather than the image scale —
     /// scaling the images themselves inside a fixed grid would just crop them,
@@ -513,16 +508,29 @@ private struct GalleryHost: View {
                 }
                 .padding(.horizontal, 1)
             }
-            .padding(.bottom, 14)
+            .padding(.bottom, 10)
+
+            if !selectionMode && !filtered.isEmpty {
+                Label("Press and hold a photo to select", systemImage: "hand.tap.fill")
+                    .font(.ui(12, .medium))
+                    .foregroundStyle(Tone.tertiary)
+                    .padding(.horizontal, 11)
+                    .frame(height: 32)
+                    .background(Color.white.opacity(0.045), in: Capsule())
+                    .padding(.bottom, 18)
+            }
+
+            if selectionMode {
+                selectionToolbar
+                    .padding(.bottom, 18)
+            }
 
             if filtered.isEmpty {
                 emptyState
+            } else if selectionMode {
+                selectionGrid
             } else if layout == "Organizer" {
-                // Relies on LibraryScreen's own outer ScrollView. Wrapping it in a
-                // second one here would fight the MagnificationGesture that reads
-                // the pinch against the grid directly, and would scroll the filter
-                // chips along with the photos rather than keeping them pinned.
-                organizerGrid
+                ScrollView { organizerGrid }
             } else {
                 // The three other layouts had no scroll container at all — each
                 // rendered at whatever size its content happened to need and then
@@ -530,15 +538,18 @@ private struct GalleryHost: View {
                 // the fold could be reached, and short content left dead space.
                 ScrollView {
                     switch layout {
-                    case "Contact Roll": ContactRollLayout(photos: filtered, open: open, swatch: swatch)
-                    case "Archive":      ArchiveLayout(gallery: gallery, filter: $filter, open: open, family: family, swatch: swatch)
-                    case "Darkroom":     DarkroomLineLayout(photos: filtered, open: open, swatch: swatch)
-                    default:             StoryboardLayout(photos: filtered, open: open, swatch: swatch)
+                    case "Contact Roll": ContactRollLayout(photos: filtered, open: open, beginSelection: beginSelection, swatch: swatch)
+                    case "Archive":      ArchiveLayout(gallery: gallery, filter: $filter, open: open, beginSelection: beginSelection, family: family, swatch: swatch)
+                    case "Darkroom":     DarkroomLineLayout(photos: filtered, open: open, beginSelection: beginSelection, swatch: swatch)
+                    default:             StoryboardLayout(photos: filtered, open: open, beginSelection: beginSelection, swatch: swatch)
                     }
                 }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .overlay(alignment: .bottom) {
+            if selectionMode { selectionDelete }
+        }
         // fullScreenCover, not an inline overlay. An overlay is sized to whatever
         // frame its host view actually occupies — for a layout that hugs its
         // content instead of filling the screen, that host frame could be far
@@ -562,6 +573,22 @@ private struct GalleryHost: View {
                 onClose: { viewing = nil }
             )
         }
+        .alert("Delete selected frames?", isPresented: $showBulkDeleteConfirmation) {
+            Button("Delete \(selectedIDs.count)", role: .destructive) {
+                deleteSelectedFrames()
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("This removes the selected frames from Latitude and the Latitude album in Apple Photos.")
+        }
+        .alert("Could not delete frames", isPresented: Binding(
+            get: { deletionFailure != nil },
+            set: { if !$0 { deletionFailure = nil } }
+        )) {
+            Button("OK", role: .cancel) { deletionFailure = nil }
+        } message: {
+            Text(deletionFailure ?? "Photos could not delete the selected frames.")
+        }
     }
 
     private var emptyState: some View {
@@ -579,9 +606,290 @@ private struct GalleryHost: View {
         .padding(.vertical, 60)
     }
 
+    private var selectionToolbar: some View {
+        HStack(spacing: 12) {
+            if selectionMode {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("SELECTION")
+                        .font(.mono(8, .semibold))
+                        .kerning(1)
+                        .foregroundStyle(Tone.quaternary)
+                    Text("\(selectedIDs.count) FRAME\(selectedIDs.count == 1 ? "" : "S")")
+                        .font(.mono(11, .bold))
+                        .kerning(0.7)
+                        .foregroundStyle(selectedIDs.isEmpty ? Tone.quaternary : Accent.amber)
+                }
+
+                Spacer()
+
+                Button(allVisibleSelected ? "Clear" : "All") {
+                    Haptics.detent()
+                    let visibleIDs = Set(filtered.map(\.id))
+                    if allVisibleSelected {
+                        selectedIDs.subtract(visibleIDs)
+                    } else {
+                        selectedIDs.formUnion(visibleIDs)
+                    }
+                }
+                .buttonStyle(.plain)
+                .font(.ui(13, .semibold))
+                .foregroundStyle(Tone.primary)
+                .padding(.horizontal, 10)
+                .frame(height: 34)
+                .background(Color.white.opacity(0.06), in: Capsule())
+
+                Button("Done") {
+                    Haptics.tap()
+                    selectedIDs.removeAll()
+                    selectionMode = false
+                }
+                .buttonStyle(.plain)
+                .font(.ui(13, .semibold))
+                .foregroundStyle(Tone.secondary)
+                .padding(.horizontal, 6)
+            }
+        }
+        .padding(.horizontal, 14)
+        .frame(height: 54)
+        .background(Ink.card, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 15, style: .continuous)
+                .strokeBorder(Tone.hairline, lineWidth: 0.5)
+        }
+    }
+
+    private var selectionGrid: some View {
+        ScrollView {
+            LazyVGrid(columns: columns, spacing: 8) {
+                ForEach(filtered) { photo in
+                    Button { toggleSelection(for: photo) } label: {
+                        gridCell(photo)
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .strokeBorder(
+                                        selectedIDs.contains(photo.id) ? Accent.amber : .clear,
+                                        lineWidth: 3
+                                    )
+                            }
+                            .overlay(alignment: .topTrailing) {
+                                Image(systemName: selectedIDs.contains(photo.id)
+                                      ? "checkmark.circle.fill" : "circle")
+                                    .font(.system(size: 23, weight: .semibold))
+                                    .foregroundStyle(selectedIDs.contains(photo.id) ? Accent.amber : .white.opacity(0.84))
+                                    .shadow(color: .black.opacity(0.65), radius: 3)
+                                    .padding(7)
+                            }
+                    }
+                    .buttonStyle(.plain)
+                    .background {
+                        GeometryReader { proxy in
+                            Color.clear.preference(
+                                key: SelectionCellFramesKey.self,
+                                value: [photo.id: proxy.frame(in: .named("selection-grid"))]
+                            )
+                        }
+                    }
+                    .onDrag {
+                        // Native long-press drag carries the current batch into Delete.
+                        selectedIDs.insert(photo.id)
+                        return NSItemProvider(object: photo.id as NSString)
+                    }
+                }
+            }
+            .padding(.bottom, 92)
+            .contentShape(Rectangle())
+            // A moving finger selects across cells. A stationary long press is
+            // left to .onDrag above, preserving drag-and-drop to the Delete bin.
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 12)
+                    .onChanged { value in
+                        // The first changed value can already be over the next
+                        // cell, so include the touch-down cell explicitly.
+                        selectPhotoAlongSwipe(at: value.startLocation)
+                        selectPhotoAlongSwipe(at: value.location)
+                    }
+                    .onEnded { _ in
+                        swipedPhotoIDs.removeAll()
+                        swipeSelects = nil
+                    },
+                including: .all
+            )
+        }
+        .coordinateSpace(name: "selection-grid")
+        .onPreferenceChange(SelectionCellFramesKey.self) { selectionCellFrames = $0 }
+    }
+
+    private var allVisibleSelected: Bool {
+        let visibleIDs = Set(filtered.map(\.id))
+        return !visibleIDs.isEmpty && visibleIDs.isSubset(of: selectedIDs)
+    }
+
+    private var selectionDelete: some View {
+        Button {
+            guard !selectedIDs.isEmpty && !isDeletingSelection else { return }
+            showBulkDeleteConfirmation = true
+        } label: {
+            HStack(spacing: 10) {
+                ZStack(alignment: .top) {
+                    Image(systemName: "trash.fill")
+                        .font(.system(size: 25, weight: .bold))
+                    if isDeletingSelection {
+                        // Keep the hinge on the icon rather than floating a lid
+                        // above the enlarged button.
+                        Capsule()
+                            .fill(.white)
+                            .frame(width: 24, height: 4)
+                            .rotationEffect(.degrees(-32), anchor: .trailing)
+                            .offset(x: -2, y: -8)
+                        DeleteFilmDrop()
+                    }
+                }
+                .frame(width: 44, height: 44)
+                if !isDeletingSelection {
+                    Text(selectedIDs.isEmpty ? "DELETE" : "DELETE \(selectedIDs.count)")
+                    .font(.mono(10, .bold))
+                    .kerning(0.7)
+                }
+            }
+            .foregroundStyle(selectedIDs.isEmpty ? Tone.quaternary : .white)
+            .padding(.horizontal, 24)
+            .frame(width: isDeletingSelection ? 92 : 166, height: 64)
+            .background(isDeletingSelection || isTrashTargeted ? Color.red.opacity(0.9) : Color(hex: 0x2A1718),
+                        in: Capsule())
+            .overlay { Capsule().strokeBorder(Color.red.opacity(0.55), lineWidth: 0.8) }
+            .shadow(color: .black.opacity(0.45), radius: isDeletingSelection ? 18 : 10, y: 5)
+            // The existing bottom bin grows in place, anchored to the screen edge.
+            .scaleEffect(isDeletingSelection ? 1.28 : 1, anchor: .bottom)
+            .animation(.spring(response: 0.4, dampingFraction: 0.82), value: isDeletingSelection)
+        }
+        .buttonStyle(.plain)
+        .onDrop(of: [UTType.text.identifier, UTType.plainText.identifier], isTargeted: $isTrashTargeted) { providers in
+            guard let provider = providers.first else { return false }
+            if selectedIDs.isEmpty {
+                provider.loadObject(ofClass: NSString.self) { object, _ in
+                    guard let id = object as? String else { return }
+                    DispatchQueue.main.async {
+                        selectedIDs.insert(id)
+                        showBulkDeleteConfirmation = true
+                    }
+                }
+            } else {
+                showBulkDeleteConfirmation = true
+            }
+            return true
+        }
+        .padding(.bottom, 18)
+    }
+
+    private func deleteSelectedFrames() {
+        guard !selectedIDs.isEmpty, !isDeletingSelection else { return }
+        Haptics.destructive()
+        isDeletingSelection = true
+        let ids = selectedIDs
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.65) {
+            let watchdog = DispatchWorkItem {
+                guard isDeletingSelection else { return }
+                isDeletingSelection = false
+                deletionFailure = "Apple Photos did not finish the deletion. No frames were removed; please try again."
+            }
+            deletionWatchdog?.cancel()
+            deletionWatchdog = watchdog
+            DispatchQueue.main.asyncAfter(deadline: .now() + 12, execute: watchdog)
+
+            gallery.deletePhotos(ids) { success, problem in
+                DispatchQueue.main.async {
+                    deletionWatchdog?.cancel()
+                    deletionWatchdog = nil
+                    isDeletingSelection = false
+                    if success {
+                        selectedIDs.removeAll()
+                        selectionMode = false
+                    } else {
+                        deletionFailure = problem
+                    }
+                }
+            }
+        }
+
+    }
+
+    /// Brief film strips fall into the existing bin once its lid opens.
+    private struct DeleteFilmDrop: View {
+        @State private var hasShredded = false
+
+        var body: some View {
+            ZStack {
+                ForEach(0..<5, id: \.self) { index in
+                    RoundedRectangle(cornerRadius: 2, style: .continuous)
+                        .fill(Accent.amber.opacity(0.95))
+                        .frame(width: 7, height: 10)
+                        .rotationEffect(.degrees(hasShredded ? Double(index * 20 - 40) : 0))
+                        .offset(
+                            x: hasShredded ? CGFloat(index - 2) * 7 : 0,
+                            y: hasShredded ? 18 : -18
+                        )
+                        .opacity(hasShredded ? 0 : 1)
+                        .animation(.easeIn(duration: 0.46).delay(Double(index) * 0.06), value: hasShredded)
+                }
+            }
+            .onAppear {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.24) { hasShredded = true }
+            }
+        }
+    }
+
+    private func toggleSelection(for photo: PhotoGallery.Photo) {
+        Haptics.detent()
+        if selectedIDs.contains(photo.id) {
+            selectedIDs.remove(photo.id)
+        } else {
+            selectedIDs.insert(photo.id)
+        }
+    }
+
+    /// Uses the rendered cell bounds, not inferred grid math, so a swipe stays
+    /// accurate when the grid spacing, columns, or scroll offset changes.
+    private func selectPhotoAlongSwipe(at point: CGPoint) {
+        guard let id = selectionCellFrames.first(where: { $0.value.contains(point) })?.key,
+              let photo = filtered.first(where: { $0.id == id })
+        else { return }
+        guard !swipedPhotoIDs.contains(photo.id) else { return }
+
+        if swipeSelects == nil {
+            swipeSelects = !selectedIDs.contains(photo.id)
+        }
+        guard let swipeSelects else { return }
+
+        swipedPhotoIDs.insert(photo.id)
+        if swipeSelects {
+            if selectedIDs.insert(photo.id).inserted { Haptics.detent() }
+        } else if selectedIDs.remove(photo.id) != nil {
+            Haptics.detent()
+        }
+    }
+
+    private func beginSelection(_ photo: PhotoGallery.Photo) {
+        Haptics.toggle()
+        selectedIDs.insert(photo.id)
+        selectionMode = true
+        suppressNextOpenID = photo.id
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            if suppressNextOpenID == photo.id { suppressNextOpenID = nil }
+        }
+    }
+
     /// Opens the viewer rather than the editor — tapping a photo used to drop
     /// straight into edit controls, which answered a question nobody asked.
     private func open(_ photo: PhotoGallery.Photo) {
+        if suppressNextOpenID == photo.id {
+            suppressNextOpenID = nil
+            return
+        }
+        if selectionMode {
+            toggleSelection(for: photo)
+            return
+        }
         Haptics.tap()
         withAnimation(.easeOut(duration: 0.18)) { viewing = photo }
     }
@@ -593,6 +901,7 @@ private struct GalleryHost: View {
                     gridCell(photo)
                 }
                 .buttonStyle(.plain)
+                .highPriorityGesture(LongPressGesture(minimumDuration: 0.3, maximumDistance: 20).onEnded { _ in beginSelection(photo) })
                 .contextMenu { contextMenu(photo) }
             }
         }
@@ -642,7 +951,7 @@ private struct GalleryHost: View {
             }
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .overlay(alignment: .bottomLeading) {
+        .overlay(alignment: .bottomLeading) {
                 Circle()
                     .fill(swatch(for: photo.filmID))
                     .frame(width: 8, height: 8)
@@ -671,6 +980,7 @@ private struct GalleryHost: View {
 private struct ContactRollLayout: View {
     var photos: [PhotoGallery.Photo]
     var open: (PhotoGallery.Photo) -> Void
+    var beginSelection: (PhotoGallery.Photo) -> Void
     var swatch: (String) -> Color
 
     var body: some View {
@@ -703,6 +1013,7 @@ private struct ContactRollLayout: View {
                         }
                     }
                     .buttonStyle(.plain)
+                    .highPriorityGesture(LongPressGesture(minimumDuration: 0.3, maximumDistance: 20).onEnded { _ in beginSelection(photo) })
                     .overlay(alignment: .bottom) {
                         Rectangle().fill(Color(hex: 0x0A0908)).frame(height: 2)
                     }
@@ -740,6 +1051,7 @@ private struct ContactRollLayout: View {
 private struct DarkroomLineLayout: View {
     var photos: [PhotoGallery.Photo]
     var open: (PhotoGallery.Photo) -> Void
+    var beginSelection: (PhotoGallery.Photo) -> Void
     var swatch: (String) -> Color
 
     private static let perLine = 5
@@ -795,6 +1107,7 @@ private struct DarkroomLineLayout: View {
             .rotationEffect(.degrees(tilt))
         }
         .buttonStyle(.plain)
+        .highPriorityGesture(LongPressGesture(minimumDuration: 0.3, maximumDistance: 20).onEnded { _ in beginSelection(photo) })
     }
 }
 
@@ -808,6 +1121,7 @@ private struct ArchiveLayout: View {
     @ObservedObject var gallery: PhotoGallery
     @Binding var filter: String
     var open: (PhotoGallery.Photo) -> Void
+    var beginSelection: (PhotoGallery.Photo) -> Void
     var family: (PhotoGallery.Photo) -> String
     var swatch: (String) -> Color
 
@@ -878,6 +1192,7 @@ private struct ArchiveLayout: View {
                                     .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                             }
                             .buttonStyle(.plain)
+                            .highPriorityGesture(LongPressGesture(minimumDuration: 0.3, maximumDistance: 20).onEnded { _ in beginSelection(photo) })
                             .contextMenu {
                                 Button("Delete", role: .destructive) {
                                     Haptics.toggle()
@@ -905,6 +1220,7 @@ private struct ArchiveLayout: View {
 private struct StoryboardLayout: View {
     var photos: [PhotoGallery.Photo]
     var open: (PhotoGallery.Photo) -> Void
+    var beginSelection: (PhotoGallery.Photo) -> Void
     var swatch: (String) -> Color
 
     var body: some View {
@@ -959,6 +1275,7 @@ private struct StoryboardLayout: View {
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
         .buttonStyle(.plain)
+        .highPriorityGesture(LongPressGesture(minimumDuration: 0.3, maximumDistance: 20).onEnded { _ in beginSelection(photo) })
     }
 }
 
@@ -1034,20 +1351,15 @@ struct EditScreen: View {
         HStack {
             ScreenReturn(title: "Library") { app.go(.library) }
             Spacer()
-            Button {
+            GalleryAction(title: "Reset", role: .secondary, compact: true) {
                 Haptics.toggle()
                 editor.reset()
-            } label: {
-                Text("RESET")
-                    .font(.mono(9, .semibold))
-                    .kerning(1)
-                    .foregroundStyle(Tone.secondary)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background { Capsule().fill(Color.white.opacity(0.07)) }
-                    .contentShape(Capsule())
             }
-            .buttonStyle(.plain)
+            GalleryAction(title: "Cancel", role: .secondary, compact: true) {
+                Haptics.tap()
+                editor.reset()
+                app.go(.library)
+            }
             PrimaryAction(title: "Save", enabled: editor.canSave) { save() }
         }
         .padding(.horizontal, 16)

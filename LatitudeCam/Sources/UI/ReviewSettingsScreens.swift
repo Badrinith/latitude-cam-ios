@@ -202,6 +202,10 @@ struct SettingsScreen: View {
     @AppStorage(Pref.grid) private var grid = "Rule of Thirds"
     @AppStorage(Pref.aspect) private var aspect = "3:2"
     @AppStorage(Pref.jpegQuality) private var jpegQuality = "Maximum"
+    @AppStorage(Pref.captureFormat) private var captureFormat = "RAW + JPEG"
+    @AppStorage(Pref.rawCaptureSource) private var rawCaptureSource = "Sensor RAW"
+    @AppStorage(Pref.rawProgressDesign) private var rawProgressDesign = "01 Aperture Bloom"
+    @AppStorage(Pref.captureResolution) private var captureResolution = "Full"
     @AppStorage(Pref.peakingColor) private var peakingColor = "Amber"
     @AppStorage(Pref.histogramStyle) private var histogramStyle = "Luma"
     @AppStorage(Pref.haptics) private var haptics = true
@@ -219,7 +223,7 @@ struct SettingsScreen: View {
                         title: "Settings",
                         leading: AnyView(ViewfinderReturn { app.go(.viewfinder) })
                     ) {
-                        Text("V1.0")
+                        Text("V1.0.1 (32)")
                             .font(.mono(9, .semibold))
                             .kerning(1)
                             .foregroundStyle(Tone.quaternary)
@@ -233,6 +237,24 @@ struct SettingsScreen: View {
                                   options: Pref.aspectOptions, selection: $aspect)
                         OptionRow(title: "JPEG Quality",
                                   options: Pref.jpegQualityOptions, selection: $jpegQuality)
+                        OptionRow(title: "Capture Format",
+                                  options: Pref.captureFormatOptions, selection: $captureFormat,
+                                  disabledOptions: app.usingFrontCamera ? ["RAW Only", "RAW + JPEG"] : [])
+                        if captureFormat != "JPEG Only" {
+                            OptionRow(title: "RAW Source",
+                                      options: Pref.rawCaptureSourceOptions, selection: $rawCaptureSource)
+                            OptionRow(title: "RAW Capture Animation",
+                                      options: Pref.rawProgressDesignOptions, selection: $rawProgressDesign)
+                        }
+                        if app.usingFrontCamera {
+                            Text("Selfie camera: JPEG only. Sensor RAW and Apple ProRAW are rear-camera formats.")
+                                .font(.ui(12))
+                                .foregroundStyle(Tone.secondary)
+                                .padding(.horizontal, 18)
+                                .padding(.vertical, 10)
+                        }
+                        OptionRow(title: "Capture Resolution",
+                                  options: Pref.captureResolutionOptions, selection: $captureResolution)
                         ToggleSettingsRow(title: "Save to Apple Photos", isOn: $mirrorToPhotos,
                                           isLast: true)
                     }
@@ -271,7 +293,7 @@ struct SettingsScreen: View {
                     }
 
                     SettingsGroup(header: "About") {
-                        SettingsRow(title: "Version", detail: "1.0", showChevron: false, isLast: true)
+                        SettingsRow(title: "Version", detail: "1.0.1 (15)", showChevron: false, isLast: true)
                     }
                 }
                 .padding(.horizontal, 16)
@@ -291,11 +313,14 @@ private struct OptionRow: View {
     var options: [String]
     @Binding var selection: String
     var isLast = false
+    var disabledOptions: Set<String> = []
 
     var body: some View {
         Menu {
             Picker(title, selection: $selection) {
-                ForEach(options, id: \.self) { Text($0).tag($0) }
+                ForEach(options, id: \.self) { option in
+                    Text(option).tag(option).disabled(disabledOptions.contains(option))
+                }
             }
         } label: {
             SettingsRow(title: title, detail: selection, isLast: isLast)

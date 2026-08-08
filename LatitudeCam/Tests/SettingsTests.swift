@@ -72,6 +72,18 @@ final class PreferenceMappingTests: XCTestCase {
         XCTAssertTrue(Pref.gridOptions.contains("Rule of Thirds"))
     }
 
+    func testRawCaptureOptionsOfferSensorAndProRAWPaths() {
+        XCTAssertEqual(Pref.rawCaptureSourceOptions, ["Sensor RAW", "Apple ProRAW"])
+        XCTAssertEqual(
+            CameraManager.RawCaptureSource(rawValue: Pref.rawCaptureSourceOptions[0]),
+            .sensor
+        )
+        XCTAssertEqual(
+            CameraManager.RawCaptureSource(rawValue: Pref.rawCaptureSourceOptions[1]),
+            .appleProRAW
+        )
+    }
+
     func testStringReadsDefaultsAndFallsBack() {
         let key = "settings.testOnly"
         UserDefaults.standard.removeObject(forKey: key)
@@ -80,6 +92,27 @@ final class PreferenceMappingTests: XCTestCase {
         UserDefaults.standard.set("stored", forKey: key)
         XCTAssertEqual(Pref.string(key, default: "fallback"), "stored")
         UserDefaults.standard.removeObject(forKey: key)
+    }
+}
+
+final class CaptureOrientationTests: XCTestCase {
+
+    func testLandscapeCaptureMapsToEXIFOrientation() {
+        XCTAssertEqual(
+            CameraManager.exifOrientation(forCaptureRotation: 90),
+            CGImagePropertyOrientation.right.rawValue
+        )
+        XCTAssertEqual(
+            CameraManager.exifOrientation(forCaptureRotation: -90),
+            CGImagePropertyOrientation.left.rawValue
+        )
+    }
+
+    func testPortraitCaptureKeepsEXIFUpright() {
+        XCTAssertEqual(
+            CameraManager.exifOrientation(forCaptureRotation: 0),
+            CGImagePropertyOrientation.up.rawValue
+        )
     }
 }
 

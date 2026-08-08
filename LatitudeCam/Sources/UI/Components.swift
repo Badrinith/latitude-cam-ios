@@ -499,6 +499,7 @@ struct ChipRow: View {
     var label: String
     var options: [String]
     @Binding var selection: String
+    var disabledOptions: Set<String> = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -509,24 +510,26 @@ struct ChipRow: View {
             HStack(spacing: 6) {
                 ForEach(options, id: \.self) { option in
                     let active = option == selection
+                    let enabled = !disabledOptions.contains(option)
                     Button {
-                        guard !active else { return }
+                        guard enabled, !active else { return }
                         Haptics.detent()
                         selection = option
                     } label: {
                         Text(option)
                             .font(.mono(11, .medium))
-                            .foregroundStyle(active ? Ink.base : Tone.primary)
+                            .foregroundStyle(enabled ? (active ? Ink.base : Tone.primary) : Tone.quaternary)
                             .padding(.horizontal, 10)
                             .padding(.vertical, 7)
                             .frame(maxWidth: .infinity)
                             .background(
-                                active ? Accent.amber : Color.white.opacity(0.08),
+                                enabled && active ? Accent.amber : Color.white.opacity(enabled ? 0.08 : 0.035),
                                 in: Capsule()
                             )
                             .contentShape(Capsule())
                     }
                     .buttonStyle(.plain)
+                    .disabled(!enabled)
                 }
             }
         }
@@ -926,9 +929,9 @@ struct BottomSheet<Content: View>: View {
 // leaving Settings or abandoning an edit. These give the return a shape: an iris
 // closing back down to the finder, with the screen's own name beside it.
 
-/// Returns to the camera. The glyph is the iris from the shutter release, small
-/// and closed — going back to the viewfinder is the same idea as taking the
-/// picture, so it uses the same object.
+/// Returns to the camera with the same generous action target used for gallery
+/// Edit/Delete. The iris remains the visual cue, but no longer asks for a tiny
+/// precision tap.
 struct ViewfinderReturn: View {
     var action: () -> Void
 
@@ -937,43 +940,51 @@ struct ViewfinderReturn: View {
             Haptics.tap()
             action()
         } label: {
-            HStack(spacing: 6) {
+            HStack(spacing: 9) {
                 ZStack {
+                    RoundedRectangle(cornerRadius: 5, style: .continuous)
+                        .strokeBorder(Accent.amber.opacity(0.8), lineWidth: 1.1)
+                        .frame(width: 24, height: 21)
                     Circle()
-                        .strokeBorder(Accent.amber, lineWidth: 1.2)
-                        .frame(width: 15, height: 15)
-                    // Three strokes across the ring read as blades without needing
-                    // six of them at this size.
-                    ForEach(0..<3, id: \.self) { index in
-                        Capsule()
-                            .fill(Accent.amber)
-                            .frame(width: 1.2, height: 7)
-                            .offset(y: -3.4)
-                            .rotationEffect(.degrees(Double(index) * 120))
+                        .strokeBorder(Accent.amber, lineWidth: 1)
+                        .frame(width: 10, height: 10)
+                    Rectangle()
+                        .fill(Accent.amber.opacity(0.75))
+                        .frame(width: 1, height: 5)
+                    Rectangle()
+                        .fill(Accent.amber.opacity(0.75))
+                        .frame(width: 5, height: 1)
+                    ForEach([-8.0, 8.0], id: \.self) { x in
+                        Circle()
+                            .fill(Accent.amber.opacity(0.65))
+                            .frame(width: 2, height: 2)
+                            .offset(x: x)
                     }
                 }
                 Text("VIEWFINDER")
-                    .font(.mono(9, .semibold))
+                    .font(.mono(11, .semibold))
                     .kerning(1.1)
                     .foregroundStyle(Accent.amber)
             }
-            .padding(.leading, 8)
-            .padding(.trailing, 12)
-            .padding(.vertical, 7)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 11)
             .background {
-                Capsule().fill(Accent.amber.opacity(0.12))
-                    .overlay { Capsule().strokeBorder(Accent.amber.opacity(0.35), lineWidth: 0.5) }
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(LinearGradient(
+                        colors: [Accent.amber.opacity(0.2), Accent.amber.opacity(0.07)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ))
+                    .overlay { RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Accent.amber.opacity(0.42), lineWidth: 0.7) }
             }
-            .contentShape(Capsule())
+            .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Back to viewfinder")
     }
 }
 
-/// A plain return to another screen in the app — the library, say. Deliberately
-/// quieter than ViewfinderReturn: leaving the camera behind is the bigger move,
-/// and the two should not compete.
+/// A secondary action for moving back inside the library and editor.
 struct ScreenReturn: View {
     var title: String
     var action: () -> Void
@@ -983,48 +994,94 @@ struct ScreenReturn: View {
             Haptics.tap()
             action()
         } label: {
-            HStack(spacing: 5) {
+            HStack(spacing: 7) {
                 Image(systemName: "chevron.left")
-                    .font(.system(size: 10, weight: .bold))
+                    .font(.system(size: 11, weight: .bold))
                 Text(title.uppercased())
-                    .font(.mono(9, .semibold))
+                    .font(.mono(11, .semibold))
                     .kerning(1)
             }
             .foregroundStyle(Tone.secondary)
-            .padding(.vertical, 7)
-            .padding(.trailing, 8)
-            .contentShape(Rectangle())
+            .padding(.horizontal, 13)
+            .padding(.vertical, 11)
+            .background {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Color.white.opacity(0.07))
+                    .overlay { RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Tone.hairline, lineWidth: 0.5) }
+            }
+            .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
         .buttonStyle(.plain)
     }
 }
 
-/// A committing action — Save. Filled, so it reads as the end of something
-/// rather than as one more control.
+/// The gallery's action language: amber commits, rust removes, and the quiet
+/// outlined state exits or resets without competing with the photograph.
+struct GalleryAction: View {
+    enum Role { case primary, destructive, secondary }
+
+    var title: String
+    var role: Role
+    var enabled: Bool = true
+    var compact = false
+    var action: () -> Void
+
+    var body: some View {
+        Button {
+            role == .primary ? Haptics.success() : Haptics.tap()
+            action()
+        } label: {
+            Text(title.uppercased())
+                .font(.mono(compact ? 9.5 : 11, .semibold))
+                .kerning(1.1)
+                .foregroundStyle(foreground)
+                .frame(maxWidth: compact ? nil : .infinity)
+                .padding(.horizontal, compact ? 11 : 14)
+                .padding(.vertical, compact ? 7 : 13)
+                .background {
+                    RoundedRectangle(cornerRadius: compact ? 10 : 12, style: .continuous)
+                        .fill(background)
+                        .overlay {
+                            if role == .secondary {
+                                RoundedRectangle(cornerRadius: compact ? 10 : 12, style: .continuous)
+                                    .strokeBorder(Tone.hairline, lineWidth: 0.5)
+                            }
+                        }
+                }
+                .contentShape(RoundedRectangle(cornerRadius: compact ? 10 : 12, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled)
+    }
+
+    private var foreground: Color {
+        guard enabled else { return Tone.quaternary }
+        switch role {
+        case .primary: return Ink.base
+        case .destructive: return Color(hex: 0xE2685A)
+        case .secondary: return Tone.secondary
+        }
+    }
+
+    private var background: AnyShapeStyle {
+        guard enabled else { return AnyShapeStyle(Color.white.opacity(0.08)) }
+        switch role {
+        case .primary: return AnyShapeStyle(Accent.amber)
+        case .destructive: return AnyShapeStyle(Color(hex: 0xE2685A).opacity(0.12))
+        case .secondary: return AnyShapeStyle(Color.white.opacity(0.07))
+        }
+    }
+}
+
+/// A committing action — Save. Kept as a semantic wrapper where the existing
+/// screen code reads better with a named primary action.
 struct PrimaryAction: View {
     var title: String
     var enabled: Bool = true
     var action: () -> Void
 
     var body: some View {
-        Button {
-            Haptics.success()
-            action()
-        } label: {
-            Text(title.uppercased())
-                .font(.mono(9.5, .bold))
-                .kerning(1.1)
-                .foregroundStyle(enabled ? Ink.base : Tone.quaternary)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 7)
-                .background {
-                    Capsule().fill(enabled ? AnyShapeStyle(Accent.amber)
-                                           : AnyShapeStyle(Color.white.opacity(0.08)))
-                }
-                .contentShape(Capsule())
-        }
-        .buttonStyle(.plain)
-        .disabled(!enabled)
+        GalleryAction(title: title, role: .primary, enabled: enabled, compact: true, action: action)
     }
 }
 
