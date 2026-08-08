@@ -544,18 +544,28 @@ struct PlateDial: View {
     var diameter: CGFloat
     var highlighted: Bool = false
     var rotation: Angle = .zero
+    /// Landscape. The label below the dial is dropped and the reading moves
+    /// inside the face — a rotated word needs its width in the frame's height,
+    /// so "SHUTTER" under the dial climbed back over it once the body turned.
+    var compact: Bool = false
     var onTurn: (ActiveDial) -> Void = { _ in }
+    /// Called once when a turn begins. Shutter and ISO use it to come off A:
+    /// touching the dial is what takes a camera out of auto, and without it the
+    /// dial moved while the exposure stayed exactly where it was.
+    var onEngage: () -> Void = {}
 
     @State private var lastAngle: Double?
     @State private var lastDetent: Int?
+    @State private var engaged = false
 
     var body: some View {
         VStack(spacing: 4) {
             face
-            Text(label)
-                .font(.mono(7, .semibold))
-                .foregroundStyle(highlighted ? Accent.amber : Color(hex: 0x8A8478))
-                .rotationEffect(rotation)
+            if !compact {
+                Text(label)
+                    .font(.mono(7, .semibold))
+                    .foregroundStyle(highlighted ? Accent.amber : Color(hex: 0x8A8478))
+            }
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(barrelName)
@@ -586,10 +596,13 @@ struct PlateDial: View {
                 .offset(y: -diameter / 2 + (diameter > 60 ? 9 : 6))
                 .rotationEffect(.degrees(KnobMath.pointerAngle(for: value)))
 
-            if let inlineReading {
-                Text(inlineReading)
-                    .font(.mono(9, .bold))
+            if let text = compact ? (inlineReading ?? label) : inlineReading {
+                Text(text)
+                    .font(.mono(compact ? 8 : 9, .bold))
                     .foregroundStyle(Color(hex: 0xE8E2D4))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                    .frame(maxWidth: diameter * 0.82)
                     .rotationEffect(rotation)
             }
         }
@@ -631,6 +644,11 @@ struct PlateDial: View {
                 defer { lastAngle = angle }
                 guard let previous = lastAngle else { return }
 
+                if !engaged {
+                    engaged = true
+                    onEngage()
+                }
+
                 value = KnobMath.advance(
                     value, byDegrees: KnobMath.angleDelta(from: previous, to: angle)
                 )
@@ -642,7 +660,7 @@ struct PlateDial: View {
                 onTurn(ActiveDial(key: barrelKey, name: barrelName,
                                   reading: barrelReading, value: value))
             }
-            .onEnded { _ in lastAngle = nil; lastDetent = nil }
+            .onEnded { _ in lastAngle = nil; lastDetent = nil; engaged = false }
     }
 }
 
@@ -955,6 +973,7 @@ struct PlateLensRow: View {
 struct TopPlateBand: View {
     @EnvironmentObject var app: AppState
     var rotation: Angle = .zero
+    var compact: Bool = false
     var onSettings: () -> Void
     var onCycleGrid: () -> Void
     var onCycleAspect: () -> Void
@@ -1088,30 +1107,37 @@ struct TopPlateBand: View {
                           barrelReading: AppState.apertureLabels[app.apertureIndex],
                           value: apertureBinding,
                           stops: AppState.apertureStops.count,
-                          diameter: 44, rotation: rotation, onTurn: onDialTurn)
+                          diameter: 44, rotation: rotation, compact: compact,
+                          onTurn: onDialTurn)
 
                 PlateDial(label: app.isoLabel,
                           barrelKey: .iso, barrelName: "ISO", barrelReading: app.isoLabel,
                           value: $app.iso,
                           stops: AppState.isoStops.count,
-                          diameter: 50, rotation: rotation, onTurn: onDialTurn)
+                          diameter: 50, rotation: rotation, compact: compact,
+                          onTurn: onDialTurn,
+                          onEngage: { app.autoExposure = false })
 
                 PlateDial(label: "SHUTTER", inlineReading: app.shutterLabel,
                           barrelKey: .shutter, barrelName: "SHUTTER", barrelReading: app.shutterLabel,
                           value: $app.shutter, stops: AppState.shutterStops.count,
-                          diameter: 70, highlighted: true, rotation: rotation, onTurn: onDialTurn)
+                          diameter: 70, highlighted: true, rotation: rotation,
+                          compact: compact, onTurn: onDialTurn,
+                          onEngage: { app.autoExposure = false })
 
                 PlateDial(label: app.kelvinLabel,
                           barrelKey: .white, barrelName: "WHITE BALANCE", barrelReading: app.kelvinLabel,
                           value: $app.whiteBalance,
                           stops: AppState.whiteBalanceStops.count,
-                          diameter: 50, rotation: rotation, onTurn: onDialTurn)
+                          diameter: 50, rotation: rotation, compact: compact,
+                          onTurn: onDialTurn)
 
                 PlateDial(label: String(format: "%+.1fEV", app.evValue),
                           barrelKey: .exposure, barrelName: "EXPOSURE",
                           barrelReading: String(format: "%+.1f EV", app.evValue),
                           value: $app.exposureComp, stops: AppState.evDetents,
-                          diameter: 44, rotation: rotation, onTurn: onDialTurn)
+                          diameter: 44, rotation: rotation, compact: compact,
+                          onTurn: onDialTurn)
             }
             .frame(maxWidth: .infinity)
         }

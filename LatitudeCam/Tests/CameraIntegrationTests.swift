@@ -1221,3 +1221,61 @@ final class ViewfinderRegionTests: XCTestCase {
         XCTAssertGreaterThan(r.height, 0)
     }
 }
+
+// MARK: - Dials that actually reach the camera
+
+/// Shutter and ISO read AUTO while auto-exposure is on, and the camera ignores
+/// whatever the dial says. Turning one has to take the camera off A the way a
+/// physical dial does — without it the dial moved, the value changed, and the
+/// exposure stayed exactly where it was, which is what "not working" looked
+/// like on the device.
+@MainActor
+final class DialEngagesExposureTests: XCTestCase {
+
+    func testAutoIsTheStartingPoint() {
+        XCTAssertTrue(AppState().autoExposure, "a camera should open on auto")
+    }
+
+    func testTheLabelsAdvertiseAutoUntilItIsLeft() {
+        let app = AppState()
+        app.autoExposure = true
+        XCTAssertEqual(app.shutterLabel, "AUTO")
+        XCTAssertEqual(app.isoLabel, "ISO A")
+    }
+
+    /// Once off A the readouts have to show real numbers, or the dial still
+    /// looks dead however well it works.
+    func testLeavingAutoShowsRealValues() {
+        let app = AppState()
+        app.autoExposure = false
+        XCTAssertNotEqual(app.shutterLabel, "AUTO")
+        XCTAssertNotEqual(app.isoLabel, "ISO A")
+        XCTAssertTrue(app.shutterLabel.hasPrefix("1/"))
+        XCTAssertTrue(app.isoLabel.hasPrefix("ISO "))
+    }
+
+    /// The value under the dial keeps its position across the switch, so coming
+    /// off A does not also jump the exposure.
+    func testComingOffAutoKeepsTheDialWhereItWas() {
+        let app = AppState()
+        app.iso = 0.5
+        app.shutter = 0.5
+        let iso = app.isoValue
+        let shutter = app.shutterValue
+
+        app.autoExposure = false
+        XCTAssertEqual(app.isoValue, iso)
+        XCTAssertEqual(app.shutterValue, shutter)
+    }
+
+    /// Aperture, white balance and exposure compensation are not gated on A, so
+    /// they must not be dragged off it as a side effect.
+    func testTheOtherDialsDoNotDisturbAuto() {
+        let app = AppState()
+        app.autoExposure = true
+        app.whiteBalance = 0.7
+        app.exposureComp = 0.7
+        app.apertureIndex = 4
+        XCTAssertTrue(app.autoExposure, "a dial that does not need manual took the camera off A")
+    }
+}

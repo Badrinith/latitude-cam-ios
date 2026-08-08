@@ -346,6 +346,7 @@ struct ViewfinderScreen: View {
         VStack(spacing: 0) {
             TopPlateBand(
                 rotation: orientation.angle,
+                compact: orientation.edge != .bottom,
                 onSettings: { app.go(.settings) },
                 onCycleGrid: cycleGrid,
                 onCycleAspect: cycleAspect,
@@ -476,8 +477,14 @@ struct ViewfinderScreen: View {
                 app.apertureIndex = index
                 Haptics.detent()
             }
-        case .iso:      step(\.iso, by: delta, stops: AppState.isoStops.count)
-        case .shutter:  step(\.shutter, by: delta, stops: AppState.shutterStops.count)
+        case .iso:
+            // Same reason as the dial: a value the camera is not reading is not
+            // a control.
+            if app.autoExposure { app.autoExposure = false }
+            step(\.iso, by: delta, stops: AppState.isoStops.count)
+        case .shutter:
+            if app.autoExposure { app.autoExposure = false }
+            step(\.shutter, by: delta, stops: AppState.shutterStops.count)
         case .white:    step(\.whiteBalance, by: delta, stops: AppState.whiteBalanceStops.count)
         case .exposure: step(\.exposureComp, by: delta, stops: AppState.evDetents)
         }
