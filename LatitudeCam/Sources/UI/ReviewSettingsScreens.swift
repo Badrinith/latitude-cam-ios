@@ -214,6 +214,16 @@ struct SettingsScreen: View {
     @AppStorage(Pref.viewfinderControls) private var viewfinderControls = "Film Label"
     @AppStorage(Pref.mirrorToPhotos) private var mirrorToPhotos = true
 
+    /// Read from the bundle rather than typed here. The literal that used to sit
+    /// in this row had drifted several builds behind the binary, which defeats
+    /// the only purpose the row has — telling you which build you are looking at.
+    static var installedVersion: String {
+        let info = Bundle.main.infoDictionary
+        let version = info?["CFBundleShortVersionString"] as? String ?? "—"
+        let build = info?["CFBundleVersion"] as? String ?? "—"
+        return "\(version) (\(build))"
+    }
+
     var body: some View {
         ZStack {
             Ink.base.ignoresSafeArea()
@@ -300,7 +310,7 @@ struct SettingsScreen: View {
                     }
 
                     SettingsGroup(header: "About") {
-                        SettingsRow(title: "Version", detail: "1.0.1 (15)", showChevron: false, isLast: true)
+                        SettingsRow(title: "Version", detail: Self.installedVersion, showChevron: false, isLast: true)
                     }
                 }
                 .padding(.horizontal, 16)
