@@ -437,16 +437,50 @@ private struct GalleryHost: View {
 
             if filtered.isEmpty {
                 emptyState
+            } else if layout == "Organizer" {
+                // Relies on LibraryScreen's own outer ScrollView. Wrapping it in a
+                // second one here would fight the MagnificationGesture that reads
+                // the pinch against the grid directly, and would scroll the filter
+                // chips along with the photos rather than keeping them pinned.
+                organizerGrid
             } else {
-                switch layout {
-                case "Negative":  NegativeLayout(photos: filtered, open: open, swatch: swatch)
-                case "Archive":   ArchiveLayout(gallery: gallery, filter: $filter, open: open, family: family, swatch: swatch)
-                case "Storyboard": StoryboardLayout(photos: filtered, open: open, swatch: swatch)
-                default:          organizerGrid
+                // The three other layouts had no scroll container at all — each
+                // rendered at whatever size its content happened to need and then
+                // stopped, which is what "all over the place" was: nothing below
+                // the fold could be reached, and short content left dead space.
+                ScrollView {
+                    switch layout {
+                    case "Negative":   NegativeLayout(photos: filtered, open: open, swatch: swatch)
+                    case "Archive":    ArchiveLayout(gallery: gallery, filter: $filter, open: open, family: family, swatch: swatch)
+                    default:           StoryboardLayout(photos: filtered, open: open, swatch: swatch)
+                    }
                 }
             }
         }
-        .overlay { viewerOverlay }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        // fullScreenCover, not an inline overlay. An overlay is sized to whatever
+        // frame its host view actually occupies — for a layout that hugs its
+        // content instead of filling the screen, that host frame could be far
+        // smaller than the device, and the "opened" photo was rendered clipped to
+        // it: too small, and with its own Close button potentially laid outside
+        // the region that was actually receiving taps, which is what made the
+        // Storyboard layout's back button look broken. fullScreenCover is sized
+        // by the system to the full device bounds regardless of the presenting
+        // view's own size, so this cannot happen in any layout.
+        .fullScreenCover(item: $viewing) { photo in
+            PhotoViewer(
+                gallery: gallery,
+                photos: filtered,
+                startingAt: photo.id,
+                onEdit: { chosen in
+                    app.editingPhoto = chosen
+                    viewing = nil
+                    app.go(.edit)
+                },
+                onDelete: { chosen in gallery.deletePhoto(chosen.id) },
+                onClose: { viewing = nil }
+            )
+        }
     }
 
     private var emptyState: some View {
@@ -539,27 +573,6 @@ private struct GalleryHost: View {
                     }
                     .padding(5)
             }
-    }
-
-    @ViewBuilder
-    var viewerOverlay: some View {
-        if let photo = viewing {
-            // The whole filtered roll, not just the one photo — scrolling through
-            // the viewer is scrolling through what you were already looking at,
-            // not a second, narrower list.
-            PhotoViewer(
-                gallery: gallery,
-                photos: filtered,
-                startingAt: photo.id,
-                onEdit: { chosen in
-                    app.editingPhoto = chosen
-                    viewing = nil
-                    app.go(.edit)
-                },
-                onDelete: { chosen in gallery.deletePhoto(chosen.id) },
-                onClose: { withAnimation(.easeOut(duration: 0.18)) { viewing = nil } }
-            )
-        }
     }
 
     private func swatch(for filmID: String) -> Color {
