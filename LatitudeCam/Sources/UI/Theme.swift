@@ -196,11 +196,11 @@ enum Pref {
     static let captureFormatOptions = ["RAW Only", "JPEG Only", "RAW + JPEG"]
     static let captureResolutionOptions = ["4MP", "8MP", "12MP", "Full"]
     /// Organizer is the grid every photo app has — everything visible at once,
-    /// no metaphor to learn. The other three are the picks from the fifteen
-    /// gallery concepts: Negative (film-true, tap flips to positive), Archive
-    /// (drawers by family) and Storyboard (unequal panels, newest gets the big
-    /// one).
-    static let galleryLayoutOptions = ["Organizer", "Negative", "Archive", "Storyboard"]
+    /// no metaphor to learn. The other four are picks from the fifteen gallery
+    /// concepts: Contact Roll (continuous filmstrip, sprockets both edges),
+    /// Archive (drawers by family), Storyboard (unequal panels, newest gets the
+    /// big one), and Darkroom (prints clipped to a line).
+    static let galleryLayoutOptions = ["Organizer", "Contact Roll", "Archive", "Storyboard", "Darkroom"]
 
     static func string(_ key: String, default fallback: String) -> String {
         UserDefaults.standard.string(forKey: key) ?? fallback

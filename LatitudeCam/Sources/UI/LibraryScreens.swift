@@ -200,94 +200,151 @@ struct PhotoViewer: View {
         self._current = State(initialValue: startingAt)
     }
 
+    @State private var showMetadata = false
+
     private var index: Int { photos.firstIndex { $0.id == current } ?? 0 }
 
     var body: some View {
-        ZStack {
-            Ink.base.ignoresSafeArea()
+        VStack(spacing: 0) {
+            HStack {
+                ScreenReturn(title: "Close", action: onClose)
+                Spacer()
+                if photos.count > 1 {
+                    Text("\(index + 1) OF \(photos.count)")
+                        .font(.mono(9, .semibold))
+                        .kerning(1)
+                        .foregroundStyle(Tone.quaternary)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 10)
+            .padding(.bottom, 4)
 
             // One paged scroll rather than a manual swipe gesture: paging,
-            // momentum and the settle onto a whole frame all come from the system
-            // for free, and each page keeps its own pinch state independently.
+            // momentum and the settle onto a whole frame all come from the
+            // system for free, and each page keeps its own pinch state
+            // independently. Bounded to the space between the header and the
+            // button bar rather than the whole screen — the image no longer
+            // sits under floating controls, it sits in its own region.
             TabView(selection: $current) {
                 ForEach(photos) { photo in
-                    ZoomableImage(gallery: gallery, photo: photo)
-                        .tag(photo.id)
+                    ZoomableImage(gallery: gallery, photo: photo, onSwipeUp: {
+                        Haptics.tap()
+                        showMetadata = true
+                    })
+                    .tag(photo.id)
                 }
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
-            .ignoresSafeArea()
+            .frame(maxHeight: .infinity)
 
-            VStack(spacing: 0) {
-                HStack {
-                    ScreenReturn(title: "Close", action: onClose)
-                    Spacer()
-                    VStack(spacing: 1) {
-                        Text(stamp)
-                            .font(.mono(9, .semibold))
-                            .kerning(1)
-                            .foregroundStyle(Tone.quaternary)
-                        if photos.count > 1 {
-                            Text("\(index + 1) OF \(photos.count)")
-                                .font(.mono(8, .medium))
-                                .kerning(0.8)
-                                .foregroundStyle(Tone.quaternary.opacity(0.7))
+            Text("SWIPE UP FOR DETAILS")
+                .font(.mono(7.5, .medium))
+                .kerning(1)
+                .foregroundStyle(Tone.quaternary.opacity(0.6))
+                .padding(.bottom, 8)
+
+            // A real toolbar below the picture, not two pills floating over it.
+            // The photo used to sit directly under Delete and Edit, which is
+            // also where a thumb rests to swipe between pages — the two kept
+            // competing for the same touches.
+            HStack(spacing: 10) {
+                Button {
+                    Haptics.toggle()
+                    if let photo = current(in: photos) { onDelete(photo) }
+                } label: {
+                    Text("DELETE")
+                        .font(.mono(11, .semibold))
+                        .kerning(1)
+                        .foregroundStyle(Color(hex: 0xE2685A))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 13)
+                        .background {
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(Color(hex: 0xE2685A).opacity(0.12))
                         }
-                    }
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, 10)
-                .background {
-                    LinearGradient(colors: [Ink.base.opacity(0.85), .clear],
-                                   startPoint: .top, endPoint: .bottom)
-                        .frame(height: 90)
-                        .allowsHitTesting(false)
-                        .frame(maxHeight: .infinity, alignment: .top)
-                }
+                .buttonStyle(.plain)
 
-                Spacer(minLength: 0)
-
-                HStack(spacing: 30) {
-                    Button {
-                        Haptics.toggle()
-                        if let photo = current(in: photos) { onDelete(photo) }
-                    } label: {
-                        Text("DELETE")
-                            .font(.mono(9.5, .semibold))
-                            .kerning(1)
-                            .foregroundStyle(Color(hex: 0xE2685A))
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 8)
-                            .background { Capsule().fill(Color.white.opacity(0.07)) }
-                    }
-                    .buttonStyle(.plain)
-
-                    PrimaryAction(title: "Edit") {
-                        if let photo = current(in: photos) { onEdit(photo) }
-                    }
+                Button {
+                    Haptics.tap()
+                    if let photo = current(in: photos) { onEdit(photo) }
+                } label: {
+                    Text("EDIT")
+                        .font(.mono(11, .semibold))
+                        .kerning(1)
+                        .foregroundStyle(Ink.base)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 13)
+                        .background {
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(Accent.amber)
+                        }
                 }
-                .padding(.bottom, 26)
-                .background {
-                    LinearGradient(colors: [.clear, Ink.base.opacity(0.85)],
-                                   startPoint: .top, endPoint: .bottom)
-                        .frame(height: 110)
-                        .allowsHitTesting(false)
-                        .frame(maxHeight: .infinity, alignment: .bottom)
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 20)
+        }
+        .background(Ink.base.ignoresSafeArea())
+        .overlay {
+            if showMetadata, let photo = current(in: photos) {
+                BottomSheet(onDismiss: { showMetadata = false }) {
+                    metadataContent(photo)
                 }
+                .zIndex(6)
             }
         }
-        .transition(.opacity)
-        .zIndex(5)
+        .animation(.spring(response: 0.32, dampingFraction: 0.84), value: showMetadata)
     }
 
     private func current(in photos: [PhotoGallery.Photo]) -> PhotoGallery.Photo? {
         photos.first { $0.id == current }
     }
 
-    private var stamp: String {
-        guard let photo = current(in: photos) else { return "" }
-        let film = FilmPreset.all.first { $0.id == photo.filmID }?.name.uppercased() ?? "—"
-        return "\(film) · ISO \(photo.iso) · 1/\(photo.shutterDenominator)"
+    private func metadataContent(_ photo: PhotoGallery.Photo) -> some View {
+        let preset = FilmPreset.all.first { $0.id == photo.filmID }
+        let formatter: DateFormatter = {
+            let f = DateFormatter()
+            f.dateStyle = .medium
+            f.timeStyle = .short
+            return f
+        }()
+
+        return VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 8) {
+                Circle().fill(preset?.swatch ?? FilmSwatch.amber).frame(width: 10, height: 10)
+                Text(preset?.name ?? "—")
+                    .font(.ui(16, .semibold))
+                    .foregroundStyle(Tone.primary)
+            }
+
+            VStack(spacing: 0) {
+                metadataRow("Family", preset?.family ?? "—")
+                metadataRow("ISO", "\(photo.iso)")
+                metadataRow("Shutter", "1/\(photo.shutterDenominator)")
+                metadataRow("Taken", formatter.string(from: photo.timestamp), isLast: true)
+            }
+        }
+    }
+
+    private func metadataRow(_ label: String, _ value: String, isLast: Bool = false) -> some View {
+        HStack {
+            Text(label.uppercased())
+                .font(.mono(10, .semibold))
+                .kerning(0.6)
+                .foregroundStyle(Tone.quaternary)
+            Spacer()
+            Text(value)
+                .font(.ui(14, .medium))
+                .foregroundStyle(Tone.primary)
+        }
+        .padding(.vertical, 12)
+        .overlay(alignment: .bottom) {
+            if !isLast {
+                Rectangle().fill(Tone.separator).frame(height: 0.5)
+            }
+        }
     }
 }
 
@@ -296,6 +353,7 @@ struct PhotoViewer: View {
 private struct ZoomableImage: View {
     @ObservedObject var gallery: PhotoGallery
     var photo: PhotoGallery.Photo
+    var onSwipeUp: () -> Void
 
     // Starts on the grid thumbnail, already in hand, and is replaced the moment
     // the full-resolution roll copy arrives — the same fast-then-sharp pattern
@@ -306,6 +364,7 @@ private struct ZoomableImage: View {
     @State private var lastScale: CGFloat = 1
     @State private var offset: CGSize = .zero
     @State private var lastOffset: CGSize = .zero
+    @State private var pulledUp: CGFloat = 0
 
     var body: some View {
         GeometryReader { geo in
@@ -314,8 +373,31 @@ private struct ZoomableImage: View {
                 .scaledToFit()
                 .frame(width: geo.size.width, height: geo.size.height)
                 .scaleEffect(scale)
-                .offset(offset)
+                .offset(x: offset.width, y: offset.height - pulledUp)
                 .contentShape(Rectangle())
+                .simultaneousGesture(
+                    // Only while unzoomed — zoomed, an upward drag is panning the
+                    // photo, not asking to see its metadata, and the two must not
+                    // be read as the same gesture.
+                    scale <= 1.01 ?
+                    DragGesture(minimumDistance: 12)
+                        .onChanged { value in
+                            guard value.translation.height < 0 else { return }
+                            // Rubber-banded rather than 1:1 — a swipe that opens a
+                            // sheet should feel like it is pulling against
+                            // something, not like the photo is simply sliding away.
+                            pulledUp = min(60, -value.translation.height * 0.5)
+                        }
+                        .onEnded { value in
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                pulledUp = 0
+                            }
+                            if value.translation.height < -50 {
+                                onSwipeUp()
+                            }
+                        }
+                    : nil
+                )
                 .gesture(
                     MagnificationGesture()
                         .onChanged { value in
@@ -369,9 +451,10 @@ private struct ZoomableImage: View {
         }
     }
 
-    init(gallery: PhotoGallery, photo: PhotoGallery.Photo) {
+    init(gallery: PhotoGallery, photo: PhotoGallery.Photo, onSwipeUp: @escaping () -> Void) {
         self.gallery = gallery
         self.photo = photo
+        self.onSwipeUp = onSwipeUp
         self._image = State(initialValue: photo.thumb)
     }
 }
@@ -450,9 +533,10 @@ private struct GalleryHost: View {
                 // the fold could be reached, and short content left dead space.
                 ScrollView {
                     switch layout {
-                    case "Negative":   NegativeLayout(photos: filtered, open: open, swatch: swatch)
-                    case "Archive":    ArchiveLayout(gallery: gallery, filter: $filter, open: open, family: family, swatch: swatch)
-                    default:           StoryboardLayout(photos: filtered, open: open, swatch: swatch)
+                    case "Contact Roll": ContactRollLayout(photos: filtered, open: open, swatch: swatch)
+                    case "Archive":      ArchiveLayout(gallery: gallery, filter: $filter, open: open, family: family, swatch: swatch)
+                    case "Darkroom":     DarkroomLineLayout(photos: filtered, open: open, swatch: swatch)
+                    default:             StoryboardLayout(photos: filtered, open: open, swatch: swatch)
                     }
                 }
             }
@@ -580,69 +664,140 @@ private struct GalleryHost: View {
     }
 }
 
-// MARK: - Negative layout
+// MARK: - Contact roll layout
 //
-// The roll shown as negatives: inverted, orange-cast, closer to what actually
-// comes off a scanner than a photo grid is. Tapping a frame is "printing" it —
-// the same gesture that opens the viewer, so there is no separate develop step
-// to learn.
+// The whole roll as one continuous filmstrip, sprockets down both edges. The
+// same visual object the film barrel on the camera screen already is, so
+// reaching the library does not mean learning a second vocabulary for what
+// film looks like.
 
-private struct NegativeLayout: View {
+private struct ContactRollLayout: View {
     var photos: [PhotoGallery.Photo]
     var open: (PhotoGallery.Photo) -> Void
     var swatch: (String) -> Color
 
     var body: some View {
-        LazyVStack(spacing: 2) {
-            ForEach(photos) { photo in
-                Button { open(photo) } label: {
-                    HStack(spacing: 0) {
-                        sprocket
+        VStack(spacing: 0) {
+            sprocketRow
+            LazyVStack(spacing: 2) {
+                ForEach(photos) { photo in
+                    Button { open(photo) } label: {
                         ZStack(alignment: .bottomLeading) {
                             Image(uiImage: photo.thumb)
                                 .resizable()
                                 .aspectRatio(3/2, contentMode: .fill)
-                                .frame(height: 78)
+                                .frame(height: 92)
                                 .clipped()
-                                // The negative look: invert, then push the hue back
-                                // round by 180° so an inverted amber cast reads as
-                                // the orange base a real negative has, rather than
-                                // an arbitrary inverted colour.
-                                .colorInvert()
-                                .hueRotation(.degrees(180))
-                                .saturation(0.75)
 
                             HStack(spacing: 5) {
                                 Circle().fill(swatch(photo.filmID)).frame(width: 6, height: 6)
                                 Text(stamp(photo))
                                     .font(.mono(7, .semibold))
                                     .kerning(0.4)
-                                    .foregroundStyle(.white.opacity(0.85))
+                                    .foregroundStyle(.white.opacity(0.9))
                             }
-                            .padding(6)
+                            .padding(8)
+                            .background {
+                                LinearGradient(colors: [.black.opacity(0.55), .clear],
+                                               startPoint: .bottom, endPoint: .top)
+                                    .frame(height: 36)
+                                    .frame(maxHeight: .infinity, alignment: .bottom)
+                            }
                         }
-                        sprocket
+                    }
+                    .buttonStyle(.plain)
+                    .overlay(alignment: .bottom) {
+                        Rectangle().fill(Color(hex: 0x0A0908)).frame(height: 2)
                     }
                 }
-                .buttonStyle(.plain)
             }
+            sprocketRow
         }
         .background(Color(hex: 0x141210))
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
-    private var sprocket: some View {
-        VStack(spacing: 5) {
-            ForEach(0..<5, id: \.self) { _ in
-                RoundedRectangle(cornerRadius: 1).fill(.white.opacity(0.18)).frame(width: 5, height: 5)
+    private var sprocketRow: some View {
+        HStack(spacing: 9) {
+            ForEach(0..<11, id: \.self) { _ in
+                RoundedRectangle(cornerRadius: 1.5).fill(.white.opacity(0.16)).frame(width: 8, height: 8)
             }
         }
-        .frame(width: 16)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 6)
+        .background(Color(hex: 0x0A0908))
     }
 
     private func stamp(_ photo: PhotoGallery.Photo) -> String {
         let name = FilmPreset.all.first { $0.id == photo.filmID }?.shortName.uppercased() ?? "—"
-        return "\(name) · \(photo.iso)"
+        return "\(name) · ISO \(photo.iso) · 1/\(photo.shutterDenominator)"
+    }
+}
+
+// MARK: - Darkroom line layout
+//
+// Prints clipped to a washing line, freshly developed. Several lines stacked
+// vertically, each scrolling horizontally, rather than one line trying to hold
+// an entire roll — a real line runs out of room, and so does a phone screen.
+
+private struct DarkroomLineLayout: View {
+    var photos: [PhotoGallery.Photo]
+    var open: (PhotoGallery.Photo) -> Void
+    var swatch: (String) -> Color
+
+    private static let perLine = 5
+
+    private var lines: [[PhotoGallery.Photo]] {
+        stride(from: 0, to: photos.count, by: Self.perLine).map {
+            Array(photos[$0..<min($0 + Self.perLine, photos.count)])
+        }
+    }
+
+    var body: some View {
+        LazyVStack(spacing: 30) {
+            ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
+                ZStack(alignment: .top) {
+                    Rectangle().fill(.white.opacity(0.22)).frame(height: 1).padding(.top, 8)
+
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(alignment: .top, spacing: 18) {
+                            ForEach(line) { photo in
+                                clippedPrint(photo)
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                    }
+                }
+            }
+        }
+        .padding(.top, 8)
+    }
+
+    private func clippedPrint(_ photo: PhotoGallery.Photo) -> some View {
+        // A stable, deterministic tilt from the photo's own id rather than
+        // Double.random — a fresh random value on every body re-evaluation
+        // would make the print visibly jitter each time SwiftUI redraws it.
+        let tilt = Double(abs(photo.id.hashValue) % 9) - 4
+
+        return Button { open(photo) } label: {
+            VStack(spacing: 0) {
+                Capsule().fill(Color(hex: 0xC9A227)).frame(width: 12, height: 4).offset(y: 2)
+                ZStack(alignment: .bottomLeading) {
+                    Image(uiImage: photo.thumb)
+                        .resizable()
+                        .aspectRatio(3/2, contentMode: .fill)
+                        .frame(width: 108, height: 72)
+                        .clipped()
+                    Circle().fill(swatch(photo.filmID)).frame(width: 7, height: 7).padding(5)
+                }
+                .background(.white)
+                .padding(4)
+                .background(.white)
+                .shadow(color: .black.opacity(0.4), radius: 6, y: 4)
+            }
+            .rotationEffect(.degrees(tilt))
+        }
+        .buttonStyle(.plain)
     }
 }
 

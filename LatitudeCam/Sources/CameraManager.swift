@@ -127,48 +127,18 @@ public final class CameraManager: NSObject, ObservableObject {
     /// Drives the render-side mirror. Read on the camera queue, written there too.
     private(set) var isFrontCamera = false
 
-    /// The phone's physical attitude, tracked independently of the UI. The app is
-    /// portrait-locked, so the viewfinder and its preview connection must never
-    /// rotate — but a photo taken while the phone is physically sideways still has
-    /// to come out the right way round. Without this, the still connection stayed
-    /// at the fixed portrait angle set at configuration, so a landscape photo was
-    /// saved as a portrait-shaped buffer holding a rotated scene.
-    private var physicalOrientation: UIDeviceOrientation = .portrait
-    private var orientationObserver: NSObjectProtocol?
-
-    private func startWatchingPhysicalOrientation() {
-        UIDevice.current.beginGeneratingDeviceOrientationNotifications()
-        orientationObserver = NotificationCenter.default.addObserver(
-            forName: UIDevice.orientationDidChangeNotification, object: nil, queue: nil
-        ) { [weak self] _ in
-            let next = UIDevice.current.orientation
-            // faceUp, faceDown and unknown carry no rotation information — keep
-            // whatever was last valid rather than snapping the next photo sideways
-            // because the phone was set down flat.
-            guard next.isValidInterfaceOrientation else { return }
-            self?.cameraQueue.async { self?.physicalOrientation = next }
-        }
-    }
-
-    /// The still-capture rotation for the *back* camera, mapped from the
-    /// physical orientation rather than the fixed angle the preview uses.
+    /// Computes the correct still-capture rotation from the device and camera
+    /// position directly, updating live as the phone turns.
     ///
-    /// Values match AVFoundation's own rotation-coordinator table for a
-    /// rear-facing sensor: portrait 90°, landscape-right 0°, landscape-left 180°,
-    /// upside-down 270°. landscapeLeft and landscapeRight look swapped against
-    /// intuition because UIDeviceOrientation names the edge that is now *down*,
-    /// not the direction the top of the phone is pointing.
-    /// Internal rather than private so the mapping can be asserted directly —
-    /// this table is exactly the kind of thing that looks backwards to a reader
-    /// and is easy to silently invert in a future edit.
-    static func stillRotationAngle(for orientation: UIDeviceOrientation) -> CGFloat {
-        switch orientation {
-        case .landscapeLeft:        return 0
-        case .landscapeRight:       return 180
-        case .portraitUpsideDown:   return 270
-        default:                    return 90   // .portrait and any unhandled case
-        }
-    }
+    /// This replaces a hand-built UIDeviceOrientation → angle table that was
+    /// still wrong after two attempts to reason it out by hand — the mapping is
+    /// exactly the kind of thing that is easy to get backwards and hard to
+    /// notice from reading the code, only from a photo that comes out sideways.
+    /// RotationCoordinator is the API Apple ships specifically to replace that
+    /// guesswork; it accounts for camera position and mirroring on its own,
+    /// which is also why this now needs no separate front/back case — the coordinator
+    /// already knows the difference.
+    private var rotationCoordinator: AVCaptureDevice.RotationCoordinator?
 
     /// True where the hardware can hand back a matte. Published so the control
     /// can hide itself on a body that cannot do it rather than fail on tap.
@@ -193,7 +163,6 @@ public final class CameraManager: NSObject, ObservableObject {
         super.init()
 
         loadSettings()
-        startWatchingPhysicalOrientation()
 
         cameraQueue.async { [weak self] in
             self?.initializeCamera()
@@ -204,10 +173,6 @@ public final class CameraManager: NSObject, ObservableObject {
         if let session = captureSession, session.isRunning {
             session.stopRunning()
         }
-        if let orientationObserver {
-            NotificationCenter.default.removeObserver(orientationObserver)
-        }
-        UIDevice.current.endGeneratingDeviceOrientationNotifications()
     }
 
     // MARK: - Settings
@@ -541,6 +506,7 @@ public final class CameraManager: NSObject, ObservableObject {
 
             self.videoDevice = next
             self.isFrontCamera = target == .front
+            self.rotationCoordinator = AVCaptureDevice.RotationCoordinator(device: next, previewLayer: nil)
             self.publishLenses(for: next)
             self.applyDeviceFocus(self.settings)
             self.applyDeviceExposure(self.settings)
@@ -616,6 +582,7 @@ public final class CameraManager: NSObject, ObservableObject {
         self.videoDevice = camera
         self.videoOutput = output
         self.photoOutput = photoOutput
+        self.rotationCoordinator = AVCaptureDevice.RotationCoordinator(device: camera, previewLayer: nil)
 
         publishLenses(for: camera)
         applyDeviceFocus(settings)
@@ -816,12 +783,13 @@ public final class CameraManager: NSObject, ObservableObject {
 
         // The preview connection stays at its fixed portrait angle — the
         // viewfinder is UI-locked and must never visually rotate. The still
-        // connection is different: this is what was missing, and why a photo
-        // taken with the phone physically sideways came out saved sideways.
-        // Front camera is left on its existing fixed angle; only the back
-        // camera's landscape mapping has been verified.
-        if !isFrontCamera, let stillConnection = photoOutput.connection(with: .video) {
-            let angle = Self.stillRotationAngle(for: physicalOrientation)
+        // connection is different: it is read from the coordinator at the moment
+        // of capture, which is why a photo taken with the phone physically
+        // sideways now comes out the right way round regardless of which camera
+        // is active.
+        if let coordinator = rotationCoordinator,
+           let stillConnection = photoOutput.connection(with: .video) {
+            let angle = coordinator.videoRotationAngleForHorizonLevelCapture
             if stillConnection.isVideoRotationAngleSupported(angle) {
                 stillConnection.videoRotationAngle = angle
             }

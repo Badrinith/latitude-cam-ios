@@ -685,53 +685,13 @@ final class PinchZoomTests: XCTestCase {
 }
 
 // MARK: - Landscape capture orientation
-
-final class StillRotationTests: XCTestCase {
-
-    /// The preview connection is fixed at 90 because the viewfinder is UI-locked
-    /// and must never visually rotate. The still connection is not — a photo
-    /// taken with the phone physically sideways has to come out the right way
-    /// round, which needs the still connection's angle to track physical
-    /// orientation independently of the preview's fixed one.
-    func testPortraitMatchesThePreviewsFixedAngle() {
-        XCTAssertEqual(CameraManager.stillRotationAngle(for: .portrait), 90)
-    }
-
-    /// landscapeLeft and landscapeRight look swapped against intuition:
-    /// UIDeviceOrientation names the edge that is now down, not the direction
-    /// the top of the phone points. Getting this backwards is exactly the
-    /// failure being fixed — a landscape photo staying rotated — so it is
-    /// asserted explicitly rather than left to be re-derived from memory.
-    func testLandscapeAnglesAreNotSwapped() {
-        XCTAssertEqual(CameraManager.stillRotationAngle(for: .landscapeLeft), 0)
-        XCTAssertEqual(CameraManager.stillRotationAngle(for: .landscapeRight), 180)
-        XCTAssertNotEqual(
-            CameraManager.stillRotationAngle(for: .landscapeLeft),
-            CameraManager.stillRotationAngle(for: .landscapeRight),
-            "the two landscape orientations must not produce the same photo rotation"
-        )
-    }
-
-    func testUpsideDownIsTheRemainingQuarterTurn() {
-        XCTAssertEqual(CameraManager.stillRotationAngle(for: .portraitUpsideDown), 270)
-    }
-
-    /// faceUp/faceDown/unknown are not handled explicitly because they carry no
-    /// rotation information — the camera keeps the last valid reading rather
-    /// than reaching this function with a meaningless orientation. This pins the
-    /// safe fallback in case that guard is ever bypassed.
-    func testUnknownOrientationFallsBackToPortrait() {
-        XCTAssertEqual(CameraManager.stillRotationAngle(for: .faceUp), 90)
-        XCTAssertEqual(CameraManager.stillRotationAngle(for: .unknown), 90)
-    }
-
-    func testAllFourRotationsAreDistinct() {
-        let angles = Set([
-            CameraManager.stillRotationAngle(for: .portrait),
-            CameraManager.stillRotationAngle(for: .landscapeLeft),
-            CameraManager.stillRotationAngle(for: .landscapeRight),
-            CameraManager.stillRotationAngle(for: .portraitUpsideDown)
-        ])
-        XCTAssertEqual(angles.count, 4)
-    }
-}
+//
+// The hand-built UIDeviceOrientation → angle table this used to pin was still
+// wrong on device after two attempts to reason it out by hand. Still-capture
+// rotation is now read from AVCaptureDevice.RotationCoordinator at the moment
+// of capture, which is Apple's own answer to exactly this problem — it has no
+// pure function left to unit test, since the correct angle depends on a live
+// AVCaptureDevice and changes as the phone physically turns. That makes this
+// part of the photo-output path that is device-only, alongside the rest of
+// AVCapturePhotoOutput — noted in the handoff rather than approximated with a
+// test that would only be checking that a mock returns what the mock returns.

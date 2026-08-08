@@ -250,7 +250,7 @@ final class SingleCopyTests: XCTestCase {
 final class GalleryLayoutPrefTests: XCTestCase {
 
     func testFourLayoutOptionsExist() {
-        XCTAssertEqual(Pref.galleryLayoutOptions, ["Organizer", "Negative", "Archive", "Storyboard"])
+        XCTAssertEqual(Pref.galleryLayoutOptions, ["Organizer", "Contact Roll", "Archive", "Storyboard", "Darkroom"])
     }
 
     func testOrganizerIsTheDefault() {
