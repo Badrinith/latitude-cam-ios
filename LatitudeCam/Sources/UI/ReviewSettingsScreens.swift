@@ -211,7 +211,7 @@ struct SettingsScreen: View {
     @AppStorage(Pref.haptics) private var haptics = true
     @AppStorage(Pref.hapticStrength) private var hapticStrength = "Strong"
     @AppStorage(Pref.galleryLayout) private var galleryLayout = "Organizer"
-    @AppStorage(Pref.viewfinderControls) private var viewfinderControls = "Classic"
+    @AppStorage(Pref.viewfinderControls) private var viewfinderControls = "Film Label"
     @AppStorage(Pref.mirrorToPhotos) private var mirrorToPhotos = true
 
     var body: some View {
@@ -310,6 +310,13 @@ struct SettingsScreen: View {
         }
         // The peaking tint lives in defaults, so the pipeline needs a nudge to
         // pick up a change made here.
+        .onAppear {
+            // "Classic" was the previous persisted value. Its visual treatment
+            // is now Film Label, so migrate the displayed choice once.
+            if viewfinderControls == "Classic" {
+                viewfinderControls = "Film Label"
+            }
+        }
         .onChange(of: peakingColor) { _, _ in app.syncCamera() }
     }
 }

@@ -1,0 +1,310 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Latitude — Viewfinder, rebuilt on the handoff</title>
+
+<style>
+:root{
+  --ink:#0d0d0d; --ink-2:#141414; --raised:#161616; --card:#1c1c1e;
+  --tone:#f2efe8; --amber:#d98a52; --amber-deep:#8a5a34;
+  --plate-top:#302d28; --plate-bot:#1c1a17;
+  --dial-a:#4a453c; --dial-b:#2c2924;
+  --label:#8a8478; --hair:rgba(255,255,255,.12);
+  --mono:ui-monospace,"SF Mono",Menlo,monospace;
+  --ui:-apple-system,system-ui,"Helvetica Neue",sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--ink);color:var(--tone);font-family:var(--ui);padding:52px 24px 96px}
+
+header{max-width:1180px;margin:0 auto 46px;text-align:center}
+.kicker{font-family:var(--mono);font-size:9px;letter-spacing:.42em;color:rgba(255,255,255,.4);text-transform:uppercase}
+h1{font-size:40px;font-weight:700;letter-spacing:-.5px;margin:14px 0 0}
+h1 em{font-style:normal;color:var(--amber)}
+.lede{max-width:640px;margin:16px auto 0;font-size:15px;line-height:1.7;color:rgba(255,255,255,.55)}
+.rule{height:1px;background:linear-gradient(90deg,transparent,var(--hair) 20%,var(--hair) 80%,transparent);margin:26px 0}
+
+.rack{max-width:1180px;margin:0 auto;display:flex;flex-wrap:wrap;gap:56px;justify-content:center;align-items:flex-start}
+.slot{width:393px}
+.slot h2{font-size:15px;font-weight:600;margin-bottom:4px}
+.slot p{font-size:12.5px;line-height:1.6;color:rgba(255,255,255,.45);margin-bottom:16px}
+
+/* ── phone ─────────────────────────────────────────────── */
+.phone{width:393px;height:852px;position:relative;background:var(--ink-2);border-radius:44px;overflow:hidden;
+  border:1px solid rgba(255,255,255,.08);box-shadow:0 30px 70px rgba(0,0,0,.7)}
+.status{position:absolute;top:0;left:0;right:0;height:44px;display:flex;align-items:center;justify-content:space-between;
+  padding:0 28px;font-size:13px;font-weight:600;z-index:9;color:var(--tone)}
+.status .dots{display:flex;gap:5px;align-items:center;font-size:11px}
+
+/* ── 1 · top plate ─────────────────────────────────────── */
+.plate{height:210px;background:linear-gradient(180deg,var(--plate-top),var(--plate-bot));
+  border-bottom:2px solid #0a0a0a;padding:44px 6px 16px;box-sizing:border-box;position:relative}
+/* utility row lives in the plate's 44px head — the handoff leaves it empty,
+   and it is the only place these belong on a metal top plate */
+.utility{position:absolute;top:46px;left:0;right:0;display:flex;justify-content:center;gap:7px}
+.ubtn{height:28px;min-width:28px;padding:0 9px;border-radius:7px;display:flex;align-items:center;justify-content:center;gap:5px;
+  background:rgba(0,0,0,.34);border:1px solid rgba(255,255,255,.09);
+  font-family:var(--mono);font-size:8px;font-weight:600;letter-spacing:.09em;color:#a09a8d;cursor:pointer}
+.ubtn.on{background:var(--amber);color:#161616;border-color:transparent}
+.ubtn svg{width:13px;height:13px;display:block}
+
+.dials{display:flex;align-items:flex-end;justify-content:space-around;height:100%}
+.dwrap{display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer}
+.dial{border-radius:50%;position:relative;
+  background:repeating-conic-gradient(var(--dial-a) 0deg 4deg,var(--dial-b) 4deg 8deg);
+  box-shadow:inset 0 0 0 2px #0d0d0d,0 2px 4px rgba(0,0,0,.5)}
+.dial i{position:absolute;top:2px;left:50%;width:2px;height:8px;background:var(--amber);transform:translateX(-50%)}
+.dial.big{box-shadow:inset 0 0 0 3px #0d0d0d,0 2px 6px rgba(0,0,0,.6)}
+.dial.big i{top:3px;width:3px;height:12px}
+.dial b{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  font:700 9px var(--mono);color:#e8e2d4}
+.dlabel{font:600 7px var(--mono);color:var(--label)}
+.dlabel.hot{color:var(--amber)}
+
+/* ── 2 · feed ──────────────────────────────────────────── */
+.feed{position:absolute;top:210px;bottom:0;left:0;right:0;overflow:hidden}
+.scene{position:absolute;inset:0;
+  background:
+    radial-gradient(120% 70% at 26% 16%, rgba(146,166,178,.34), transparent 60%),
+    linear-gradient(#26313a 0%, #33403f 30%, #4d4437 58%, #6d5433 80%, #7f5e35 100%);
+  filter:saturate(.78) contrast(1.05)}
+.scene::after{content:"";position:absolute;inset:0;
+  background:radial-gradient(80px 80px at 76% 26%, rgba(255,216,152,.5), transparent 70%),
+             linear-gradient(transparent 56%, rgba(0,0,0,.4) 100%)}
+.vig{position:absolute;inset:0;box-shadow:inset 0 0 110px 30px rgba(0,0,0,.6);pointer-events:none}
+
+.glass{background:rgba(0,0,0,.45);backdrop-filter:blur(10px);border-radius:8px}
+.histo{position:absolute;top:14px;left:16px;width:96px;height:40px;display:flex;align-items:flex-end;gap:1.5px;padding:5px 6px}
+.histo div{width:3px;background:var(--amber)}
+.rawpill{position:absolute;top:14px;right:16px;padding:5px 8px;font:600 9px var(--mono);color:var(--amber);cursor:pointer}
+
+/* instrument column — same glass language, under the histogram */
+.instr{position:absolute;top:62px;left:16px;display:flex;flex-direction:column;gap:6px;align-items:flex-start}
+.chip{padding:4px 8px;font:600 8.5px var(--mono);letter-spacing:.06em;color:rgba(242,239,232,.82);display:flex;align-items:center;gap:6px}
+.chip .dot{width:5px;height:5px;border-radius:50%;background:#5ec27a}
+.chip .amber{color:var(--amber)}
+
+.reticle{position:absolute;left:46%;top:44%;width:66px;height:66px;border:1px solid var(--amber);transform:translate(-50%,-50%)}
+
+/* film card stack */
+.stack{position:absolute;left:0;right:0;bottom:150px;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.card{width:58px;height:80px;background:#c9a45c;border-radius:5px;padding:5px;border:2px solid var(--amber);
+  z-index:2;margin:0 -6px;box-shadow:0 6px 16px rgba(0,0,0,.5)}
+.card .sw{width:100%;height:50px;background:#8a7a63;border-radius:3px}
+.card .nm{font:700 7px var(--mono);color:#3a2c14;text-align:center;margin-top:4px}
+.peek{width:36px;height:52px;border-radius:3px;opacity:.4}
+.peek.l{background:#7a7264;transform:scale(.85) translateX(10px)}
+.peek.r{background:#a8927c;transform:scale(.85) translateX(-10px)}
+.hint{position:absolute;left:0;right:0;bottom:130px;text-align:center;font:600 9px var(--mono);color:rgba(255,255,255,.35)}
+
+/* lens selector — the handoff's bottom bar has a "VIDEO" placeholder here;
+   the app has real lenses, so they take that slot rather than being dropped */
+.lenses{position:absolute;left:0;right:0;bottom:96px;display:flex;justify-content:center}
+.lensrow{display:flex;gap:2px;padding:4px;border-radius:999px;background:rgba(0,0,0,.45);backdrop-filter:blur(10px)}
+.lensrow span{min-width:34px;height:28px;padding:0 8px;border-radius:999px;display:flex;align-items:center;justify-content:center;
+  font:600 10px var(--mono);color:rgba(242,239,232,.7);cursor:pointer}
+.lensrow span.on{background:rgba(217,138,82,.22);color:var(--amber)}
+
+/* bottom bar */
+.bar{position:absolute;left:0;right:0;bottom:30px;display:flex;align-items:center;justify-content:center;gap:56px}
+.pro{font:700 12px var(--mono);letter-spacing:.09em;color:rgba(255,255,255,.5);width:62px;height:40px;
+  display:flex;align-items:center;justify-content:center;border-radius:12px;background:rgba(255,255,255,.07);cursor:pointer}
+.pro.on{background:var(--amber);color:#161616}
+.shutter{width:62px;height:62px;border-radius:50%;border:3px solid #fff;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.shutter div{width:50px;height:50px;border-radius:50%;background:#fff}
+.thumb{width:26px;height:26px;border-radius:6px;cursor:pointer;
+  background:linear-gradient(135deg,#6d5433,#33403f);border:1px solid rgba(255,255,255,.18)}
+.slotB{width:62px;display:flex;justify-content:center}
+
+/* pro barrels, second phone */
+.barrels{position:absolute;left:0;right:0;bottom:150px;padding:0 14px;display:flex;flex-direction:column;gap:7px}
+.barrel{height:44px;border-radius:11px;background:linear-gradient(180deg,#2b2b2b,#171717);
+  border:1px solid var(--hair);display:flex;align-items:center;justify-content:space-between;padding:0 13px;
+  font:600 10px var(--mono);color:rgba(242,239,232,.75)}
+.barrel .v{color:var(--amber)}
+.barrel .ticks{flex:1;height:100%;margin:0 12px;background:repeating-linear-gradient(90deg,rgba(255,255,255,.16) 0 1px,transparent 1px 9px)}
+
+/* ── inventory ─────────────────────────────────────────── */
+.inv{max-width:1180px;margin:76px auto 0}
+.inv h2{font-size:22px;font-weight:700;margin-bottom:6px}
+.inv .sub{font-size:13.5px;color:rgba(255,255,255,.5);margin-bottom:24px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;font:600 8.5px var(--mono);letter-spacing:.22em;text-transform:uppercase;
+  color:rgba(255,255,255,.38);padding:0 12px 11px;border-bottom:1px solid var(--hair)}
+td{padding:12px;border-bottom:1px solid rgba(255,255,255,.06);vertical-align:top;line-height:1.55}
+td:first-child{color:var(--tone);font-weight:500;width:24%}
+td:nth-child(2){color:rgba(255,255,255,.62);width:38%}
+td:last-child{color:rgba(255,255,255,.45);font-size:12.2px}
+.tag{display:inline-block;font:600 7.5px var(--mono);letter-spacing:.14em;padding:3px 7px;border-radius:4px;
+  background:rgba(217,138,82,.16);color:var(--amber);margin-right:7px;vertical-align:1px}
+.tag.new{background:rgba(94,194,122,.16);color:#5ec27a}
+footer{max-width:760px;margin:70px auto 0;text-align:center;font-size:13px;line-height:1.8;color:rgba(255,255,255,.42)}
+</style>
+
+<header>
+  <div class="kicker">Latitude Cam · Handoff Adoption</div>
+  <h1>The viewfinder, rebuilt on the <em>new design</em></h1>
+  <div class="rule"></div>
+  <p class="lede">Every token from the handoff — the 210px metal top plate, the five knurled dials,
+  the film-stock card carousel, the glass HUD — with every control the app already has folded into it.
+  Nothing was dropped to make it fit.</p>
+</header>
+
+<div class="rack">
+
+  <!-- ══ standard ══ -->
+  <div class="slot">
+    <h2>Viewfinder — standard</h2>
+    <p>The handoff screen exactly, plus the app's real instruments and switches placed in its own visual language.</p>
+    <div class="phone">
+      <div class="status"><span>9:41</span><span class="dots">▮▮▮ ▾ ▰</span></div>
+
+      <div class="plate">
+        <div class="utility">
+          <div class="ubtn" title="Flip camera">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h3l2-2h6l2 2h3v12H4z"/><circle cx="12" cy="13" r="3.2"/></svg>
+          </div>
+          <div class="ubtn on" title="Portrait">PORTRAIT</div>
+          <div class="ubtn" title="Grid">GRID</div>
+          <div class="ubtn" title="Settings">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9L17 7M7 17l-2.1 2.1"/></svg>
+          </div>
+        </div>
+
+        <div class="dials">
+          <div class="dwrap"><div class="dial" style="width:44px;height:44px"><i style="transform:translateX(-50%) rotate(-38deg);transform-origin:50% 20px"></i></div><span class="dlabel">f/2.8</span></div>
+          <div class="dwrap"><div class="dial" style="width:50px;height:50px"><i style="height:9px;transform:translateX(-50%) rotate(24deg);transform-origin:50% 23px"></i></div><span class="dlabel">ISO 400</span></div>
+          <div class="dwrap"><div class="dial big" style="width:70px;height:70px"><i style="transform:translateX(-50%) rotate(-14deg);transform-origin:50% 32px"></i><b>1/250</b></div><span class="dlabel hot">SHUTTER</span></div>
+          <div class="dwrap"><div class="dial" style="width:50px;height:50px"><i style="height:9px;transform:translateX(-50%) rotate(52deg);transform-origin:50% 23px"></i></div><span class="dlabel">5600K</span></div>
+          <div class="dwrap"><div class="dial" style="width:44px;height:44px"><i style="transform:translateX(-50%) rotate(12deg);transform-origin:50% 20px"></i></div><span class="dlabel">+0.3EV</span></div>
+        </div>
+      </div>
+
+      <div class="feed">
+        <div class="scene"></div>
+
+        <div class="histo glass"><div style="height:35%"></div><div style="height:60%"></div><div style="height:85%"></div><div style="height:100%"></div><div style="height:65%"></div><div style="height:45%"></div></div>
+        <div class="rawpill glass">RAW · 3:2</div>
+
+        <div class="instr">
+          <div class="chip glass"><span class="dot"></span>READY · 48MP</div>
+          <div class="chip glass">MATRIX <span class="amber">·  EV +0.3</span></div>
+          <div class="chip glass"><span class="amber">1.0×</span></div>
+        </div>
+
+        <div class="reticle"></div>
+
+        <div class="stack">
+          <div class="peek l"></div>
+          <div class="card"><div class="sw"></div><div class="nm">PORCELAIN</div></div>
+          <div class="peek r"></div>
+        </div>
+        <div class="hint">‹ TAP TO CHANGE STOCK ›</div>
+
+        <div class="lenses">
+          <div class="lensrow">
+            <span>.5×</span><span class="on">1×</span><span>2×</span><span>5×</span>
+          </div>
+        </div>
+
+        <div class="bar">
+          <div class="pro">PRO</div>
+          <div class="shutter"><div></div></div>
+          <div class="slotB"><div class="thumb"></div></div>
+        </div>
+
+        <div class="vig"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ pro ══ -->
+  <div class="slot">
+    <h2>Viewfinder — PRO engaged</h2>
+    <p>PRO swaps the film carousel for the barrel cluster. The dials stay live above, so the plate is always the reading.</p>
+    <div class="phone">
+      <div class="status"><span>9:41</span><span class="dots">▮▮▮ ▾ ▰</span></div>
+
+      <div class="plate">
+        <div class="utility">
+          <div class="ubtn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h3l2-2h6l2 2h3v12H4z"/><circle cx="12" cy="13" r="3.2"/></svg>
+          </div>
+          <div class="ubtn">PORTRAIT</div>
+          <div class="ubtn">GRID</div>
+          <div class="ubtn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9L17 7M7 17l-2.1 2.1"/></svg>
+          </div>
+        </div>
+        <div class="dials">
+          <div class="dwrap"><div class="dial" style="width:44px;height:44px"><i style="transform:translateX(-50%) rotate(-38deg);transform-origin:50% 20px"></i></div><span class="dlabel">f/2.8</span></div>
+          <div class="dwrap"><div class="dial" style="width:50px;height:50px"><i style="height:9px;transform:translateX(-50%) rotate(60deg);transform-origin:50% 23px"></i></div><span class="dlabel hot">ISO 800</span></div>
+          <div class="dwrap"><div class="dial big" style="width:70px;height:70px"><i style="transform:translateX(-50%) rotate(-52deg);transform-origin:50% 32px"></i><b>1/60</b></div><span class="dlabel hot">SHUTTER</span></div>
+          <div class="dwrap"><div class="dial" style="width:50px;height:50px"><i style="height:9px;transform:translateX(-50%) rotate(52deg);transform-origin:50% 23px"></i></div><span class="dlabel">5600K</span></div>
+          <div class="dwrap"><div class="dial" style="width:44px;height:44px"><i style="transform:translateX(-50%) rotate(12deg);transform-origin:50% 20px"></i></div><span class="dlabel">+0.3EV</span></div>
+        </div>
+      </div>
+
+      <div class="feed">
+        <div class="scene"></div>
+        <div class="histo glass"><div style="height:52%"></div><div style="height:78%"></div><div style="height:100%"></div><div style="height:84%"></div><div style="height:48%"></div><div style="height:30%"></div></div>
+        <div class="rawpill glass">RAW · 3:2</div>
+
+        <div class="instr">
+          <div class="chip glass"><span class="dot"></span>READY · 48MP</div>
+          <div class="chip glass">SPOT <span class="amber">· MANUAL</span></div>
+          <div class="chip glass"><span class="amber">2.0×</span></div>
+        </div>
+
+        <div class="barrels">
+          <div class="barrel"><span>FOCUS</span><span class="ticks"></span><span class="v">1.4m</span></div>
+          <div class="barrel"><span>METERING</span><span class="ticks"></span><span class="v">SPOT</span></div>
+          <div class="barrel"><span>GRAIN</span><span class="ticks"></span><span class="v">72</span></div>
+        </div>
+
+        <div class="lenses">
+          <div class="lensrow"><span>.5×</span><span>1×</span><span class="on">2×</span><span>5×</span></div>
+        </div>
+
+        <div class="bar">
+          <div class="pro on">PRO</div>
+          <div class="shutter"><div></div></div>
+          <div class="slotB"><div class="thumb"></div></div>
+        </div>
+        <div class="vig"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ inventory ══ -->
+<div class="inv">
+  <h2>Every control, and where it went</h2>
+  <p class="sub">The handoff's viewfinder has five dials, a film carousel and a three-item bottom bar.
+  The app has more than that. Nothing was cut to make the two agree — each existing control took a place
+  in the new language instead.</p>
+  <table>
+    <thead><tr><th>Control today</th><th>Where it lands</th><th>Why there</th></tr></thead>
+    <tbody>
+      <tr><td>Shutter, ISO, White&nbsp;Balance, Exposure</td><td><span class="tag">DIAL</span>Four of the five knurled dials on the top plate</td><td>Exactly the handoff's spec. Each becomes a real rotary control, not a sheet launcher — the sheet stays as the expanded view.</td></tr>
+      <tr><td>Aperture <span class="tag new">WAS BURIED</span></td><td><span class="tag">DIAL</span>Fifth dial, far left, f/2.8</td><td>The handoff gives aperture its own dial. It exists in AppState already but had no face on the viewfinder — this is a gain, not a port.</td></tr>
+      <tr><td>PRO toggle</td><td><span class="tag">BAR</span>Left slot of the bottom bar</td><td>The handoff parks a "VIDEO" placeholder left of the shutter. PRO is the real thing that belongs in a permanent slot.</td></tr>
+      <tr><td>Pro barrel cluster</td><td><span class="tag">FEED</span>Replaces the film carousel while PRO is lit</td><td>Both want the same band above the bar, and they are never wanted at once — one is framing, the other is setting up.</td></tr>
+      <tr><td>Film selector (two-tier)</td><td><span class="tag">FEED</span>Film-stock card carousel</td><td>The handoff's replacement for the flat strip. Swipes between stocks; tap opens Film&nbsp;Sim.</td></tr>
+      <tr><td>Lens selector</td><td><span class="tag">FEED</span>Glass segmented row above the bar</td><td>Real lenses outrank the "VIDEO" placeholder they displace, and the glass pill is the handoff's own HUD material.</td></tr>
+      <tr><td>Flip camera · Portrait · Settings</td><td><span class="tag">PLATE</span>Utility row in the plate's 44px head</td><td>The handoff leaves that band empty above the dials. A metal top plate is exactly where body switches live on a real camera.</td></tr>
+      <tr><td>Aspect ratio</td><td><span class="tag">HUD</span>The "RAW · 3:2" pill</td><td>Already in the handoff and already shows the aspect. Tap cycles, press-and-hold opens Settings.</td></tr>
+      <tr><td>Grid / composition</td><td><span class="tag">PLATE</span>Utility row</td><td>A view aid, grouped with the other view aids rather than with exposure.</td></tr>
+      <tr><td>Histogram</td><td><span class="tag">HUD</span>96×40 glass panel, top-left</td><td>Specified in the handoff, unchanged.</td></tr>
+      <tr><td>Meter readout · Status pill · Zoom</td><td><span class="tag">HUD</span>Glass chip column under the histogram</td><td>The handoff defines the glass pill as its HUD chip. These are three more of them, stacked so the frame's centre stays clear.</td></tr>
+      <tr><td>Gallery thumbnail</td><td><span class="tag">BAR</span>Right of the shutter, 26×26</td><td>Handoff spec, unchanged.</td></tr>
+      <tr><td>Release</td><td><span class="tag">BAR</span>62px ring + 50px fill, centre</td><td>Handoff spec. Still the one thing that never moves.</td></tr>
+      <tr><td>Tap-to-meter · Pinch-to-zoom · RAW progress · Save toast</td><td><span class="tag">FEED</span>Unchanged over the feed</td><td>Behaviours, not chrome — the redesign does not touch them.</td></tr>
+      <tr><td>Control style (Classic · Bellows · Crown)</td><td><span class="tag">SETTINGS</span>Joined by a fourth: "Top Plate"</td><td>This becomes another selectable deck, so nothing you already had stops working.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<footer>
+  Two deliberate departures from the handoff, both because the app is real and the reference is not:
+  the "VIDEO" placeholder becomes the lens selector, and the empty band above the dials becomes the
+  body switches. Everything else follows the tokens as written.
+</footer>

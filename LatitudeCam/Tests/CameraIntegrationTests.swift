@@ -858,15 +858,47 @@ final class KnobMathTests: XCTestCase {
 
 final class ViewfinderControlStyleTests: XCTestCase {
 
-    func testThreeStylesAreOffered() {
-        XCTAssertEqual(Pref.viewfinderControlOptions, ["Classic", "Bellows Drawer", "Crown"])
+    func testEveryStyleIsOffered() {
+        XCTAssertEqual(Pref.viewfinderControlOptions,
+                       ["Film Label", "Bellows Drawer", "Crown", "Top Plate"])
     }
 
-    /// Classic is what the app already had. A new style must never become the
-    /// default by accident — that would change every existing user's camera.
-    func testClassicIsTheDefault() {
+    /// Top Plate is the only style that replaces the chrome outright rather
+    /// than hanging a deck beneath it, so it is the only one that has to inset
+    /// the picture. If the band height and that inset ever disagree, the frame
+    /// sits under opaque metal and metering lands off the thumb.
+    func testTheTopPlateBandHasAHeightToInsetBy() {
+        XCTAssertEqual(TopPlateBand.height, 210, "the handoff specifies a 210pt plate")
+    }
+
+    /// Every dial on the plate drives a real ladder. A zero-stop dial divides by
+    /// zero in the detent maths and never clicks.
+    func testEveryPlateDialHasALadder() {
+        XCTAssertGreaterThan(AppState.apertureStops.count, 1)
+        XCTAssertGreaterThan(AppState.isoStops.count, 1)
+        XCTAssertGreaterThan(AppState.shutterStops.count, 1)
+        XCTAssertGreaterThan(AppState.whiteBalanceStops.count, 1)
+        XCTAssertGreaterThan(AppState.evDetents, 1)
+    }
+
+    /// Aperture is stored as a ladder index while every other dial is 0…1, so
+    /// the plate bridges it. A round trip that drifts would walk the aperture
+    /// a stop every time the view rebuilt.
+    func testTheApertureBridgeRoundTrips() {
+        let last = AppState.apertureStops.count - 1
+        for index in 0...last {
+            let normalised = Double(index) / Double(last)
+            let back = min(last, max(0, Int((normalised * Double(last)).rounded())))
+            XCTAssertEqual(back, index, "aperture index \(index) did not survive the round trip")
+        }
+    }
+
+    /// Film Label is the chosen primary deck. Existing Classic preferences are
+    /// migrated by SettingsScreen, so a fresh install and an upgraded install
+    /// both land on the same presentation.
+    func testFilmLabelIsTheDefault() {
         UserDefaults.standard.removeObject(forKey: Pref.viewfinderControls)
-        XCTAssertEqual(Pref.string(Pref.viewfinderControls, default: "Classic"), "Classic")
+        XCTAssertEqual(Pref.string(Pref.viewfinderControls, default: "Film Label"), "Film Label")
     }
 
     /// The crown cycles through every target and comes back round, so no
@@ -895,5 +927,77 @@ final class ViewfinderControlStyleTests: XCTestCase {
     func testTheStowedDrawerLeavesAHandle() {
         XCTAssertGreaterThanOrEqual(BellowsDrawer.lip, 28, "too little left to grab")
         XCTAssertLessThan(BellowsDrawer.lip, BellowsDrawer.height, "the drawer never stows")
+    }
+}
+
+// MARK: - Leaf shutter
+
+/// Five blades that fail to meet leave a hole in the middle of a shut shutter —
+/// which looks like a rendering bug and is really arithmetic. Pinned here.
+final class LeafShutterGeometryTests: XCTestCase {
+
+    func testAnOddBladeCountReadsAsMechanism() {
+        XCTAssertEqual(LeafShutterGeometry.bladeCount % 2, 1,
+                       "an even blade count reads as a flower, not a shutter")
+    }
+
+    /// The property the whole drawing depends on: fully closed means no opening
+    /// left at all.
+    func testFullClosureLeavesNoOpening() {
+        XCTAssertEqual(LeafShutterGeometry.apertureRadius(closure: 1), 0, accuracy: 0.0001)
+    }
+
+    func testFullyOpenIsTheWholeAperture() {
+        XCTAssertEqual(LeafShutterGeometry.apertureRadius(closure: 0), 1, accuracy: 0.0001)
+    }
+
+    /// Closing must never widen the opening — an easing curve that overshoots
+    /// would make the shutter flare open mid-fire.
+    func testTheApertureOnlyEverNarrowsAsItCloses() {
+        var previous = LeafShutterGeometry.apertureRadius(closure: 0)
+        for step in 1...40 {
+            let radius = LeafShutterGeometry.apertureRadius(closure: Double(step) / 40)
+            XCTAssertLessThanOrEqual(radius, previous + 0.0001, "the aperture widened while closing")
+            previous = radius
+        }
+    }
+
+    func testTheApertureNeverLeavesItsBounds() {
+        for step in -10...50 {
+            let radius = LeafShutterGeometry.apertureRadius(closure: Double(step) / 40)
+            XCTAssertTrue((0...1).contains(radius), "radius \(radius) is outside the button")
+        }
+    }
+
+    /// Each blade starts on its own seat, evenly spaced around the ring. Two
+    /// blades sharing a seat leaves a permanent gap opposite them.
+    func testBladesAreEvenlySeatedWhenOpen() {
+        let seats = (0..<LeafShutterGeometry.bladeCount).map {
+            LeafShutterGeometry.bladeAngle(index: $0, closure: 0)
+        }
+        XCTAssertEqual(Set(seats).count, LeafShutterGeometry.bladeCount, "two blades share a seat")
+
+        let spacing = 360.0 / Double(LeafShutterGeometry.bladeCount)
+        for (i, seat) in seats.enumerated() {
+            XCTAssertEqual(seat, Double(i) * spacing, accuracy: 0.001)
+        }
+    }
+
+    /// Every blade sweeps the same distance, and it is at least its own share of
+    /// the circle — less than that and the blades cannot overlap into a seal.
+    func testEveryBladeSweepsEnoughToOverlapItsNeighbour() {
+        let share = 360.0 / Double(LeafShutterGeometry.bladeCount)
+        for index in 0..<LeafShutterGeometry.bladeCount {
+            let travel = LeafShutterGeometry.bladeAngle(index: index, closure: 1)
+                - LeafShutterGeometry.bladeAngle(index: index, closure: 0)
+            XCTAssertGreaterThan(travel, share, "blade \(index) cannot reach its neighbour")
+        }
+    }
+
+    func testClosureIsClampedRatherThanExtrapolated() {
+        XCTAssertEqual(LeafShutterGeometry.apertureRadius(closure: -5),
+                       LeafShutterGeometry.apertureRadius(closure: 0), accuracy: 0.0001)
+        XCTAssertEqual(LeafShutterGeometry.apertureRadius(closure: 5),
+                       LeafShutterGeometry.apertureRadius(closure: 1), accuracy: 0.0001)
     }
 }

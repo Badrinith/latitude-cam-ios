@@ -210,7 +210,7 @@ struct ViewfinderScreen: View {
     @AppStorage(Pref.aspect) private var aspect = "3:2"
     @AppStorage(Pref.histogramStyle) private var histogramStyle = "Luma"
     @AppStorage(Pref.rawProgressDesign) private var rawProgressDesign = "01 Aperture Bloom"
-    @AppStorage(Pref.viewfinderControls) private var controlStyle = "Classic"
+    @AppStorage(Pref.viewfinderControls) private var controlStyle = "Film Label"
 
     @StateObject private var orientation = DeviceOrientation()
     @State private var reticle: CGPoint?
@@ -224,48 +224,57 @@ struct ViewfinderScreen: View {
         ZStack {
             Ink.base.ignoresSafeArea()
 
-            CameraPreview(frames: app.cameraManager.frames)
-                .contentShape(Rectangle())
-                // A spatial tap rather than a zero-distance drag: a drag gesture
-                // fires on the first finger of a pinch too, so metering used to
-                // jump to wherever the pinch began.
-                .onTapGesture { location in meter(at: location) }
-                .gesture(
-                    MagnificationGesture()
-                        .onChanged { value in
-                            // Relative to the last reading, not to the start of the
-                            // gesture — otherwise the zoom snaps back to where the
-                            // pinch began every time the scale is re-read.
-                            let step = value / lastPinch
-                            lastPinch = value
-                            app.pinchZoom(by: step)
-                        }
-                        .onEnded { _ in
-                            lastPinch = 1
-                            Haptics.detent()
-                        }
-                )
+            // Grouped so Top Plate can inset the whole picture below its metal
+            // band in one place. The plate is opaque — in the handoff the frame
+            // starts under it rather than running behind it — and the mask, the
+            // grid, the measured size and the reticle all have to agree about
+            // where the picture actually is, or metering lands off the thumb.
+            ZStack {
+                CameraPreview(frames: app.cameraManager.frames)
+                    .contentShape(Rectangle())
+                    // A spatial tap rather than a zero-distance drag: a drag gesture
+                    // fires on the first finger of a pinch too, so metering used to
+                    // jump to wherever the pinch began.
+                    .onTapGesture { location in meter(at: location) }
+                    .gesture(
+                        MagnificationGesture()
+                            .onChanged { value in
+                                // Relative to the last reading, not to the start of the
+                                // gesture — otherwise the zoom snaps back to where the
+                                // pinch began every time the scale is re-read.
+                                let step = value / lastPinch
+                                lastPinch = value
+                                app.pinchZoom(by: step)
+                            }
+                            .onEnded { _ in
+                                lastPinch = 1
+                                Haptics.detent()
+                            }
+                    )
 
-            AspectMask(aspect: aspect)
+                AspectMask(aspect: aspect)
 
-            CompositionGrid(style: gridStyle).ignoresSafeArea()
+                CompositionGrid(style: gridStyle)
 
-            GeometryReader { geo in
-                Color.clear
-                    .onAppear { lastPreviewSize = geo.size }
-                    .onChange(of: geo.size) { _, size in lastPreviewSize = size }
+                GeometryReader { geo in
+                    Color.clear
+                        .onAppear { lastPreviewSize = geo.size }
+                        .onChange(of: geo.size) { _, size in lastPreviewSize = size }
+                }
+                .allowsHitTesting(false)
+
+                if let reticle {
+                    Rectangle()
+                        .strokeBorder(Accent.amber, lineWidth: 1)
+                        .frame(width: 66, height: 66)
+                        .position(reticle)
+                        .allowsHitTesting(false)
+                        .transition(.scale(scale: 1.35).combined(with: .opacity))
+                        .zIndex(3)
+                }
             }
-            .allowsHitTesting(false)
-
-            if let reticle {
-                Rectangle()
-                    .strokeBorder(Accent.amber, lineWidth: 1)
-                    .frame(width: 66, height: 66)
-                    .position(reticle)
-                    .allowsHitTesting(false)
-                    .transition(.scale(scale: 1.35).combined(with: .opacity))
-                    .zIndex(3)
-            }
+            .padding(.top, controlStyle == "Top Plate" ? TopPlateBand.height : 0)
+            .ignoresSafeArea(edges: controlStyle == "Top Plate" ? [] : .all)
 
             chrome
 
@@ -315,7 +324,45 @@ struct ViewfinderScreen: View {
     /// holding the phone and made each one 32pt — small for a control you reach
     /// for while framing. A row along the top is clear of the grip, and the
     /// buttons grow to 42.
-    private var chrome: some View {
+    @ViewBuilder private var chrome: some View {
+        if controlStyle == "Top Plate" {
+            topPlateChrome
+        } else {
+            classicChrome
+        }
+    }
+
+    /// The handoff's screen. Unlike the other three styles this is not a deck
+    /// hung under the existing chrome — the metal plate replaces the glass
+    /// strip outright, so the whole frame is arranged here rather than layered
+    /// over the classic one.
+    private var topPlateChrome: some View {
+        VStack(spacing: 0) {
+            TopPlateBand(
+                rotation: orientation.angle,
+                onSettings: { app.go(.settings) },
+                onCycleGrid: cycleGrid
+            )
+
+            TopPlateDeck(
+                rotation: orientation.angle,
+                histogramStyle: histogramStyle,
+                aspect: aspect,
+                onCycleAspect: cycleAspect,
+                onSettings: { app.go(.settings) },
+                onFilmSim: { app.go(.filmSim) },
+                onLibrary: { app.go(.library) },
+                onFire: fire
+            )
+            .background(alignment: .bottom) {
+                deckShade.frame(height: 260)
+            }
+        }
+        .ignoresSafeArea(edges: .top)
+        .animation(.spring(response: 0.34, dampingFraction: 0.84), value: app.proMode)
+    }
+
+    private var classicChrome: some View {
         VStack(spacing: 9) {
             controlRow
                 .padding(.top, 6)
@@ -430,7 +477,9 @@ struct ViewfinderScreen: View {
     private static let clusterBand: CGFloat = BarrelCluster.expandedHeight + 18
     /// Exposed so the relationship above can be asserted rather than eyeballed.
     static var clusterBandHeight: CGFloat { clusterBand }
-    private static let filmBand: CGFloat = 106
+    // Film Label expands to reveal the same family and stock rails. Reserve its
+    // full height even while closed so the shutter never shifts or overlaps.
+    private static let filmBand: CGFloat = 128
     private static let shutterBand: CGFloat = 80
     private static let bandInset: CGFloat = 12
 
@@ -449,7 +498,43 @@ struct ViewfinderScreen: View {
         switch controlStyle {
         case "Bellows Drawer": bellowsDeck
         case "Crown": crownDeck
-        default: classicDeck
+        default: filmLabelDeck
+        }
+    }
+
+    /// 11 · The selected stock rests as a tactile label below the shutter. The
+    /// two-tier selector stays hidden until the label is tapped, so it never
+    /// competes with the live photograph.
+    private var filmLabelDeck: some View {
+        GeometryReader { geo in
+            let size = geo.size
+            ZStack(alignment: .topLeading) {
+                deckShade
+                    .frame(height: 190)
+                    .frame(maxHeight: .infinity, alignment: .bottom)
+                    .opacity(orientation.edge == .bottom ? 1 : 0)
+
+                if app.proMode {
+                    band(BarrelCluster().frame(maxHeight: .infinity, alignment: .bottom),
+                         thickness: Self.clusterBand,
+                         centre: clusterCentre(in: size), length: size.width)
+                        .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .bottom)))
+                }
+
+                band(
+                    FilmLabelSelector(onOpenDetail: { app.go(.filmSim) }),
+                    thickness: Self.filmBand,
+                    centre: filmCentre(in: size),
+                    length: size.width
+                )
+
+                shutterRow
+                    .frame(width: size.width, height: Self.shutterBand)
+                    .position(
+                        x: size.width / 2,
+                        y: size.height - Self.bandInset - Self.filmBand - Self.shutterBand / 2
+                    )
+            }
         }
     }
 
@@ -655,6 +740,15 @@ struct ViewfinderScreen: View {
             try? await Task.sleep(for: .seconds(1.4))
             withAnimation(.easeOut(duration: 0.3)) { reticle = nil }
         }
+    }
+
+    /// Grid has no face of its own on the classic chrome — it lives in
+    /// Settings. The plate's utility row gives it one, so it needs a cycler.
+    private func cycleGrid() {
+        Haptics.detent()
+        let options = Pref.gridOptions
+        let next = (options.firstIndex(of: gridStyle).map { $0 + 1 } ?? 0) % options.count
+        withAnimation(.snappy(duration: 0.2)) { gridStyle = options[next] }
     }
 
     private func cycleAspect() {

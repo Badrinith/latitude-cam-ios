@@ -238,10 +238,9 @@ enum Pref {
     /// Archive (drawers by family), Storyboard (unequal panels, newest gets the
     /// big one), and Darkroom (prints clipped to a line).
     static let galleryLayoutOptions = ["Organizer", "Contact Roll", "Archive", "Storyboard", "Darkroom"]
-    /// How the viewfinder presents its settings. Classic is the barrel deck the
-    /// app shipped with; the other two put everything away until asked and hand
-    /// it back as something you turn.
-    static let viewfinderControlOptions = ["Classic", "Bellows Drawer", "Crown"]
+    /// How the viewfinder presents its settings. Film Label keeps the active
+    /// stock readable below the shutter and opens its selector only on intent.
+    static let viewfinderControlOptions = ["Film Label", "Bellows Drawer", "Crown", "Top Plate"]
 
     static func string(_ key: String, default fallback: String) -> String {
         UserDefaults.standard.string(forKey: key) ?? fallback

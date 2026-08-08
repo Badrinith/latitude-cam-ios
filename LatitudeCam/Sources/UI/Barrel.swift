@@ -350,6 +350,111 @@ struct FilmTwoTier: View {
     private var stocks: [FilmPreset] { AppState.stocks(in: app.selectedFilm.family) }
 }
 
+// MARK: - Film label
+//
+// The quiet state is a paper stock label, not another always-open control. It
+// keeps the viewfinder clear while still making the selected simulation legible
+// at a glance. Opening the label retains the same two-stage family -> stock
+// selection model as FilmTwoTier, so this is a presentation change, not a
+// second film-selection system.
+
+struct FilmLabelSelector: View {
+    @EnvironmentObject var app: AppState
+    var onOpenDetail: () -> Void
+
+    @State private var isOpen = false
+
+    var body: some View {
+        VStack(spacing: isOpen ? 7 : 0) {
+            Button {
+                Haptics.toggle()
+                withAnimation(.spring(response: 0.34, dampingFraction: 0.84)) {
+                    isOpen.toggle()
+                }
+            } label: {
+                HStack(spacing: 10) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(app.selectedFilm.name.uppercased())
+                            .font(.mono(11, .bold))
+                            .kerning(1.1)
+                            .foregroundStyle(Ink.base)
+                        Text(app.selectedFilm.blurb.uppercased())
+                            .font(.mono(6.5, .medium))
+                            .kerning(0.7)
+                            .foregroundStyle(Ink.base.opacity(0.72))
+                            .lineLimit(1)
+                    }
+
+                    Spacer(minLength: 8)
+
+                    Image(systemName: isOpen ? "chevron.down" : "chevron.up")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(Ink.base.opacity(0.75))
+                }
+                .padding(.horizontal, 13)
+                .frame(height: 38)
+                .background {
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .fill(app.selectedFilm.engraved)
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                .strokeBorder(Accent.amber.opacity(0.76), lineWidth: 0.8)
+                        }
+                }
+                .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Film simulation")
+            .accessibilityValue(app.selectedFilm.name)
+
+            if isOpen {
+                VStack(spacing: 5) {
+                    Barrel(
+                        values: AppState.filmFamilies.map { $0.uppercased() },
+                        index: Binding(
+                            get: { app.familyIndex },
+                            set: { app.familyIndex = $0 }
+                        ),
+                        height: 24,
+                        pitch: 100,
+                        pointsPerStop: 50,
+                        radius: 6
+                    )
+
+                    Barrel(
+                        values: stocks.map { $0.name.uppercased() },
+                        index: Binding(
+                            get: { app.stockIndex },
+                            set: { app.stockIndex = $0 }
+                        ),
+                        height: 34,
+                        pitch: 98,
+                        pointsPerStop: 48,
+                        radius: 8,
+                        tints: stocks.map(\.engraved)
+                    )
+
+                    Button {
+                        Haptics.tap()
+                        onOpenDetail()
+                    } label: {
+                        Text("OPEN FILM LIBRARY")
+                            .font(.mono(7, .semibold))
+                            .kerning(1.1)
+                            .foregroundStyle(Tone.quaternary)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .padding(.horizontal, 18)
+        .animation(.spring(response: 0.3, dampingFraction: 0.82), value: app.selectedFilm.family)
+    }
+
+    private var stocks: [FilmPreset] { AppState.stocks(in: app.selectedFilm.family) }
+}
+
 // MARK: - Pro cluster
 //
 // Collapsed to chips above the shutter; one tap inflates the chosen control into
