@@ -182,6 +182,7 @@ enum Pref {
     static let captureFormat = "settings.captureFormat"
     static let captureResolution = "settings.captureResolution"
     static let proMode = "settings.proMode"
+    static let galleryLayout = "settings.galleryLayout"
     /// Set once the entry flow has been completed, so later cold launches go
     /// straight from the splash to the viewfinder.
     static let onboarded = "app.onboarded"
@@ -194,6 +195,12 @@ enum Pref {
     static let hapticStrengthOptions = ["Subtle", "Standard", "Strong"]
     static let captureFormatOptions = ["RAW Only", "JPEG Only", "RAW + JPEG"]
     static let captureResolutionOptions = ["4MP", "8MP", "12MP", "Full"]
+    /// Organizer is the grid every photo app has — everything visible at once,
+    /// no metaphor to learn. The other three are the picks from the fifteen
+    /// gallery concepts: Negative (film-true, tap flips to positive), Archive
+    /// (drawers by family) and Storyboard (unequal panels, newest gets the big
+    /// one).
+    static let galleryLayoutOptions = ["Organizer", "Negative", "Archive", "Storyboard"]
 
     static func string(_ key: String, default fallback: String) -> String {
         UserDefaults.standard.string(forKey: key) ?? fallback

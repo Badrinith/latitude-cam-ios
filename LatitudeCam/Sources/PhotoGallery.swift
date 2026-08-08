@@ -10,7 +10,7 @@ import UIKit
 import ImageIO
 import Photos
 
-public final class PhotoGallery: ObservableObject {
+public final class PhotoGallery: NSObject, ObservableObject {
 
     public struct Photo: Identifiable, Equatable {
         public let id: String
@@ -37,8 +37,27 @@ public final class PhotoGallery: ObservableObject {
     private let fileManager = FileManager.default
     private let ioQueue = DispatchQueue(label: "com.latitude.gallery", qos: .utility)
 
-    public init() {
+    public override init() {
+        super.init()
         // Disk I/O never blocks launch — the grid fills in when it is ready.
+        ioQueue.async { [weak self] in self?.loadPhotos() }
+        // Two things this alone does not cover: PhotoGallery is built once at
+        // launch, but Photos permission is normally granted later, on first
+        // capture — a launch-time load found nothing and nothing ever asked
+        // again, so the roll stayed empty for the rest of the session. And a
+        // photo taken by any other app, or one still arriving from iCloud, would
+        // never appear either. This observer reloads on every library change,
+        // which covers all three.
+        PHPhotoLibrary.shared().register(self)
+    }
+
+    deinit {
+        PHPhotoLibrary.shared().unregisterChangeObserver(self)
+    }
+
+    /// Re-reads the album. Safe to call as often as needed — it always merges
+    /// against whatever is already showing rather than flashing the grid empty.
+    public func reload() {
         ioQueue.async { [weak self] in self?.loadPhotos() }
     }
 
@@ -148,6 +167,9 @@ public final class PhotoGallery: ObservableObject {
     /// fetches our own album back.
     private func loadPhotos() {
         let status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+        // .notDetermined is not a failure — permission is normally granted later,
+        // on first capture, and the library-change observer re-runs this once it
+        // is. Nothing to do yet, but nothing wrong either.
         guard status == .authorized || status == .limited else { return }
         guard let album = PhotoExporter.album() else { return }
 
@@ -155,58 +177,110 @@ public final class PhotoGallery: ObservableObject {
         options.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
         let assets = PHAssets.fetch(in: album, options: options)
 
+        // Grid-sized thumbnails only, and one request per asset rather than two.
+        // The 1280pt "roll" copy used to be decoded synchronously for every
+        // photo in the album before the grid could show a single one — on any
+        // real-sized roll that read as the gallery having frozen. It is now
+        // decoded on demand, the moment a specific photo is actually opened.
         let manager = PHImageManager.default()
         let request = PHImageRequestOptions()
-        request.isSynchronous = true
-        request.deliveryMode = .highQualityFormat
+        request.isSynchronous = false
+        request.deliveryMode = .opportunistic
         request.isNetworkAccessAllowed = true
+        request.resizeMode = .fast
 
-        var loaded: [Photo] = []
+        // PHImageManager's completion handler can land on any thread and can
+        // fire more than once per request (opportunistic delivery sends a fast
+        // low-quality pass before the final one) — collect under a lock and
+        // publish as a batch rather than racing the main-queue update.
+        let resultLock = NSLock()
+        var results: [String: Photo] = [:]
+        let group = DispatchGroup()
+
         for asset in assets {
             // The filename carries the shoot settings; a frame taken by anything
             // else lands in the album without one and gets sensible defaults.
             let name = PHAssetResource.assetResources(for: asset)
                 .first?.originalFilename ?? ""
-            let id = (name as NSString).deletingPathExtension
-            let meta = Self.parseID(id)
+            let rawID = (name as NSString).deletingPathExtension
+            let id = rawID.isEmpty ? asset.localIdentifier : rawID
+            let meta = Self.parseID(rawID)
 
-            var full: UIImage?
-            var small: UIImage?
-            manager.requestImage(
-                for: asset,
-                targetSize: CGSize(width: Self.inMemoryEdge, height: Self.inMemoryEdge),
-                contentMode: .aspectFit, options: request
-            ) { image, _ in full = image }
+            group.enter()
             manager.requestImage(
                 for: asset,
                 targetSize: CGSize(width: Self.gridEdge, height: Self.gridEdge),
                 contentMode: .aspectFit, options: request
-            ) { image, _ in small = image }
+            ) { [weak self] image, info in
+                guard let self else { return }
+                defer {
+                    // isDegraded marks the fast opportunistic pass; only leave the
+                    // group once the final image has arrived, or a genuinely
+                    // failed request would hang it open forever.
+                    let degraded = (info?[PHImageResultIsDegradedKey] as? Bool) ?? false
+                    if !degraded { group.leave() }
+                }
+                guard let image else { return }
+                let photo = Photo(
+                    id: id, image: image, thumb: image, assetID: asset.localIdentifier,
+                    filmID: meta.filmID, iso: meta.iso, shutterDenominator: meta.shutter,
+                    timestamp: asset.creationDate ?? meta.timestamp
+                )
+                resultLock.lock()
+                results[id] = photo
+                resultLock.unlock()
 
-            guard let full, let small else { continue }
-            loaded.append(Photo(
-                id: id.isEmpty ? asset.localIdentifier : id,
-                image: full,
-                thumb: small,
-                assetID: asset.localIdentifier,
-                filmID: meta.filmID,
-                iso: meta.iso,
-                shutterDenominator: meta.shutter,
-                timestamp: asset.creationDate ?? meta.timestamp
-            ))
-        }
-
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            // A capture can land before this returns. Replacing the array wholesale
-            // silently dropped that photo from the grid, so merge on id.
-            let known = Set(loaded.map(\.id))
-            self.photos = (loaded + self.photos.filter { !known.contains($0.id) })
-                .sorted { $0.timestamp > $1.timestamp }
+                // Published as each photo resolves rather than after the whole
+                // album — the grid fills in progressively instead of staying
+                // blank until the slowest asset (an iCloud original, typically)
+                // finishes downloading.
+                self.publish(Array(results.values))
+            }
         }
     }
 
-    /// Small shim so the fetch reads as a sequence rather than as index arithmetic.
+    /// Merges a batch of freshly loaded photos into what is already showing. A
+    /// capture taken this session, or a photo from an earlier partial load, must
+    /// survive being merged over rather than replaced.
+    private func publish(_ batch: [Photo]) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            var byID = Dictionary(uniqueKeysWithValues: self.photos.map { ($0.id, $0) })
+            for photo in batch { byID[photo.id] = photo }
+            self.photos = byID.values.sorted { $0.timestamp > $1.timestamp }
+        }
+    }
+
+    /// The full-resolution roll copy, fetched only when a specific photo is
+    /// opened — the viewer or the editor — rather than for the whole album up
+    /// front.
+    public func loadFullImage(for photo: Photo, completion: @escaping (UIImage?) -> Void) {
+        guard let assetID = photo.assetID,
+              let asset = PHAsset.fetchAssets(withLocalIdentifiers: [assetID], options: nil).firstObject
+        else {
+            completion(photo.image)
+            return
+        }
+
+        let request = PHImageRequestOptions()
+        request.isSynchronous = false
+        request.deliveryMode = .highQualityFormat
+        request.isNetworkAccessAllowed = true
+
+        PHImageManager.default().requestImage(
+            for: asset,
+            targetSize: CGSize(width: Self.inMemoryEdge, height: Self.inMemoryEdge),
+            contentMode: .aspectFit, options: request
+        ) { image, info in
+            let degraded = (info?[PHImageResultIsDegradedKey] as? Bool) ?? false
+            guard !degraded else { return }
+            DispatchQueue.main.async { completion(image ?? photo.image) }
+        }
+    }
+
+    /// Reloads on any change to the library — a photo added from elsewhere, one
+    /// finishing its iCloud download, or (the case that mattered most) Photos
+    /// permission being granted after PhotoGallery already existed.
     private enum PHAssets {
         static func fetch(in album: PHAssetCollection, options: PHFetchOptions) -> [PHAsset] {
             let result = PHAsset.fetchAssets(in: album, options: options)
@@ -262,5 +336,15 @@ public final class PhotoGallery: ObservableObject {
         default:
             return fallback
         }
+    }
+}
+
+// MARK: - Library change observation
+
+extension PhotoGallery: PHPhotoLibraryChangeObserver {
+    /// Fires on a background thread for any library change; loadPhotos() does
+    /// its own hop to ioQueue and to main, so this only needs to kick it off.
+    public func photoLibraryDidChange(_ changeInstance: PHChange) {
+        reload()
     }
 }

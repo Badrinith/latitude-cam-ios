@@ -244,3 +244,17 @@ final class SingleCopyTests: XCTestCase {
         XCTAssertGreaterThan(meta.shutter, 0)
     }
 }
+
+// MARK: - Gallery layout preference
+
+final class GalleryLayoutPrefTests: XCTestCase {
+
+    func testFourLayoutOptionsExist() {
+        XCTAssertEqual(Pref.galleryLayoutOptions, ["Organizer", "Negative", "Archive", "Storyboard"])
+    }
+
+    func testOrganizerIsTheDefault() {
+        UserDefaults.standard.removeObject(forKey: Pref.galleryLayout)
+        XCTAssertEqual(Pref.string(Pref.galleryLayout, default: "Organizer"), "Organizer")
+    }
+}

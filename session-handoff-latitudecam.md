@@ -1,8 +1,8 @@
 # Latitude Cam — Session Handoff
 
 **Date:** 5 Aug 2026
-**Branch:** `feat/camera-pipeline-dials-splash` — 35 commits, **all local, nothing pushed to `origin`**
-**Tests:** 273 passing
+**Branch:** `feat/camera-pipeline-dials-splash` — 36 commits, **all local, nothing pushed to `origin`**
+**Tests:** 280 passing
 **Device:** iPhone 17 Pro Max, UDID `854CD202-7808-597B-A70F-6A6628AED263` (build installed and current)
 
 ---
@@ -39,6 +39,10 @@
 | Pinch zoom drives `zoom` (Double), selector snaps to nearest lens | A pinch lands between marked lenses; the lens buttons name the nearest one |
 | Gallery pinch changes column count (2-5), not image scale | Scaling photos in a fixed grid would crop them, not "zoom" the contact sheet |
 | Gallery viewer is a `TabView(.page)` over the filtered roll, each page independently pinch/pan zoomable | Paging, momentum, and per-page zoom state all come free from the system |
+| Gallery loading is async + incremental, `PhotoGallery` observes `PHPhotoLibraryChangeObserver` | Was synchronous over the whole album with no retry after permission — empty until relaunch |
+| Gallery holds grid thumbnails only; full-res fetched on demand via `loadFullImage` | Loading full-res for every asset up front was the "completely broken" symptom |
+| Four selectable gallery layouts (`Pref.galleryLayout`): Organizer/Negative/Archive/Storyboard | User-chosen from Settings; `GalleryHost` owns shared filter/viewer state, layouts are dumb renderers |
+| Still-capture connection tracks physical `UIDeviceOrientation`; preview connection stays fixed | Preview must stay UI-locked (portrait app); only the saved photo should rotate with how the phone was held |
 | Edit ladders have an odd stop count | Only an odd count puts a notch exactly at neutral |
 
 ## Architecture

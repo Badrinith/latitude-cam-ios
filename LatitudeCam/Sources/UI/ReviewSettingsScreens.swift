@@ -206,6 +206,7 @@ struct SettingsScreen: View {
     @AppStorage(Pref.histogramStyle) private var histogramStyle = "Luma"
     @AppStorage(Pref.haptics) private var haptics = true
     @AppStorage(Pref.hapticStrength) private var hapticStrength = "Strong"
+    @AppStorage(Pref.galleryLayout) private var galleryLayout = "Organizer"
     @AppStorage(Pref.mirrorToPhotos) private var mirrorToPhotos = true
 
     var body: some View {
@@ -261,6 +262,12 @@ struct SettingsScreen: View {
                                   isLast: true) {
                             app.resetControls()
                         }
+                    }
+
+                    SettingsGroup(header: "Library") {
+                        OptionRow(title: "Gallery Layout",
+                                  options: Pref.galleryLayoutOptions, selection: $galleryLayout,
+                                  isLast: true)
                     }
 
                     SettingsGroup(header: "About") {

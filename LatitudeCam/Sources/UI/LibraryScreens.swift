@@ -126,30 +126,47 @@ struct LookPanel: View {
 
 struct LibraryScreen: View {
     @EnvironmentObject var app: AppState
+    @AppStorage(Pref.galleryLayout) private var layout = "Organizer"
 
     var body: some View {
         ZStack {
             Ink.base.ignoresSafeArea()
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-                    ScreenHeader(
-                        title: "Library",
-                        leading: AnyView(ViewfinderReturn { app.go(.viewfinder) })
-                    ) {
-                        Text("\(app.gallery.photos.count) FRAMES")
-                            .font(.mono(9, .semibold))
-                            .kerning(1)
-                            .foregroundStyle(Tone.quaternary)
+            if layout == "Organizer" {
+                // The one layout that wants its own ScrollView + LazyVGrid rather
+                // than the shared vertical list the other three share — a grid
+                // needs to own its own scrolling axis to pinch-zoom the column
+                // count without fighting an outer scroll view for the gesture.
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0) {
+                        libraryHeader
+                        GalleryHost(gallery: app.gallery, layout: layout)
                     }
-                    .padding(.bottom, 16)
-
-                    LibraryGrid(gallery: app.gallery)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 12)
+                    .padding(.bottom, 32)
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, 12)
-                .padding(.bottom, 32)
+            } else {
+                VStack(alignment: .leading, spacing: 0) {
+                    libraryHeader
+                        .padding(.horizontal, 16)
+                        .padding(.top, 12)
+                        .padding(.bottom, 16)
+                    GalleryHost(gallery: app.gallery, layout: layout)
+                }
             }
+        }
+    }
+
+    private var libraryHeader: some View {
+        ScreenHeader(
+            title: "Library",
+            leading: AnyView(ViewfinderReturn { app.go(.viewfinder) })
+        ) {
+            Text("\(app.gallery.photos.count) FRAMES")
+                .font(.mono(9, .semibold))
+                .kerning(1)
+                .foregroundStyle(Tone.quaternary)
         }
     }
 }
@@ -159,6 +176,7 @@ struct LibraryScreen: View {
 /// separates them; paging is what makes it a viewer rather than a single photo
 /// wearing a close button.
 struct PhotoViewer: View {
+    @ObservedObject var gallery: PhotoGallery
     var photos: [PhotoGallery.Photo]
     var startingAt: String
     var onEdit: (PhotoGallery.Photo) -> Void
@@ -168,11 +186,12 @@ struct PhotoViewer: View {
     @State private var current: String
 
     init(
-        photos: [PhotoGallery.Photo], startingAt: String,
+        gallery: PhotoGallery, photos: [PhotoGallery.Photo], startingAt: String,
         onEdit: @escaping (PhotoGallery.Photo) -> Void,
         onDelete: @escaping (PhotoGallery.Photo) -> Void,
         onClose: @escaping () -> Void
     ) {
+        self.gallery = gallery
         self.photos = photos
         self.startingAt = startingAt
         self.onEdit = onEdit
@@ -192,7 +211,7 @@ struct PhotoViewer: View {
             // for free, and each page keeps its own pinch state independently.
             TabView(selection: $current) {
                 ForEach(photos) { photo in
-                    ZoomableImage(image: photo.image)
+                    ZoomableImage(gallery: gallery, photo: photo)
                         .tag(photo.id)
                 }
             }
@@ -275,8 +294,14 @@ struct PhotoViewer: View {
 /// One page of the viewer: a photo that pinches to zoom and drags while zoomed,
 /// and snaps back the moment it is released at 1×.
 private struct ZoomableImage: View {
-    var image: UIImage
+    @ObservedObject var gallery: PhotoGallery
+    var photo: PhotoGallery.Photo
 
+    // Starts on the grid thumbnail, already in hand, and is replaced the moment
+    // the full-resolution roll copy arrives — the same fast-then-sharp pattern
+    // opportunistic delivery uses for the grid itself, so opening a photo never
+    // shows a blank frame while the real image decodes.
+    @State private var image: UIImage
     @State private var scale: CGFloat = 1
     @State private var lastScale: CGFloat = 1
     @State private var offset: CGSize = .zero
@@ -337,14 +362,28 @@ private struct ZoomableImage: View {
                     Haptics.detent()
                 }
         }
+        .onAppear {
+            gallery.loadFullImage(for: photo) { full in
+                if let full { image = full }
+            }
+        }
+    }
+
+    init(gallery: PhotoGallery, photo: PhotoGallery.Photo) {
+        self.gallery = gallery
+        self.photo = photo
+        self._image = State(initialValue: photo.thumb)
     }
 }
 
-/// Owns the filter state and the gallery subscription so the surrounding screen
-/// does not rebuild when photos load in off the disk queue.
-private struct LibraryGrid: View {
+/// Owns the filter state, the gallery subscription, and the family/frame
+/// bookkeeping every layout needs — so the surrounding screen does not rebuild
+/// when photos load in off the disk queue, and the four layouts do not each
+/// reimplement "what family is this photo" and "open the viewer."
+private struct GalleryHost: View {
     @ObservedObject var gallery: PhotoGallery
     @EnvironmentObject var app: AppState
+    var layout: String
     @State private var filter = "All"
     @State private var viewing: PhotoGallery.Photo?
 
@@ -397,65 +436,81 @@ private struct LibraryGrid: View {
             .padding(.bottom, 14)
 
             if filtered.isEmpty {
-                VStack(spacing: 8) {
-                    Text(gallery.photos.isEmpty ? "No shots yet" : "Nothing in \(filter)")
-                        .font(.ui(15, .semibold))
-                        .foregroundStyle(Tone.secondary)
-                    Text(gallery.photos.isEmpty
-                         ? "Tap the shutter in the viewfinder to start a roll."
-                         : "No frames on this shelf yet.")
-                        .font(.ui(12))
-                        .foregroundStyle(Tone.tertiary)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 60)
+                emptyState
             } else {
-                LazyVGrid(columns: columns, spacing: 6) {
-                    ForEach(filtered) { photo in
-                        Button {
-                            Haptics.tap()
-                            // Opens the frame, not the editor. Tapping a photo used
-                            // to drop straight into edit controls, which is an
-                            // answer to a question nobody asked — most taps are to
-                            // look at the picture.
-                            withAnimation(.easeOut(duration: 0.18)) { viewing = photo }
-                        } label: {
-                            gridCell(photo)
-                        }
-                        .buttonStyle(.plain)
-                        .contextMenu {
-                            Button("Edit") {
-                                Haptics.tap()
-                                app.editingPhoto = photo
-                                app.go(.edit)
-                            }
-                            Button("Delete", role: .destructive) {
-                                Haptics.toggle()
-                                gallery.deletePhoto(photo.id)
-                            }
-                        }
-                    }
+                switch layout {
+                case "Negative":  NegativeLayout(photos: filtered, open: open, swatch: swatch)
+                case "Archive":   ArchiveLayout(gallery: gallery, filter: $filter, open: open, family: family, swatch: swatch)
+                case "Storyboard": StoryboardLayout(photos: filtered, open: open, swatch: swatch)
+                default:          organizerGrid
                 }
-                // Column count, not image scale: scaling the photos inside a fixed
-                // grid would only crop them, which is not what "zoom" means to
-                // someone looking at a contact sheet. Snapped to a whole column so
-                // the pinch has a definite place to land rather than settling on a
-                // fractional width.
-                .animation(.spring(response: 0.32, dampingFraction: 0.82), value: columnCount)
-                .gesture(
-                    MagnificationGesture()
-                        .onChanged { value in
-                            let proposed = Double(pinchStart) / value
-                            columnCount = min(5, max(2, Int(proposed.rounded())))
-                        }
-                        .onEnded { _ in
-                            pinchStart = columnCount
-                            Haptics.detent()
-                        }
-                )
             }
         }
         .overlay { viewerOverlay }
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 8) {
+            Text(gallery.photos.isEmpty ? "No shots yet" : "Nothing in \(filter)")
+                .font(.ui(15, .semibold))
+                .foregroundStyle(Tone.secondary)
+            Text(gallery.photos.isEmpty
+                 ? "Tap the shutter in the viewfinder to start a roll."
+                 : "No frames on this shelf yet.")
+                .font(.ui(12))
+                .foregroundStyle(Tone.tertiary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 60)
+    }
+
+    /// Opens the viewer rather than the editor — tapping a photo used to drop
+    /// straight into edit controls, which answered a question nobody asked.
+    private func open(_ photo: PhotoGallery.Photo) {
+        Haptics.tap()
+        withAnimation(.easeOut(duration: 0.18)) { viewing = photo }
+    }
+
+    private var organizerGrid: some View {
+        LazyVGrid(columns: columns, spacing: 6) {
+            ForEach(filtered) { photo in
+                Button { open(photo) } label: {
+                    gridCell(photo)
+                }
+                .buttonStyle(.plain)
+                .contextMenu { contextMenu(photo) }
+            }
+        }
+        // Column count, not image scale: scaling the photos inside a fixed
+        // grid would only crop them, which is not what "zoom" means to
+        // someone looking at a contact sheet. Snapped to a whole column so
+        // the pinch has a definite place to land rather than settling on a
+        // fractional width.
+        .animation(.spring(response: 0.32, dampingFraction: 0.82), value: columnCount)
+        .gesture(
+            MagnificationGesture()
+                .onChanged { value in
+                    let proposed = Double(pinchStart) / value
+                    columnCount = min(5, max(2, Int(proposed.rounded())))
+                }
+                .onEnded { _ in
+                    pinchStart = columnCount
+                    Haptics.detent()
+                }
+        )
+    }
+
+    @ViewBuilder
+    private func contextMenu(_ photo: PhotoGallery.Photo) -> some View {
+        Button("Edit") {
+            Haptics.tap()
+            app.editingPhoto = photo
+            app.go(.edit)
+        }
+        Button("Delete", role: .destructive) {
+            Haptics.toggle()
+            gallery.deletePhoto(photo.id)
+        }
     }
 
     /// Colour.clear sets the cell size and the photo fills it from an overlay.
@@ -493,6 +548,7 @@ private struct LibraryGrid: View {
             // the viewer is scrolling through what you were already looking at,
             // not a second, narrower list.
             PhotoViewer(
+                gallery: gallery,
                 photos: filtered,
                 startingAt: photo.id,
                 onEdit: { chosen in
@@ -508,6 +564,236 @@ private struct LibraryGrid: View {
 
     private func swatch(for filmID: String) -> Color {
         FilmPreset.all.first { $0.id == filmID }?.swatch ?? FilmSwatch.amber
+    }
+}
+
+// MARK: - Negative layout
+//
+// The roll shown as negatives: inverted, orange-cast, closer to what actually
+// comes off a scanner than a photo grid is. Tapping a frame is "printing" it —
+// the same gesture that opens the viewer, so there is no separate develop step
+// to learn.
+
+private struct NegativeLayout: View {
+    var photos: [PhotoGallery.Photo]
+    var open: (PhotoGallery.Photo) -> Void
+    var swatch: (String) -> Color
+
+    var body: some View {
+        LazyVStack(spacing: 2) {
+            ForEach(photos) { photo in
+                Button { open(photo) } label: {
+                    HStack(spacing: 0) {
+                        sprocket
+                        ZStack(alignment: .bottomLeading) {
+                            Image(uiImage: photo.thumb)
+                                .resizable()
+                                .aspectRatio(3/2, contentMode: .fill)
+                                .frame(height: 78)
+                                .clipped()
+                                // The negative look: invert, then push the hue back
+                                // round by 180° so an inverted amber cast reads as
+                                // the orange base a real negative has, rather than
+                                // an arbitrary inverted colour.
+                                .colorInvert()
+                                .hueRotation(.degrees(180))
+                                .saturation(0.75)
+
+                            HStack(spacing: 5) {
+                                Circle().fill(swatch(photo.filmID)).frame(width: 6, height: 6)
+                                Text(stamp(photo))
+                                    .font(.mono(7, .semibold))
+                                    .kerning(0.4)
+                                    .foregroundStyle(.white.opacity(0.85))
+                            }
+                            .padding(6)
+                        }
+                        sprocket
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .background(Color(hex: 0x141210))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    private var sprocket: some View {
+        VStack(spacing: 5) {
+            ForEach(0..<5, id: \.self) { _ in
+                RoundedRectangle(cornerRadius: 1).fill(.white.opacity(0.18)).frame(width: 5, height: 5)
+            }
+        }
+        .frame(width: 16)
+    }
+
+    private func stamp(_ photo: PhotoGallery.Photo) -> String {
+        let name = FilmPreset.all.first { $0.id == photo.filmID }?.shortName.uppercased() ?? "—"
+        return "\(name) · \(photo.iso)"
+    }
+}
+
+// MARK: - Archive layout
+//
+// A filing cabinet, one drawer per family. The family grouping already exists
+// as the two-tier film selector on the camera screen; this is the same idea
+// turned into furniture rather than a second, unrelated organising principle.
+
+private struct ArchiveLayout: View {
+    @ObservedObject var gallery: PhotoGallery
+    @Binding var filter: String
+    var open: (PhotoGallery.Photo) -> Void
+    var family: (PhotoGallery.Photo) -> String
+    var swatch: (String) -> Color
+
+    @State private var expanded: Set<String> = []
+
+    private var families: [String] {
+        var seen: [String] = []
+        for photo in gallery.photos {
+            let f = family(photo)
+            if !seen.contains(f) { seen.append(f) }
+        }
+        return seen
+    }
+
+    private func photos(in fam: String) -> [PhotoGallery.Photo] {
+        gallery.photos.filter { family($0) == fam }
+    }
+
+    var body: some View {
+        LazyVStack(spacing: 8) {
+            ForEach(families, id: \.self) { fam in
+                drawer(fam)
+            }
+        }
+    }
+
+    private func drawer(_ fam: String) -> some View {
+        let open = expanded.contains(fam)
+        let count = photos(in: fam).count
+
+        return VStack(alignment: .leading, spacing: 0) {
+            Button {
+                Haptics.detent()
+                withAnimation(.spring(response: 0.34, dampingFraction: 0.82)) {
+                    if open { expanded.remove(fam) } else { expanded.insert(fam) }
+                }
+            } label: {
+                HStack(spacing: 10) {
+                    Capsule().fill(Accent.amber).frame(width: 22, height: 3)
+                    Text(fam.uppercased())
+                        .font(.mono(11, .semibold))
+                        .kerning(1)
+                        .foregroundStyle(Tone.primary)
+                    Spacer()
+                    Text("\(count)")
+                        .font(.mono(10, .medium))
+                        .foregroundStyle(Tone.quaternary)
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(Tone.quaternary)
+                        .rotationEffect(.degrees(open ? 180 : 0))
+                }
+                .padding(.horizontal, 16)
+                .frame(height: 50)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if open {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(photos(in: fam)) { photo in
+                            Button { self.open(photo) } label: {
+                                Image(uiImage: photo.thumb)
+                                    .resizable()
+                                    .scaledToFill()
+                                    .frame(width: 84, height: 84)
+                                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            }
+                            .buttonStyle(.plain)
+                            .contextMenu {
+                                Button("Delete", role: .destructive) {
+                                    Haptics.toggle()
+                                    gallery.deletePhoto(photo.id)
+                                }
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 14)
+                }
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .background(Ink.card, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+}
+
+// MARK: - Storyboard layout
+//
+// Unequal panels — the newest shot always gets the dominant one. Reads as a
+// sequence of moments rather than a uniform archive, and needs no metadata to
+// make its point: recency alone decides the size.
+
+private struct StoryboardLayout: View {
+    var photos: [PhotoGallery.Photo]
+    var open: (PhotoGallery.Photo) -> Void
+    var swatch: (String) -> Color
+
+    var body: some View {
+        LazyVStack(spacing: 6) {
+            ForEach(Array(chunked.enumerated()), id: \.offset) { _, group in
+                row(group)
+            }
+        }
+    }
+
+    /// Groups of four: one dominant frame, three supporting. `photos` is
+    /// already newest-first, so the dominant slot in every group is the most
+    /// recent frame in it.
+    private var chunked: [[PhotoGallery.Photo]] {
+        stride(from: 0, to: photos.count, by: 4).map {
+            Array(photos[$0..<min($0 + 4, photos.count)])
+        }
+    }
+
+    @ViewBuilder
+    private func row(_ group: [PhotoGallery.Photo]) -> some View {
+        HStack(alignment: .top, spacing: 6) {
+            if let lead = group.first {
+                panel(lead, height: 176)
+                    .frame(maxWidth: .infinity)
+            }
+            if group.count > 1 {
+                VStack(spacing: 6) {
+                    ForEach(group.dropFirst()) { photo in
+                        panel(photo, height: 56)
+                    }
+                }
+                .frame(width: 92)
+            }
+        }
+    }
+
+    private func panel(_ photo: PhotoGallery.Photo, height: CGFloat) -> some View {
+        Button { open(photo) } label: {
+            ZStack(alignment: .bottomLeading) {
+                Image(uiImage: photo.thumb)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(height: height)
+                    .clipped()
+                Circle()
+                    .fill(swatch(photo.filmID))
+                    .frame(width: 7, height: 7)
+                    .padding(6)
+            }
+            .frame(maxWidth: .infinity)
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -564,7 +850,17 @@ struct EditScreen: View {
                 }
             }
         }
-        .onAppear { editor.load(app.editingPhoto) }
+        .onAppear {
+            // Starts from the grid thumbnail already in memory, then upgrades to
+            // the full-resolution roll copy — the editor used to require every
+            // photo in the album decoded at 1280pt up front just to open one.
+            editor.load(app.editingPhoto)
+            if let photo = app.editingPhoto {
+                app.gallery.loadFullImage(for: photo) { full in
+                    if let full { editor.load(app.editingPhoto, image: full) }
+                }
+            }
+        }
     }
 
     // MARK: Header
@@ -819,14 +1115,17 @@ final class PhotoEditor: ObservableObject {
 
     // MARK: Loading
 
-    func load(_ photo: PhotoGallery.Photo?) {
-        guard let photo, let cg = photo.image.cgImage else {
+    /// `image` overrides the photo's own — used to hand the editor the
+    /// full-resolution roll copy once it arrives, without changing what photo is
+    /// considered loaded (film id, source scale) in the meantime.
+    func load(_ photo: PhotoGallery.Photo?, image: UIImage? = nil) {
+        guard let photo, let cg = (image ?? photo.image).cgImage else {
             source = nil
             preview = nil
             return
         }
         source = CIImage(cgImage: cg)
-        sourceScale = photo.image.scale
+        sourceScale = (image ?? photo.image).scale
         filmID = photo.filmID          // triggers the first render
     }
 

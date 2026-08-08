@@ -127,6 +127,49 @@ public final class CameraManager: NSObject, ObservableObject {
     /// Drives the render-side mirror. Read on the camera queue, written there too.
     private(set) var isFrontCamera = false
 
+    /// The phone's physical attitude, tracked independently of the UI. The app is
+    /// portrait-locked, so the viewfinder and its preview connection must never
+    /// rotate — but a photo taken while the phone is physically sideways still has
+    /// to come out the right way round. Without this, the still connection stayed
+    /// at the fixed portrait angle set at configuration, so a landscape photo was
+    /// saved as a portrait-shaped buffer holding a rotated scene.
+    private var physicalOrientation: UIDeviceOrientation = .portrait
+    private var orientationObserver: NSObjectProtocol?
+
+    private func startWatchingPhysicalOrientation() {
+        UIDevice.current.beginGeneratingDeviceOrientationNotifications()
+        orientationObserver = NotificationCenter.default.addObserver(
+            forName: UIDevice.orientationDidChangeNotification, object: nil, queue: nil
+        ) { [weak self] _ in
+            let next = UIDevice.current.orientation
+            // faceUp, faceDown and unknown carry no rotation information — keep
+            // whatever was last valid rather than snapping the next photo sideways
+            // because the phone was set down flat.
+            guard next.isValidInterfaceOrientation else { return }
+            self?.cameraQueue.async { self?.physicalOrientation = next }
+        }
+    }
+
+    /// The still-capture rotation for the *back* camera, mapped from the
+    /// physical orientation rather than the fixed angle the preview uses.
+    ///
+    /// Values match AVFoundation's own rotation-coordinator table for a
+    /// rear-facing sensor: portrait 90°, landscape-right 0°, landscape-left 180°,
+    /// upside-down 270°. landscapeLeft and landscapeRight look swapped against
+    /// intuition because UIDeviceOrientation names the edge that is now *down*,
+    /// not the direction the top of the phone is pointing.
+    /// Internal rather than private so the mapping can be asserted directly —
+    /// this table is exactly the kind of thing that looks backwards to a reader
+    /// and is easy to silently invert in a future edit.
+    static func stillRotationAngle(for orientation: UIDeviceOrientation) -> CGFloat {
+        switch orientation {
+        case .landscapeLeft:        return 0
+        case .landscapeRight:       return 180
+        case .portraitUpsideDown:   return 270
+        default:                    return 90   // .portrait and any unhandled case
+        }
+    }
+
     /// True where the hardware can hand back a matte. Published so the control
     /// can hide itself on a body that cannot do it rather than fail on tap.
     @Published public private(set) var supportsPortrait = false
@@ -150,6 +193,7 @@ public final class CameraManager: NSObject, ObservableObject {
         super.init()
 
         loadSettings()
+        startWatchingPhysicalOrientation()
 
         cameraQueue.async { [weak self] in
             self?.initializeCamera()
@@ -160,6 +204,10 @@ public final class CameraManager: NSObject, ObservableObject {
         if let session = captureSession, session.isRunning {
             session.stopRunning()
         }
+        if let orientationObserver {
+            NotificationCenter.default.removeObserver(orientationObserver)
+        }
+        UIDevice.current.endGeneratingDeviceOrientationNotifications()
     }
 
     // MARK: - Settings
@@ -764,6 +812,19 @@ public final class CameraManager: NSObject, ObservableObject {
 
         if #available(iOS 16.0, *), let dimensions = photoDimensions(targetMegapixels) {
             settings.maxPhotoDimensions = dimensions
+        }
+
+        // The preview connection stays at its fixed portrait angle — the
+        // viewfinder is UI-locked and must never visually rotate. The still
+        // connection is different: this is what was missing, and why a photo
+        // taken with the phone physically sideways came out saved sideways.
+        // Front camera is left on its existing fixed angle; only the back
+        // camera's landscape mapping has been verified.
+        if !isFrontCamera, let stillConnection = photoOutput.connection(with: .video) {
+            let angle = Self.stillRotationAngle(for: physicalOrientation)
+            if stillConnection.isVideoRotationAngleSupported(angle) {
+                stillConnection.videoRotationAngle = angle
+            }
         }
 
         // Focus peaking is a viewfinder aid, not part of the photograph — its edge
