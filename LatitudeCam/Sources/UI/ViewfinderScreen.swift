@@ -419,24 +419,45 @@ struct ViewfinderScreen: View {
         }
     }
 
-    /// Lays a band out along the screen's long side, turns it to face the user,
-    /// and parks it against one edge. The frame stays constant through the
-    /// rotation, which is what lets the move animate rather than snap.
+    /// The picture itself: below the plate, above the release and the lens row.
+    ///
+    /// Landscape bands are laid out inside this rather than against the whole
+    /// screen. Measured against the screen, a band is the full height — its top
+    /// end reached up into the plate and its foot came down onto the shutter
+    /// row, which is the overlap that was reported.
+    private func viewfinderRegion(in size: CGSize) -> CGRect {
+        let top = TopPlateBand.height(proOpen: app.proMode)
+        // Lens row, the release, and the padding under it.
+        let bottom: CGFloat = 170
+        return CGRect(
+            x: 0, y: top,
+            width: size.width,
+            height: max(140, size.height - top - bottom)
+        )
+    }
+
+    /// Lays a band along the picture's long side, turns it to face the user, and
+    /// parks it against one edge of the picture — never outside it. The frame
+    /// stays constant through the rotation, which is what lets the move animate
+    /// rather than snap.
     private func rotatedBand<C: View>(
         _ content: C, thickness: CGFloat,
         at edge: DeviceOrientation.Edge, in size: CGSize
     ) -> some View {
+        let region = viewfinderRegion(in: size)
         let centre: CGPoint
         switch edge {
         case .leading:
-            centre = CGPoint(x: thickness / 2 + 6, y: size.height / 2)
+            centre = CGPoint(x: region.minX + thickness / 2 + 8, y: region.midY)
         case .trailing:
-            centre = CGPoint(x: size.width - thickness / 2 - 6, y: size.height / 2)
+            centre = CGPoint(x: region.maxX - thickness / 2 - 8, y: region.midY)
         case .bottom:
-            centre = CGPoint(x: size.width / 2, y: size.height - thickness / 2 - 6)
+            centre = CGPoint(x: region.midX, y: region.maxY - thickness / 2 - 8)
         }
         return content
-            .frame(width: size.height - 140, height: thickness)
+            // Inset from the picture's ends too, so a band never runs edge to
+            // edge across the frame it is sitting on.
+            .frame(width: region.height - 28, height: thickness)
             .rotationEffect(orientation.angle)
             .position(centre)
     }

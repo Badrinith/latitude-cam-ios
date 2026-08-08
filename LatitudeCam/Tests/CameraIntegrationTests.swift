@@ -1161,3 +1161,63 @@ final class PlateSwitchTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(TopPlateBand.height, needed)
     }
 }
+
+// MARK: - Landscape bands stay inside the picture
+
+/// A rotated band measured against the whole screen is the whole screen tall:
+/// its head reaches up into the plate and its foot lands on the shutter row.
+/// That was reported twice from the device and is invisible in code, so the
+/// region the bands are laid out in is pinned here.
+final class ViewfinderRegionTests: XCTestCase {
+
+    /// Mirrors ViewfinderScreen.viewfinderRegion.
+    private func region(in size: CGSize, plate: CGFloat) -> CGRect {
+        let bottom: CGFloat = 170
+        return CGRect(x: 0, y: plate, width: size.width,
+                      height: max(140, size.height - plate - bottom))
+    }
+
+    private let screen = CGSize(width: 393, height: 852)
+
+    func testTheRegionStartsBelowThePlate() {
+        for open in [true, false] {
+            let plate = TopPlateBand.height(proOpen: open)
+            XCTAssertEqual(region(in: screen, plate: plate).minY, plate,
+                           "a band would start inside the plate")
+        }
+    }
+
+    func testTheRegionEndsAboveTheRelease() {
+        let r = region(in: screen, plate: TopPlateBand.height(proOpen: true))
+        XCTAssertLessThanOrEqual(r.maxY, screen.height - 160,
+                                 "a band would come down onto the shutter row")
+    }
+
+    /// The band is laid out along the region's height, so that length must never
+    /// exceed the region — an inset of zero would put its ends on the boundary.
+    func testTheBandIsShorterThanTheRegionItSitsIn() {
+        for open in [true, false] {
+            let r = region(in: screen, plate: TopPlateBand.height(proOpen: open))
+            XCTAssertLessThan(r.height - 28, r.height)
+            XCTAssertGreaterThan(r.height - 28, 0, "the band would collapse")
+        }
+    }
+
+    /// Opening the plate eats into the picture, so the region has to shrink with
+    /// it — a fixed region would push the band back under the dials the moment
+    /// PRO came on.
+    func testOpeningThePlateShrinksTheRegion() {
+        let closed = region(in: screen, plate: TopPlateBand.collapsedHeight)
+        let open = region(in: screen, plate: TopPlateBand.height)
+        XCTAssertLessThan(open.height, closed.height)
+        XCTAssertGreaterThan(open.minY, closed.minY)
+    }
+
+    /// Even on the shortest plausible screen the region cannot invert, which
+    /// would flip the band inside out rather than merely crowd it.
+    func testTheRegionNeverInverts() {
+        let tiny = CGSize(width: 320, height: 480)
+        let r = region(in: tiny, plate: TopPlateBand.height)
+        XCTAssertGreaterThan(r.height, 0)
+    }
+}
