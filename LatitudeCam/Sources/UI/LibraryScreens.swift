@@ -228,21 +228,44 @@ struct PhotoViewer: View {
             // sits under floating controls, it sits in its own region.
             TabView(selection: $current) {
                 ForEach(photos) { photo in
-                    ZoomableImage(gallery: gallery, photo: photo, onSwipeUp: {
-                        Haptics.tap()
-                        showMetadata = true
-                    })
-                    .tag(photo.id)
+                    ZoomableImage(gallery: gallery, photo: photo)
+                        .tag(photo.id)
                 }
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
             .frame(maxHeight: .infinity)
 
-            Text("SWIPE UP FOR DETAILS")
-                .font(.mono(7.5, .medium))
-                .kerning(1)
-                .foregroundStyle(Tone.quaternary.opacity(0.6))
-                .padding(.bottom, 8)
+            // A sibling of the TabView, not a child of it. A drag gesture placed
+            // on the image itself loses to the TabView's own paging pan
+            // recognizer almost every time — that recognizer is a UIScrollView
+            // under the hood and isn't part of SwiftUI's gesture arena, so
+            // .simultaneousGesture there never reliably won. Down here it has
+            // no paging gesture to compete with, so it works. A tap is included
+            // too, since a swipe on a handle this small is easy to miss.
+            VStack(spacing: 4) {
+                Capsule()
+                    .fill(Tone.quaternary.opacity(0.4))
+                    .frame(width: 32, height: 3)
+                Text("SWIPE UP FOR DETAILS")
+                    .font(.mono(7.5, .medium))
+                    .kerning(1)
+                    .foregroundStyle(Tone.quaternary.opacity(0.6))
+            }
+            .padding(.vertical, 10)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                Haptics.tap()
+                showMetadata = true
+            }
+            .gesture(
+                DragGesture(minimumDistance: 8)
+                    .onEnded { value in
+                        if value.translation.height < -15 {
+                            Haptics.tap()
+                            showMetadata = true
+                        }
+                    }
+            )
 
             // A real toolbar below the picture, not two pills floating over it.
             // The photo used to sit directly under Delete and Edit, which is
@@ -353,7 +376,6 @@ struct PhotoViewer: View {
 private struct ZoomableImage: View {
     @ObservedObject var gallery: PhotoGallery
     var photo: PhotoGallery.Photo
-    var onSwipeUp: () -> Void
 
     // Starts on the grid thumbnail, already in hand, and is replaced the moment
     // the full-resolution roll copy arrives — the same fast-then-sharp pattern
@@ -364,7 +386,6 @@ private struct ZoomableImage: View {
     @State private var lastScale: CGFloat = 1
     @State private var offset: CGSize = .zero
     @State private var lastOffset: CGSize = .zero
-    @State private var pulledUp: CGFloat = 0
 
     var body: some View {
         GeometryReader { geo in
@@ -373,31 +394,8 @@ private struct ZoomableImage: View {
                 .scaledToFit()
                 .frame(width: geo.size.width, height: geo.size.height)
                 .scaleEffect(scale)
-                .offset(x: offset.width, y: offset.height - pulledUp)
+                .offset(offset)
                 .contentShape(Rectangle())
-                .simultaneousGesture(
-                    // Only while unzoomed — zoomed, an upward drag is panning the
-                    // photo, not asking to see its metadata, and the two must not
-                    // be read as the same gesture.
-                    scale <= 1.01 ?
-                    DragGesture(minimumDistance: 12)
-                        .onChanged { value in
-                            guard value.translation.height < 0 else { return }
-                            // Rubber-banded rather than 1:1 — a swipe that opens a
-                            // sheet should feel like it is pulling against
-                            // something, not like the photo is simply sliding away.
-                            pulledUp = min(60, -value.translation.height * 0.5)
-                        }
-                        .onEnded { value in
-                            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                                pulledUp = 0
-                            }
-                            if value.translation.height < -50 {
-                                onSwipeUp()
-                            }
-                        }
-                    : nil
-                )
                 .gesture(
                     MagnificationGesture()
                         .onChanged { value in
@@ -451,10 +449,9 @@ private struct ZoomableImage: View {
         }
     }
 
-    init(gallery: PhotoGallery, photo: PhotoGallery.Photo, onSwipeUp: @escaping () -> Void) {
+    init(gallery: PhotoGallery, photo: PhotoGallery.Photo) {
         self.gallery = gallery
         self.photo = photo
-        self.onSwipeUp = onSwipeUp
         self._image = State(initialValue: photo.thumb)
     }
 }

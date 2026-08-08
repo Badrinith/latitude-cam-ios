@@ -186,7 +186,11 @@ public final class PhotoGallery: NSObject, ObservableObject {
         let request = PHImageRequestOptions()
         request.isSynchronous = false
         request.deliveryMode = .opportunistic
-        request.isNetworkAccessAllowed = true
+        // Grid thumbnails are small and these are our own recent captures —
+        // almost always already local. Letting this wait on iCloud (as the
+        // full-res fetch below correctly does) meant every thumbnail in the
+        // roll queued behind a network round trip before it could appear.
+        request.isNetworkAccessAllowed = false
         request.resizeMode = .fast
 
         // PHImageManager's completion handler can land on any thread and can

@@ -818,7 +818,12 @@ public final class CameraManager: NSObject, ObservableObject {
 
                 // Develop the full-resolution frame through the same pipeline the
                 // viewfinder uses, so the saved photo matches what was framed.
-                if let processed, let decoded = CIImage(data: processed) {
+                // CIImage(data:) does not apply EXIF orientation on its own — the
+                // connection above rotates the buffer correctly, but without this
+                // option that rotation is written to the file and then silently
+                // dropped right here, which is why both earlier rotation fixes
+                // never changed anything: neither ever reached this line.
+                if let processed, let decoded = CIImage(data: processed, options: [.applyOrientationProperty: true]) {
                     var source = self.mirroredForFrontCamera(decoded)
                     if wantsPortrait, let matte {
                         source = self.separate(source, matte: matte, aperture: aperture)
