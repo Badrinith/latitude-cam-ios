@@ -923,10 +923,12 @@ struct TopPlateBand: View {
     var aspect: String
     var onDialTurn: (ActiveDial) -> Void
 
-    /// Open, with the dials showing.
+    /// Open, with all five dials showing.
     static let height: CGFloat = 210
-    /// Closed — the switch strip only.
-    static let collapsedHeight: CGFloat = 96
+    /// Closed. Not bare: the shutter dial stays, because shutter is the one
+    /// value a photographer changes without deciding to "go manual" first, and
+    /// hiding it behind PRO put a tap in front of the most common adjustment.
+    static let collapsedHeight: CGFloat = 164
 
     static func height(proOpen: Bool) -> CGFloat { proOpen ? height : collapsedHeight }
 
@@ -959,6 +961,10 @@ struct TopPlateBand: View {
                         .padding(.top, 8)
                         .padding(.horizontal, 6)
                         .transition(.opacity.combined(with: .offset(y: -14)))
+                } else {
+                    shutterDialOnly
+                        .padding(.top, 10)
+                        .transition(.opacity)
                 }
             }
         }
@@ -980,13 +986,6 @@ struct TopPlateBand: View {
             utility(text: "GRID", on: false, label: "Grid", action: onCycleGrid)
             utility(text: aspect, on: false, label: "Aspect ratio", action: onCycleAspect)
             utility(systemImage: "gearshape", on: false, label: "Settings", action: onSettings)
-
-            // PRO is the plate's own switch, and it is what opens it.
-            utility(text: "PRO", on: app.proMode, label: "Pro controls") {
-                withAnimation(.spring(response: 0.4, dampingFraction: 0.86)) {
-                    app.proMode.toggle()
-                }
-            }
         }
     }
 
@@ -1025,6 +1024,15 @@ struct TopPlateBand: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(label)
+    }
+
+    /// What the closed plate carries. Same control as the centre dial, a size
+    /// down — it is alone, so it does not need to hold rank against four others.
+    private var shutterDialOnly: some View {
+        PlateDial(label: "SHUTTER", inlineReading: app.shutterLabel,
+                  barrelName: "SHUTTER", barrelReading: app.shutterLabel,
+                  value: $app.shutter, stops: AppState.shutterStops.count,
+                  diameter: 58, highlighted: true, rotation: rotation, onTurn: onDialTurn)
     }
 
     private var dials: some View {
@@ -1088,30 +1096,32 @@ struct TopPlateDeck: View {
             hud
             Spacer(minLength: 0)
 
-            // Portrait keeps film with the rest of the controls. Landscape sends
-            // it to the bottom edge on its own, clear of everything else.
+            // Portrait keeps film in the stack with everything else.
             if !landscape { filmBand }
 
             lensRow.padding(.bottom, 10)
             bottomBar.padding(.bottom, 30)
-
+        }
+        // Landscape sends film to the ground-facing edge as an overlay rather
+        // than another row in the stack. Stacked, it was laid out after a
+        // bottom bar that had already consumed the height: the strip rendered
+        // past the screen edge and took the shutter row with it, which is why
+        // the controls stopped answering when the body was turned. An overlay
+        // cannot push what it sits over.
+        .overlay(alignment: .bottom) {
             if landscape {
-                filmBand.padding(.bottom, 8)
+                filmBand.padding(.bottom, 6)
             }
         }
     }
 
-    @ViewBuilder private var filmBand: some View {
-        if app.proMode {
-            BarrelCluster()
-                .frame(height: BarrelCluster.expandedHeight)
-                .padding(.bottom, 12)
-                .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .bottom)))
-        } else {
-            FilmCardStack(rotation: rotation, onOpen: onFilmSim)
-                .padding(.bottom, 14)
-                .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .bottom)))
-        }
+    /// Film, always. The barrel cluster used to take this band whenever PRO was
+    /// on, but PRO now reveals the dials on the plate — which drive the same
+    /// four values. Two sets of controls for one set of numbers is one set too
+    /// many, so the cluster is gone from here and film keeps the band.
+    private var filmBand: some View {
+        FilmCardStack(rotation: rotation, onOpen: onFilmSim)
+            .padding(.bottom, 14)
     }
 
     private var hud: some View {
@@ -1153,7 +1163,31 @@ struct TopPlateDeck: View {
             LeafShutterButton(action: onFire)
 
             HStack {
+                // Back where it was. Its job is now the plate: on, and all five
+                // dials come down; off, and the shutter dial holds the fort.
+                Button {
+                    Haptics.toggle()
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.86)) {
+                        app.proMode.toggle()
+                    }
+                } label: {
+                    Text("PRO")
+                        .font(.mono(12, .bold))
+                        .kerning(0.9)
+                        .foregroundStyle(app.proMode ? Ink.base : Tone.secondary)
+                        .rotationEffect(rotation)
+                        .frame(width: 62, height: 44)
+                        .background {
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(app.proMode ? Accent.amber : Color.white.opacity(0.07))
+                        }
+                        .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Pro controls")
+
                 Spacer(minLength: 0)
+
                 Button { onLibrary() } label: {
                     LibraryThumbnail(gallery: app.gallery)
                 }

@@ -1019,11 +1019,21 @@ final class TopPlateCollapseTests: XCTestCase {
         XCTAssertEqual(TopPlateBand.height(proOpen: false), TopPlateBand.collapsedHeight)
     }
 
-    /// The closed plate still carries the switch row, so it cannot collapse to
-    /// less than one 44pt target plus the status bar it sits under.
-    func testTheClosedPlateStillFitsItsSwitches() {
-        XCTAssertGreaterThanOrEqual(TopPlateBand.collapsedHeight, 90,
-                                    "the switch row would be clipped")
+    /// The closed plate carries the switch row *and* the shutter dial, so it
+    /// cannot collapse to the height of the switches alone — shutter is the one
+    /// value changed without deciding to go manual first, and clipping it is
+    /// the same as hiding it.
+    func testTheClosedPlateStillFitsItsSwitchesAndTheShutterDial() {
+        // 46 inset + 44 switch row + 10 gap + 58 dial + its label.
+        XCTAssertGreaterThanOrEqual(TopPlateBand.collapsedHeight, 158,
+                                    "the shutter dial would be clipped when the plate closes")
+    }
+
+    /// Closing still has to buy the picture something back, or the switch is
+    /// decoration.
+    func testClosingTheePlateStillReturnsRoomToTheFrame() {
+        XCTAssertGreaterThanOrEqual(TopPlateBand.height - TopPlateBand.collapsedHeight, 40,
+                                    "closing the plate barely moves the frame")
     }
 }
 
