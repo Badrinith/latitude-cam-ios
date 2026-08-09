@@ -403,7 +403,14 @@ struct ViewfinderScreen: View {
                 DialBarrel(dial: activeDial, rotation: .zero,
                            onScrub: { scrub(activeDial.key, by: $0) })
                     .padding(.horizontal, 12)
-                    .padding(.top, TopPlateBand.height(proOpen: app.proMode, width: width) + 10)
+                    // safeTop matters here. Omitted, this defaulted to 46 while
+                    // the plate itself was built with the real inset (59 on the
+                    // larger bodies), so the barrel was drawn 13pt higher than
+                    // the plate actually ends — tucked under its own metal, and
+                    // the clearance below it measured from the wrong place.
+                    .padding(.top, TopPlateBand.height(proOpen: app.proMode,
+                                                       width: width,
+                                                       safeTop: safeTop) + 10)
                     .transition(.opacity.combined(with: .offset(y: -10)))
                     .zIndex(4)
             }

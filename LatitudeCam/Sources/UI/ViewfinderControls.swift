@@ -1859,17 +1859,15 @@ struct TopPlateDeck: View {
         .overlay(alignment: .topTrailing) {
             instruments
                 .padding(.trailing, 14)
-                // Upright there is a plate above and nothing crowding the
-                // right edge, so the column can drop clear of it. Turned, the
-                // frame is already the top of the picture and it stays put.
-                //
-                // 46 used to be enough on its own, but the PRO handle hangs
-                // off the *bottom* of the plate at +54 (see proControl below),
-                // which put its bottom edge 8pt below where this row started —
-                // an amber capsule sitting in the middle of the status text.
-                // 64 clears it with room to spare, whatever the plate's own
-                // height is doing with PRO open or closed.
-                .padding(.top, landscape ? 12 : 64)
+                // Upright the plate is directly above, and the dial barrel
+                // drops out from under it whenever a dial is turned. The barrel
+                // belongs there — beside the dials it reports on — so the
+                // readouts sit *below* it and step down only while it is out.
+                // At rest there is nothing between them and the plate, which is
+                // what a flat 64 was costing: the histogram sat low all the
+                // time to leave room for something usually absent.
+                .padding(.top, landscape ? 12 : (barrelShowing ? Self.barrelClearance : 12))
+                .animation(.easeOut(duration: 0.22), value: barrelShowing)
         }
         // Landscape film is not drawn here at all. Pinned to .bottom it landed
         // on the shutter — the release lives at that edge too. Turned, "the
@@ -1942,13 +1940,12 @@ struct TopPlateDeck: View {
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 16)
-        .padding(.top, barrelShowing ? Self.barrelClearance : 4)
-        .animation(.easeOut(duration: 0.22), value: barrelShowing)
+        .padding(.top, 14)
     }
 
-    /// The dial barrel's own height plus the air above and below it. The barrel
-    /// sits under the plate and the instruments start beneath it.
-    static let barrelClearance: CGFloat = 62
+    /// The dial barrel's own height (46) plus the air above and below it. The
+    /// barrel hangs under the plate and the instruments start beneath it.
+    static let barrelClearance: CGFloat = 68
 
     /// Laid out horizontally and turned as one piece, so no readout is rotated
     /// inside a frame sized for it upright — the fault that clipped the meter
