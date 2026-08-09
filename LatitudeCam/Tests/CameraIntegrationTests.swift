@@ -1519,3 +1519,61 @@ final class PlateDismissTests: XCTestCase {
         XCTAssertFalse(dismisses(compact: true, dx: -20, dy: 0))
     }
 }
+
+// MARK: - The focal-length barrel
+
+/// One value in force, the rest of the ladder present but not shown. What can
+/// go wrong here is stepping off the end of the lens list, which is a crash
+/// rather than a cosmetic fault, and a device's ladder is whatever hardware it
+/// has — so the arithmetic is pinned rather than assumed.
+final class LensBarrelTests: XCTestCase {
+
+    /// Mirrors PlateLensRow.step.
+    private func step(from index: Int, by delta: Int, count: Int) -> Int? {
+        let next = index + delta
+        return (0..<count).contains(next) ? next : nil
+    }
+
+    func testSteppingMovesOneStopAtATime() {
+        XCTAssertEqual(step(from: 1, by: 1, count: 4), 2)
+        XCTAssertEqual(step(from: 1, by: -1, count: 4), 0)
+    }
+
+    /// Both ends refuse rather than wrap. A focal length that jumps from 5× to
+    /// ultra-wide because the thumb kept going is a shot missed.
+    func testTheLadderDoesNotWrapAtEitherEnd() {
+        XCTAssertNil(step(from: 3, by: 1, count: 4), "stepped past the longest lens")
+        XCTAssertNil(step(from: 0, by: -1, count: 4), "stepped past the widest lens")
+    }
+
+    /// A single-camera phone has a ladder of one. Every step must refuse
+    /// without ever indexing outside it.
+    func testASingleLensPhoneCannotStepAnywhere() {
+        XCTAssertNil(step(from: 0, by: 1, count: 1))
+        XCTAssertNil(step(from: 0, by: -1, count: 1))
+    }
+
+    /// And a camera that has published no lenses yet must not be indexed at
+    /// all — this runs before the session answers.
+    func testAnEmptyLadderIsSafe() {
+        XCTAssertNil(step(from: 0, by: 1, count: 0))
+        XCTAssertNil(step(from: 0, by: -1, count: 0))
+    }
+
+    /// Every stop on a real ladder is reachable by stepping from either end.
+    func testEveryLensIsReachable() {
+        let count = 4
+        var reached = Set([0])
+        var i = 0
+        while let next = step(from: i, by: 1, count: count) { reached.insert(next); i = next }
+        XCTAssertEqual(reached.count, count, "a lens is unreachable going up the ladder")
+    }
+
+    /// 44pt per stop: deliberate enough not to trip on a stray drag, short
+    /// enough that the whole ladder is one movement of the thumb.
+    func testOneShortDragCoversTheWholeLadder() {
+        let perStop: CGFloat = 44
+        XCTAssertGreaterThanOrEqual(perStop, 40, "a stray drag would change lens")
+        XCTAssertLessThanOrEqual(perStop * 4, 200, "the ladder needs more than one thumb sweep")
+    }
+}

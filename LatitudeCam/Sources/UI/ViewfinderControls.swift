@@ -1017,19 +1017,18 @@ struct FilmCardStack: View {
     }
 }
 
-/// The focal-length selector, read as a barrel rather than a row of buttons.
+/// The focal length, as one barrel showing one value.
 ///
-/// A barrel shows one value under the index and lets the rest fall away — that
-/// is the whole reason the shape is legible at a glance: there is exactly one
-/// number in focus and it is the one in force. The others stay put so the
-/// ladder is still visible and still tappable, but they are dimmed and thrown
-/// out of focus, which is what a real lens scale does either side of the mark.
+/// It was a row of every length at once, which is a menu, not a barrel. A
+/// barrel shows the value in force and nothing else — the rest of the ladder
+/// exists, you simply are not at it. Drag across to move along the scale, one
+/// detent and one tick of haptics per stop, exactly like the dials above.
 ///
-/// The front camera is one of the focal lengths rather than a switch somewhere
-/// else on the body. That is what it physically is: another lens pointing the
-/// other way, and choosing it is the same decision as choosing between 1x and
-/// 2x. camera.lenses republishes on flip, so the row only ever offers lengths
-/// the live camera actually has.
+/// Double tap flips to the front camera and back. The front camera is another
+/// focal length rather than a switch elsewhere on the body, and keeping it on
+/// this control is what stops "which lens am I shooting through" living in two
+/// places — but it is a different *kind* of move along the ladder, so it gets
+/// its own gesture rather than a stop that can be scrubbed onto by accident.
 struct PlateLensRow: View {
     @ObservedObject var camera: CameraManager
     var selected: String
@@ -1038,80 +1037,109 @@ struct PlateLensRow: View {
     var onSelect: (CameraManager.Lens) -> Void
     var onSelectFront: () -> Void
 
-    var body: some View {
-        HStack(spacing: 2) {
-            ForEach(camera.lenses) { lens in
-                item(label: lens.label,
-                     active: !usingFront && lens.id == selected,
-                     accessibility: "\(lens.label) lens") {
-                    // Coming back from the front camera is a flip, not a
-                    // selection: the back lenses are not addressable while the
-                    // front one is live.
-                    if usingFront { onSelectFront() } else { onSelect(lens) }
-                }
-            }
+    @State private var travel: CGFloat = 0
 
-            Rectangle()
-                .fill(Tone.hairline)
-                .frame(width: 0.5, height: 18)
-                .padding(.horizontal, 3)
-
-            item(label: nil, symbol: "person.fill",
-                 active: usingFront,
-                 accessibility: usingFront ? "Front camera, selected" : "Front camera",
-                 action: onSelectFront)
-        }
-        .padding(4)
-        .background { Capsule().fill(Color.black.opacity(0.45)) }
-        .background { Capsule().fill(.ultraThinMaterial) }
-        .overlay {
-            // The index mark, as on a barrel: the value in force sits under it.
-            Capsule()
-                .fill(Accent.amber.opacity(0.55))
-                .frame(width: 14, height: 1.5)
-                .frame(maxHeight: .infinity, alignment: .top)
-                .offset(y: -1)
-                .allowsHitTesting(false)
-                .opacity(0)
-        }
-        .animation(.spring(response: 0.3, dampingFraction: 0.82), value: usingFront)
-        .animation(.spring(response: 0.3, dampingFraction: 0.82), value: selected)
+    private var index: Int {
+        camera.lenses.firstIndex { $0.id == selected } ?? 0
     }
 
-    private func item(
-        label: String? = nil, symbol: String? = nil,
-        active: Bool, accessibility: String, action: @escaping () -> Void
-    ) -> some View {
-        Button {
-            Haptics.detent()
-            action()
-        } label: {
-            Group {
-                if let label {
-                    Text(label).font(.mono(active ? 13 : 10, .semibold))
-                } else if let symbol {
-                    Image(systemName: symbol)
-                        .font(.system(size: active ? 15 : 12, weight: .semibold))
+    private var reading: String {
+        camera.lenses.first { $0.id == selected }?.label ?? "1×"
+    }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            if usingFront {
+                Image(systemName: "person.fill")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(Accent.amber)
+            }
+            Text(reading)
+                .font(.mono(14, .bold))
+                .foregroundStyle(Accent.amber)
+                .contentTransition(.numericText())
+                .fixedSize()
+        }
+        .rotationEffect(rotation)
+        .padding(.horizontal, 14)
+        .frame(minWidth: 74, minHeight: 40)
+        .background {
+            ZStack {
+                Capsule().fill(Color.black.opacity(0.45))
+                Capsule().fill(.ultraThinMaterial)
+                // The scale behind the value, so the pill reads as a barrel
+                // rather than a badge. It moves with the value.
+                ticks
+            }
+        }
+        .overlay {
+            Capsule().strokeBorder(Tone.hairline, lineWidth: 0.5)
+        }
+        .overlay(alignment: .top) {
+            // The index the value sits under.
+            Capsule()
+                .fill(Accent.amber)
+                .frame(width: 12, height: 1.5)
+                .offset(y: 3)
+        }
+        .contentShape(Capsule())
+        .gesture(scrub)
+        .simultaneousGesture(
+            TapGesture(count: 2).onEnded {
+                Haptics.toggle()
+                onSelectFront()
+            }
+        )
+        .animation(.spring(response: 0.28, dampingFraction: 0.82), value: selected)
+        .animation(.snappy(duration: 0.2), value: usingFront)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Focal length")
+        .accessibilityValue(usingFront ? "\(reading), front camera" : reading)
+        .accessibilityHint("Swipe across to change lens, double tap for the front camera")
+        .accessibilityAdjustableAction { direction in
+            step(by: direction == .increment ? 1 : -1)
+        }
+    }
+
+    private var ticks: some View {
+        GeometryReader { geo in
+            let spacing: CGFloat = 7
+            HStack(spacing: spacing - 1) {
+                ForEach(0..<Int(geo.size.width / spacing) + 12, id: \.self) { i in
+                    Rectangle()
+                        .fill(Color.white.opacity(i.isMultiple(of: 4) ? 0.22 : 0.09))
+                        .frame(width: 1, height: i.isMultiple(of: 4) ? 11 : 6)
                 }
             }
-            .foregroundStyle(active ? Accent.amber : Tone.primary)
-            // Out of focus either side of the mark. A dim label is merely
-            // quieter; a blurred one is genuinely off the index, which is the
-            // thing a lens scale actually does.
-            .blur(radius: active ? 0 : 1.1)
-            .opacity(active ? 1 : 0.42)
-            .scaleEffect(active ? 1 : 0.9)
-            .rotationEffect(rotation)
-            .frame(minWidth: 34, minHeight: 28)
-            .padding(.horizontal, 8)
-            .frame(minHeight: 44)
-            .background {
-                if active { Capsule().fill(Accent.amber.opacity(0.2)).padding(.vertical, 8) }
-            }
-            .contentShape(Capsule())
+            .frame(height: geo.size.height, alignment: .center)
+            .offset(x: -CGFloat(index) * spacing * 2 - spacing * 3)
+            .animation(.spring(response: 0.3, dampingFraction: 0.84), value: index)
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel(accessibility)
+        .clipShape(Capsule())
+        .allowsHitTesting(false)
+    }
+
+    /// One stop per 44pt of travel: far enough that a stop is deliberate, close
+    /// enough that the whole ladder is one short drag.
+    private var scrub: some Gesture {
+        DragGesture(minimumDistance: 6)
+            .onChanged { drag in
+                let moved = drag.translation.width - travel
+                guard abs(moved) >= 44 else { return }
+                travel = drag.translation.width
+                step(by: moved > 0 ? 1 : -1)
+            }
+            .onEnded { _ in travel = 0 }
+    }
+
+    private func step(by delta: Int) {
+        let next = index + delta
+        guard camera.lenses.indices.contains(next) else {
+            Haptics.blocked()
+            return
+        }
+        Haptics.detent()
+        onSelect(camera.lenses[next])
     }
 }
 
