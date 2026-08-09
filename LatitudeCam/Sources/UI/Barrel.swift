@@ -13,6 +13,7 @@
 
 import SwiftUI
 import UIKit
+import CoreMotion
 
 // MARK: - Orientation
 //
@@ -30,38 +31,94 @@ final class DeviceOrientation: ObservableObject {
     @Published private(set) var angle: Angle = .zero
     @Published private(set) var edge: Edge = .bottom
 
+    private let motion = CMMotionManager()
     private var token: NSObjectProtocol?
 
+    /// How far past level the phone has to be tilted before the answer changes.
+    /// Below this the reading is ambiguous and the last good answer stands, so
+    /// the controls do not flick about while the phone is being picked up.
+    private static let commitment = 0.62
+    /// Above this the phone is flat on its back or face and has no meaningful
+    /// left or right at all.
+    private static let flat = 0.80
+
     init() {
-        UIDevice.current.beginGeneratingDeviceOrientationNotifications()
-        token = NotificationCenter.default.addObserver(
-            forName: UIDevice.orientationDidChangeNotification,
-            object: nil, queue: .main
-        ) { [weak self] _ in self?.update() }
-        update()
+        // Read from the accelerometer rather than from UIDevice.
+        //
+        // UIDevice.orientation is the interface's idea of which way is up, and
+        // it is entangled with what the app declares it supports and with the
+        // rotation lock in Control Centre — which is exactly the coupling this
+        // is meant not to have. Gravity is not a setting: it says which way the
+        // phone is being held whatever the phone has been told to do about it.
+        if motion.isAccelerometerAvailable {
+            motion.accelerometerUpdateInterval = 0.2
+            motion.startAccelerometerUpdates(to: .main) { [weak self] data, _ in
+                guard let self, let a = data?.acceleration else { return }
+                self.apply(x: a.x, y: a.y, z: a.z)
+            }
+        } else {
+            // Simulators and any device without an accelerometer. Keeps the old
+            // behaviour rather than leaving orientation stuck in portrait.
+            UIDevice.current.beginGeneratingDeviceOrientationNotifications()
+            token = NotificationCenter.default.addObserver(
+                forName: UIDevice.orientationDidChangeNotification,
+                object: nil, queue: .main
+            ) { [weak self] _ in self?.updateFromDevice() }
+            updateFromDevice()
+        }
     }
 
     deinit {
-        if let token { NotificationCenter.default.removeObserver(token) }
-        UIDevice.current.endGeneratingDeviceOrientationNotifications()
+        motion.stopAccelerometerUpdates()
+        if let token {
+            NotificationCenter.default.removeObserver(token)
+            UIDevice.current.endGeneratingDeviceOrientationNotifications()
+        }
     }
 
-    private func update() {
-        let next: (Angle, Edge)
+    /// Which way the phone is being held, from the direction gravity pulls.
+    ///
+    /// Pure and static so the axis signs — the part that is easy to get
+    /// backwards and impossible to see in code — can be tested rather than
+    /// discovered by turning a phone over and squinting at it.
+    static func reading(x: Double, y: Double, z: Double) -> (angle: Angle, edge: Edge)? {
+        // Face up or face down: no left or right to speak of.
+        guard abs(z) < flat else { return nil }
+
+        if abs(x) > abs(y) {
+            guard abs(x) > commitment else { return nil }
+            // Turned anticlockwise the phone's left edge swings down, so the
+            // controls go there and the block turns +90 to face the user.
+            return x < 0 ? (.degrees(90), .leading) : (.degrees(-90), .trailing)
+        } else {
+            guard abs(y) > commitment else { return nil }
+            // Upside down keeps the last good answer rather than turning the
+            // whole camera over for a grip nobody shoots with.
+            return y < 0 ? (.zero, .bottom) : nil
+        }
+    }
+
+    private func apply(x: Double, y: Double, z: Double) {
+        guard let next = Self.reading(x: x, y: y, z: z) else { return }
+        commit(next)
+    }
+
+    private func updateFromDevice() {
+        let next: (angle: Angle, edge: Edge)
         switch UIDevice.current.orientation {
-        // Turned anticlockwise: the phone's left edge swings down, so the controls
-        // go there and the block turns +90 to face the user.
         case .landscapeLeft:  next = (.degrees(90), .leading)
         case .landscapeRight: next = (.degrees(-90), .trailing)
         case .portrait:       next = (.zero, .bottom)
-        // faceUp, faceDown, upside-down and unknown all keep the last good answer
-        // rather than snapping about when the phone is set down on a table.
         default:              return
         }
-        guard next.0 != angle else { return }
+        commit(next)
+    }
+
+    private func commit(_ next: (angle: Angle, edge: Edge)) {
+        guard next.angle != angle else { return }
         withAnimation(.spring(response: 0.44, dampingFraction: 0.8)) {
-            angle = next.0
-            edge = next.1
+            angle = next.angle
+            edge = next.edge
         }
     }
 }

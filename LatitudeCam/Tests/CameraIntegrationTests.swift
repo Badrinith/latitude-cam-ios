@@ -11,6 +11,7 @@
 import XCTest
 import CoreImage
 import AVFoundation
+import SwiftUI
 @testable import LatitudeCam
 
 final class CameraSettingsTests: XCTestCase {
@@ -1318,5 +1319,87 @@ final class DialEngagesExposureTests: XCTestCase {
         app.exposureComp = 0.7
         app.apertureIndex = 4
         XCTAssertTrue(app.autoExposure, "a dial that does not need manual took the camera off A")
+    }
+}
+
+// MARK: - Orientation read from gravity
+
+/// Orientation comes from the accelerometer, not from UIDevice.
+///
+/// UIDevice.orientation is the interface's idea of which way is up, entangled
+/// with what the app declares it supports and with the rotation lock in Control
+/// Centre. Gravity is not a setting. These pin the axis signs — the part that is
+/// easy to get backwards and impossible to see by reading the code.
+final class GravityOrientationTests: XCTestCase {
+
+    private func read(_ x: Double, _ y: Double, _ z: Double)
+        -> (angle: Angle, edge: DeviceOrientation.Edge)? {
+        DeviceOrientation.reading(x: x, y: y, z: z)
+    }
+
+    /// Held upright, gravity pulls along the device's -y.
+    func testUprightIsPortrait() {
+        let r = read(0, -1, 0)
+        XCTAssertEqual(r?.edge, .bottom)
+        XCTAssertEqual(r?.angle, .zero)
+    }
+
+    /// Turned anticlockwise the left edge swings down, so the controls go there
+    /// and the block turns +90 to face the reader.
+    func testTurnedAnticlockwiseIsLeading() {
+        let r = read(-1, 0, 0)
+        XCTAssertEqual(r?.edge, .leading)
+        XCTAssertEqual(r?.angle, .degrees(90))
+    }
+
+    func testTurnedClockwiseIsTrailing() {
+        let r = read(1, 0, 0)
+        XCTAssertEqual(r?.edge, .trailing)
+        XCTAssertEqual(r?.angle, .degrees(-90))
+    }
+
+    /// The two landscapes must not collapse onto the same answer — that reads
+    /// as the controls appearing on the wrong side half the time.
+    func testTheTwoLandscapesAreOpposites() {
+        XCTAssertNotEqual(read(-1, 0, 0)?.edge, read(1, 0, 0)?.edge)
+        XCTAssertNotEqual(read(-1, 0, 0)?.angle, read(1, 0, 0)?.angle)
+    }
+
+    /// Flat on a table has no left or right. Answering anyway is what makes a
+    /// phone set down on a desk flick its controls between edges.
+    func testFlatGivesNoAnswer() {
+        XCTAssertNil(read(0, 0, -1), "face up should hold the last reading")
+        XCTAssertNil(read(0, 0, 1), "face down should hold the last reading")
+    }
+
+    /// Neither does a phone held at a diagonal, until it is committed.
+    func testAnAmbiguousTiltHoldsTheLastReading() {
+        XCTAssertNil(read(0.45, -0.45, 0.2))
+    }
+
+    /// Upside down keeps the last good answer rather than turning the whole
+    /// camera over for a grip nobody shoots with.
+    func testUpsideDownHoldsRatherThanInverting() {
+        XCTAssertNil(read(0, 1, 0))
+    }
+
+    /// A real reading is never exactly on an axis. Slightly off must still
+    /// resolve, or the orientation only ever changes in a laboratory.
+    func testARealisticImperfectGripStillResolves() {
+        XCTAssertEqual(read(-0.93, -0.24, 0.14)?.edge, .leading)
+        XCTAssertEqual(read(0.88, -0.31, -0.2)?.edge, .trailing)
+        XCTAssertEqual(read(0.18, -0.96, 0.1)?.edge, .bottom)
+    }
+
+    /// Whatever comes back is one of the three the layout knows how to place.
+    func testEveryAnswerIsAnEdgeTheLayoutHandles() {
+        let samples: [(Double, Double, Double)] = [
+            (-1, 0, 0), (1, 0, 0), (0, -1, 0),
+            (-0.8, -0.5, 0.1), (0.7, -0.6, -0.3)
+        ]
+        for (x, y, z) in samples {
+            guard let edge = read(x, y, z)?.edge else { continue }
+            XCTAssertTrue([.bottom, .leading, .trailing].contains(edge))
+        }
     }
 }

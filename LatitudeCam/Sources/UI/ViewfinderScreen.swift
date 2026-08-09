@@ -384,6 +384,11 @@ struct ViewfinderScreen: View {
         // down rather than the ones the portrait layout calls top and bottom.
         // Pinning them to .top and .bottom is what put the barrel over the
         // switch row and the film strip on top of the shutter.
+        //
+        // The barrel takes the ground edge and film takes the sky. The barrel is
+        // the one that gets dragged — it is a control, not a readout — so it
+        // belongs where the thumb already is when the phone is held one-handed.
+        // Film is a swipe you make deliberately, and it can be reached for.
         .overlay {
             if orientation.edge != .bottom {
                 GeometryReader { geo in
@@ -392,14 +397,14 @@ struct ViewfinderScreen: View {
                             DialBarrel(dial: activeDial, rotation: .zero,
                                        onScrub: { scrub(activeDial.key, by: $0) })
                                 .padding(.horizontal, 14),
-                            thickness: 62, at: skyEdge, in: geo.size
+                            thickness: 62, at: orientation.edge, in: geo.size
                         )
                     }
 
                     rotatedBand(
                         TopPlateDeck.landscapeFilm(rotation: .zero,
                                                    onOpen: { app.go(.filmSim) }),
-                        thickness: 118, at: orientation.edge, in: geo.size
+                        thickness: 118, at: skyEdge, in: geo.size
                     )
                 }
                 .zIndex(4)
@@ -410,8 +415,8 @@ struct ViewfinderScreen: View {
     }
 
     /// The edge that is physically up. `orientation.edge` is the one facing the
-    /// ground, so the sky is the other side — the barrel belongs there, nearest
-    /// the eye, and the film strip belongs on the ground edge.
+    /// ground, which is where the thumb falls and therefore where the barrel
+    /// goes; the film strip takes the sky edge opposite it.
     private var skyEdge: DeviceOrientation.Edge {
         switch orientation.edge {
         case .leading:  return .trailing
