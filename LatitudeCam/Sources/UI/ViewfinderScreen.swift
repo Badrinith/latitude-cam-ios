@@ -344,6 +344,8 @@ struct ViewfinderScreen: View {
     /// strip outright, so the whole frame is arranged here rather than layered
     /// over the classic one.
     private var topPlateChrome: some View {
+        GeometryReader { chrome in
+        let width = chrome.size.width
         VStack(spacing: 0) {
             TopPlateBand(
                 rotation: orientation.angle,
@@ -352,7 +354,9 @@ struct ViewfinderScreen: View {
                 onCycleGrid: cycleGrid,
                 onCycleAspect: cycleAspect,
                 aspect: aspect,
-                onDialTurn: showBarrel
+                onDialTurn: showBarrel,
+                onResetDial: resetDial,
+                width: width
             )
 
             TopPlateDeck(
@@ -363,9 +367,7 @@ struct ViewfinderScreen: View {
                 onSettings: { app.go(.settings) },
                 onFilmSim: { app.go(.filmSim) },
                 onLibrary: { app.go(.library) },
-                onFire: fire,
-                onDialTurn: showBarrel,
-                onResetDial: resetDial
+                onFire: fire
             )
             .background(alignment: .bottom) {
                 deckShade.frame(height: 260)
@@ -378,7 +380,7 @@ struct ViewfinderScreen: View {
                 DialBarrel(dial: activeDial, rotation: .zero,
                            onScrub: { scrub(activeDial.key, by: $0) })
                     .padding(.horizontal, 12)
-                    .padding(.top, TopPlateBand.height + 10)
+                    .padding(.top, TopPlateBand.height(proOpen: app.proMode, width: width) + 10)
                     .transition(.opacity.combined(with: .offset(y: -10)))
                     .zIndex(4)
             }
@@ -416,22 +418,12 @@ struct ViewfinderScreen: View {
                     )
                     .opacity(activeDial == nil ? 1 : 0.25)
 
-                    // The rail takes the ground edge, under the hand.
-                    if app.proMode {
-                        rotatedBand(
-                            DialStrip(rotation: .zero, compact: true,
-                                      onDialTurn: showBarrel, onReset: resetDial),
-                            thickness: DialStrip.height, at: orientation.edge, in: geo.size
-                        )
-                    }
-
                     if let activeDial {
                         rotatedBand(
                             DialBarrel(dial: activeDial, rotation: .zero,
                                        onScrub: { scrub(activeDial.key, by: $0) })
                                 .padding(.horizontal, 14),
-                            thickness: 62, at: orientation.edge, in: geo.size,
-                            inset: app.proMode ? DialStrip.height + 4 : 0
+                            thickness: 62, at: orientation.edge, in: geo.size
                         )
                     }
                 }
@@ -447,6 +439,7 @@ struct ViewfinderScreen: View {
         .animation(.spring(response: 0.42, dampingFraction: 0.86), value: orientation.edge)
         .animation(.spring(response: 0.34, dampingFraction: 0.84), value: app.proMode)
         .animation(.easeOut(duration: 0.22), value: activeDial)
+        }
     }
 
     /// The edge that is physically up. `orientation.edge` is the one facing the
@@ -467,7 +460,7 @@ struct ViewfinderScreen: View {
     /// end reached up into the plate and its foot came down onto the shutter
     /// row, which is the overlap that was reported.
     private func viewfinderRegion(in size: CGSize) -> CGRect {
-        let top = TopPlateBand.height
+        let top = TopPlateBand.height(proOpen: app.proMode, width: size.width)
         // Lens row, the release, and the padding under it.
         let bottom: CGFloat = 170
         return CGRect(

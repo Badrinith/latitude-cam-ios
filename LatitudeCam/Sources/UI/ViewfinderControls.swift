@@ -604,46 +604,111 @@ struct PlateDial: View {
         }
     }
 
+    /// Built the way the object is built, not drawn as a flat circle.
+    ///
+    /// A real top-plate dial is a machined aluminium disc: a knurled rim you
+    /// grip, a milled shoulder catching the light from above, a brushed centre
+    /// pad, an engraved index notch, and a hard shadow where it sits into the
+    /// body. Each of those is a layer here, lit consistently from the top left,
+    /// which is what separates "a knob" from "a circle with lines on it".
     private var face: some View {
         ZStack {
+            // The seat it sits down into.
             Circle()
-                .fill(Color(hex: 0x2C2924))
+                .fill(Color.black.opacity(0.55))
+                .blur(radius: 3)
+                .offset(y: diameter * 0.035)
+
+            // Knurled rim. Angular rather than flat so the ridges catch the
+            // light round the circumference instead of reading as a texture.
+            Circle()
+                .fill(
+                    AngularGradient(
+                        colors: [
+                            Color(hex: 0x6A6459), Color(hex: 0x3A3630),
+                            Color(hex: 0x7A7469), Color(hex: 0x2E2B26),
+                            Color(hex: 0x5E5850), Color(hex: 0x6A6459)
+                        ],
+                        center: .center, angle: .degrees(-45)
+                    )
+                )
                 .overlay { knurling }
                 .overlay {
-                    Circle().strokeBorder(Ink.base, lineWidth: diameter > 60 ? 3 : 2)
+                    // Milled shoulder: bright where the light falls, dark
+                    // opposite. One highlight, one shadow, same source.
+                    Circle().strokeBorder(
+                        LinearGradient(
+                            colors: [Color.white.opacity(0.5), .clear,
+                                     Color.black.opacity(0.55)],
+                            startPoint: .topLeading, endPoint: .bottomTrailing
+                        ),
+                        lineWidth: max(1, diameter * 0.018)
+                    )
                 }
-                // The focus ring sits inside the dial's own bounds rather than
-                // haloing them: the plate clips, and a glow spilling past the
-                // metal would be sheared off at its edge.
-                .overlay {
-                    Circle()
-                        .strokeBorder(Accent.amber.opacity(pressing ? 0.9 : 0), lineWidth: 1.5)
-                        .padding(diameter > 60 ? 4 : 3)
-                }
-                .shadow(color: .black.opacity(pressing ? 0.75 : (diameter > 60 ? 0.6 : 0.5)),
-                        radius: pressing ? 10 : (diameter > 60 ? 3 : 2),
-                        y: pressing ? 6 : 2)
 
-            Capsule()
-                .fill(Accent.amber)
-                .frame(width: diameter > 60 ? 3 : 2, height: diameter > 60 ? 12 : 8)
-                .offset(y: -diameter / 2 + (diameter > 60 ? 9 : 6))
-                .rotationEffect(.degrees(KnobMath.pointerAngle(for: value)))
+            // Brushed centre pad, sunk below the rim.
+            Circle()
+                .fill(
+                    RadialGradient(
+                        colors: [Color(hex: 0x4A453D), Color(hex: 0x24211D)],
+                        center: .init(x: 0.34, y: 0.3),
+                        startRadius: 0, endRadius: diameter * 0.42
+                    )
+                )
+                .overlay {
+                    // Concentric turning marks, the trace of a lathe.
+                    ZStack {
+                        ForEach(1..<5, id: \.self) { ring in
+                            Circle()
+                                .strokeBorder(Color.white.opacity(0.045), lineWidth: 0.5)
+                                .padding(diameter * 0.052 * CGFloat(ring))
+                        }
+                    }
+                }
+                .overlay {
+                    Circle().strokeBorder(Color.black.opacity(0.6), lineWidth: 1)
+                }
+                .padding(diameter * 0.19)
+                .shadow(color: .black.opacity(0.6), radius: diameter * 0.02, y: 1)
+
+            // Engraved index notch: cut into the metal, so it is a dark groove
+            // with a lit lower lip rather than a painted line.
+            ZStack {
+                Capsule()
+                    .fill(Color.black.opacity(0.75))
+                    .frame(width: max(2, diameter * 0.042),
+                           height: diameter * 0.17)
+                Capsule()
+                    .fill(Accent.amber.opacity(pressing ? 1 : 0.92))
+                    .frame(width: max(1.5, diameter * 0.028),
+                           height: diameter * 0.15)
+            }
+            .offset(y: -diameter * 0.385)
+            .rotationEffect(.degrees(KnobMath.pointerAngle(for: value)))
+
+            // Focus ring, inside its own bounds: the plate clips, and a glow
+            // spilling past the metal would be sheared off at the edge.
+            Circle()
+                .strokeBorder(Accent.amber.opacity(pressing ? 0.9 : 0),
+                              lineWidth: max(1.2, diameter * 0.02))
+                .padding(diameter * 0.06)
 
             if let text = compact ? (inlineReading ?? label) : inlineReading {
                 Text(text)
-                    .font(.mono(compact ? 8 : 9, .bold))
+                    .font(.mono(max(8, diameter * 0.13), .bold))
                     .foregroundStyle(Color(hex: 0xE8E2D4))
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
-                    .frame(maxWidth: diameter * 0.82)
+                    .frame(maxWidth: diameter * 0.55)
+                    .shadow(color: .black.opacity(0.7), radius: 1, y: 1)
                     .rotationEffect(rotation)
             }
         }
         .frame(width: diameter, height: diameter)
-        // The two smallest dials are 44pt — right on Apple's minimum, and these
-        // are turned rather than tapped, so the hit area is grown past the face.
         .frame(width: max(diameter, 52), height: max(diameter, 52))
+        .shadow(color: .black.opacity(pressing ? 0.7 : 0.45),
+                radius: pressing ? diameter * 0.14 : diameter * 0.05,
+                y: pressing ? diameter * 0.07 : diameter * 0.02)
         .contentShape(Circle())
         .gesture(turn)
         // Simultaneous, because the turn gesture has a zero minimum distance
@@ -657,24 +722,23 @@ struct PlateDial: View {
         )
     }
 
-    /// Alternating wedges, the handoff's 4° ridges.
+    /// The grip. Ridges rather than wedges, each with a lit face and a dark
+    /// one, so the rim reads as cut metal from any angle.
     private var knurling: some View {
         ZStack {
-            ForEach(0..<45, id: \.self) { i in
-                Path { path in
-                    path.move(to: CGPoint(x: diameter / 2, y: diameter / 2))
-                    path.addArc(
-                        center: CGPoint(x: diameter / 2, y: diameter / 2),
-                        radius: diameter / 2,
-                        startAngle: .degrees(Double(i) * 8),
-                        endAngle: .degrees(Double(i) * 8 + 4),
-                        clockwise: false
+            ForEach(0..<60, id: \.self) { i in
+                Capsule()
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.white.opacity(0.16), Color.black.opacity(0.34)],
+                            startPoint: .leading, endPoint: .trailing
+                        )
                     )
-                }
-                .fill(Color(hex: 0x4A453C))
+                    .frame(width: max(1, diameter * 0.016), height: diameter * 0.12)
+                    .offset(y: -diameter * 0.435)
+                    .rotationEffect(.degrees(Double(i) * 6))
             }
         }
-        .frame(width: diameter, height: diameter)
         .mask(Circle())
     }
 
@@ -1012,16 +1076,76 @@ struct PlateLensRow: View {
     }
 }
 
-/// The dials, three times their old size and on a rail.
+// MARK: - Plate metrics
+
+/// Every size on the plate, derived from the width of the phone it is on.
 ///
-/// At 3x the five of them are 132 / 150 / 210 / 150 / 132 - close to 800pt of
-/// row against a 393pt screen, so a fixed row is arithmetically impossible.
-/// They scroll instead, which is what makes the size usable at all: the strip
-/// is longer than the glass and you bring the one you want to hand.
+/// Nothing here is a fixed point value chosen against one device. The dials
+/// keep their relative proportions — the shutter dial is the largest, aperture
+/// and exposure the smallest, exactly as on a camera top plate — and the row is
+/// then scaled to whatever width it has been given. A Pro Max gets larger dials
+/// than an SE because it has the glass for them, and neither is a special case
+/// in the code.
 ///
-/// The fade states the same idea visually. The left is where a dial has been
-/// scrolled past and is on its way out, so it thins; the right is where the
-/// thumb rests, and everything there is at full strength.
+/// Pure and static so the arithmetic can be tested at every screen size rather
+/// than checked on the one phone that happens to be plugged in.
+enum PlateMetrics {
+
+    /// Relative sizes, not point sizes. The proportions are the design; the
+    /// scale is the device's.
+    static let dialWeights: [CGFloat] = [44, 50, 70, 50, 44]
+    static let dialSpacing: CGFloat = 4
+    static let rowPadding: CGFloat = 8
+
+    /// Floor and ceiling so a very narrow or very wide body cannot produce a
+    /// dial too small to grip or so large it eats the frame.
+    static let minScale: CGFloat = 0.9
+    static let maxScale: CGFloat = 1.8
+
+    /// The multiplier that makes the row exactly fill the width it is given.
+    static func dialScale(forWidth width: CGFloat) -> CGFloat {
+        let gaps = dialSpacing * CGFloat(dialWeights.count - 1)
+        let usable = width - rowPadding * 2 - gaps
+        guard usable > 0 else { return minScale }
+        let raw = usable / dialWeights.reduce(0, +)
+        return min(maxScale, max(minScale, raw))
+    }
+
+    static func dialDiameter(weight: CGFloat, forWidth width: CGFloat) -> CGFloat {
+        weight * dialScale(forWidth: width)
+    }
+
+    /// The switches scale with the body too, and never fall under the 44pt
+    /// Apple asks for however narrow the phone is.
+    static func switchSide(forWidth width: CGFloat) -> CGFloat {
+        min(64, max(44, width * 0.135))
+    }
+
+    /// Tallest dial plus room for the label beneath it.
+    static func stripHeight(forWidth width: CGFloat) -> CGFloat {
+        (dialWeights.max() ?? 70) * dialScale(forWidth: width) + 26
+    }
+
+    /// The switch row: the inset above it plus the switch itself.
+    static func switchRowHeight(forWidth width: CGFloat) -> CGFloat {
+        46 + switchSide(forWidth: width) + 8
+    }
+
+    static func plateHeight(proOpen: Bool, forWidth width: CGFloat) -> CGFloat {
+        proOpen
+            ? switchRowHeight(forWidth: width) + stripHeight(forWidth: width) + 10
+            : switchRowHeight(forWidth: width)
+    }
+}
+
+/// The five dials, half again their original size, on the plate where they
+/// started.
+///
+/// At 1.5x they are 66 / 75 / 105 / 75 / 66 — 387pt of dial against 393pt of
+/// narrow phone and 440 of a Pro Max. So it fits on the wide bodies and only
+/// just misses on the narrow ones, which is why the row still sits in a scroll
+/// view: on a Pro Max it never scrolls and reads as a fixed row, and on a
+/// smaller screen the outer dials stay reachable instead of being cropped away.
 struct DialStrip: View {
     @EnvironmentObject var app: AppState
     var rotation: Angle = .zero
@@ -1029,10 +1153,8 @@ struct DialStrip: View {
     var onDialTurn: (ActiveDial) -> Void
     var onReset: (ActiveDial.Key) -> Void
 
-    /// One constant for the whole size question, so retuning it is one edit.
-    static let scale: CGFloat = 3
-    /// Tallest dial plus its label: what the strip needs from the layout.
-    static var height: CGFloat { 70 * scale + 26 }
+    /// The width this row has been given. Every size below comes from it.
+    var width: CGFloat
 
     @State private var focused: ActiveDial.Key?
 
@@ -1051,7 +1173,7 @@ struct DialStrip: View {
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(alignment: .center, spacing: 20) {
+            HStack(alignment: .center, spacing: PlateMetrics.dialSpacing) {
                 dial(.aperture, label: AppState.apertureLabels[app.apertureIndex],
                      name: "APERTURE", reading: AppState.apertureLabels[app.apertureIndex],
                      value: apertureBinding, stops: AppState.apertureStops.count, base: 44)
@@ -1071,28 +1193,16 @@ struct DialStrip: View {
                      name: "EXPOSURE", reading: String(format: "%+.1f EV", app.evValue),
                      value: $app.exposureComp, stops: AppState.evDetents, base: 44)
             }
-            .padding(.horizontal, 26)
-            .frame(height: Self.height)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, PlateMetrics.rowPadding)
+            .frame(height: PlateMetrics.stripHeight(forWidth: width))
         }
         .scrollIndicators(.hidden)
-        // Without this the enlarged dial is cut off at the rail's edge the
-        // moment it is pressed - a scroll view clips its own content, and the
+        // Without this the enlarged dial is cut off at the row's edge the
+        // moment it is pressed — a scroll view clips its own content, and the
         // whole point of the press is that it grows.
         .scrollClipDisabled()
-        .frame(height: Self.height)
-        .mask(fade)
-    }
-
-    private var fade: some View {
-        LinearGradient(
-            stops: [
-                .init(color: .white.opacity(0.28), location: 0),
-                .init(color: .white.opacity(0.75), location: 0.22),
-                .init(color: .white, location: 0.5),
-                .init(color: .white, location: 1)
-            ],
-            startPoint: .leading, endPoint: .trailing
-        )
+        .frame(height: PlateMetrics.stripHeight(forWidth: width))
     }
 
     private func dial(
@@ -1104,7 +1214,7 @@ struct DialStrip: View {
             label: label, inlineReading: inline,
             barrelKey: key, barrelName: name, barrelReading: reading,
             value: value, stops: stops,
-            diameter: base * Self.scale,
+            diameter: PlateMetrics.dialDiameter(weight: base, forWidth: width),
             highlighted: highlighted, rotation: rotation, compact: compact,
             receded: focused != nil && focused != key,
             onTurn: onDialTurn,
@@ -1132,12 +1242,17 @@ struct TopPlateBand: View {
     var onCycleAspect: () -> Void
     var aspect: String
     var onDialTurn: (ActiveDial) -> Void
+    var onResetDial: (ActiveDial.Key) -> Void = { _ in }
+    /// The width the plate has been given, so its sizes follow the phone.
+    var width: CGFloat
 
-    /// The switch row and nothing else. The dials left the plate for a rail at
-    /// the bottom of the screen, where a thumb can reach them — at three times
-    /// their old size they were never going to fit up here, and the plate no
-    /// longer needs to open and close because there is nothing in it to hide.
-    static let height: CGFloat = 108
+    /// Deferred to PlateMetrics so the plate is as deep as the phone needs and
+    /// no deeper. With PRO off it is the switch row alone: the camera is on
+    /// auto and every dial would read AUTO, and a control displaying a value it
+    /// is not setting is worse than no control.
+    static func height(proOpen: Bool, width: CGFloat) -> CGFloat {
+        PlateMetrics.plateHeight(proOpen: proOpen, forWidth: width)
+    }
 
     /// Which dial is being held, so the others can step back.
     @State private var focused: ActiveDial.Key?
@@ -1180,9 +1295,19 @@ struct TopPlateBand: View {
                     Rectangle().fill(Color(hex: 0x0A0A0A).opacity(0.6)).frame(height: 1)
                 }
 
-            utilities.padding(.top, 46)
+            VStack(spacing: 0) {
+                utilities.padding(.top, 46)
+
+                if app.proMode {
+                    DialStrip(rotation: rotation, compact: compact,
+                              onDialTurn: onDialTurn, onReset: onResetDial,
+                              width: width)
+                        .padding(.top, 6)
+                        .transition(.opacity.combined(with: .offset(y: -14)))
+                }
+            }
         }
-        .frame(height: Self.height)
+        .frame(height: Self.height(proOpen: app.proMode, width: width))
         .frame(maxWidth: .infinity)
         .clipped()
     }
@@ -1241,9 +1366,11 @@ struct TopPlateBand: View {
             // icon in a 28pt box beside a much wider PORTRAIT, which read as
             // two classes of control when they are the same class — and made
             // the most-used one the hardest to hit.
-            // 54 square. Bigger than the handoff's 28 in both directions, and
-            // square so a rotated glyph never outgrows its own button.
-            .frame(width: 54, height: 54)
+            // Square, and sized from the body rather than pinned at a number:
+            // square so a rotated glyph never outgrows its own button, and
+            // never under the 44pt Apple asks for however narrow the phone.
+            .frame(width: PlateMetrics.switchSide(forWidth: width),
+                   height: PlateMetrics.switchSide(forWidth: width))
             .background {
                 RoundedRectangle(cornerRadius: 7, style: .continuous)
                     .fill(on ? Accent.amber : Color.black.opacity(0.34))
@@ -1291,14 +1418,6 @@ struct TopPlateDeck: View {
 
             // Portrait keeps film in the stack with everything else.
             if !landscape { filmBand }
-
-            // Portrait: the rail sits at the bottom, right above the hand.
-            if !landscape && app.proMode {
-                DialStrip(rotation: rotation, compact: false,
-                          onDialTurn: onDialTurn, onReset: onResetDial)
-                    .padding(.bottom, 6)
-                    .transition(.opacity.combined(with: .offset(y: 20)))
-            }
 
             lensRow.padding(.bottom, 10)
             bottomBar.padding(.bottom, 30)

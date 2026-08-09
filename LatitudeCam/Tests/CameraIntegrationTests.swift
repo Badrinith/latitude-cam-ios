@@ -874,13 +874,16 @@ final class ViewfinderControlStyleTests: XCTestCase {
     /// literal only asserted that nobody had changed it. What matters is that
     /// it stays in the neighbourhood of the spec and that one helper is the
     /// single source for both the band and the inset.
-    /// The handoff's 210pt plate held five dials. They live on a rail now, so
-    /// the plate is the switch row alone and the depth it needs is a different
-    /// number entirely — what matters is that one constant still feeds both the
-    /// band and everything measured against it.
-    func testTheTopPlateBandIsJustItsSwitchRow() {
-        XCTAssertGreaterThanOrEqual(TopPlateBand.height, 100)
-        XCTAssertLessThanOrEqual(TopPlateBand.height, 130)
+    /// The handoff pinned a 210pt plate. The depth is derived from the phone
+    /// now rather than chosen, so what is asserted is that one function feeds
+    /// both the band and everything measured against it.
+    func testThePlateDefersToTheMetrics() {
+        for width in [CGFloat(375), 393, 440] {
+            XCTAssertEqual(TopPlateBand.height(proOpen: true, width: width),
+                           PlateMetrics.plateHeight(proOpen: true, forWidth: width))
+            XCTAssertEqual(TopPlateBand.height(proOpen: false, width: width),
+                           PlateMetrics.plateHeight(proOpen: false, forWidth: width))
+        }
     }
 
     /// Every dial on the plate drives a real ladder. A zero-stop dial divides by
@@ -1055,55 +1058,90 @@ final class LeafShutterGeometryTests: XCTestCase {
     }
 }
 
-// MARK: - The plate, and the rail that replaced its dials
+// MARK: - Sizes that follow the phone
 
-/// The dials left the plate for a rail at the bottom of the screen. At 3x they
-/// are 132/150/210/150/132 — near 800pt of row against a 393pt screen — so the
-/// arithmetic that used to keep them on the plate is what these now pin.
-final class DialRailTests: XCTestCase {
+/// Nothing on the plate is a point size chosen against one device. The dials
+/// keep their proportions and the row is scaled to the width it is given, so a
+/// Pro Max gets larger dials than an SE and neither is a special case. These
+/// pin that arithmetic at every screen size rather than on the one phone that
+/// happens to be plugged in.
+final class PlateMetricsTests: XCTestCase {
 
-    /// The whole reason the rail scrolls. If this ever came out false, a fixed
-    /// row would fit and the rail would be unnecessary complexity.
-    func testTheDialsCannotFitAcrossTheScreen() {
-        let widest: CGFloat = 393
-        let row = (44 + 50 + 70 + 50 + 44) * DialStrip.scale + 20 * 4 + 52
-        XCTAssertGreaterThan(row, widest,
-                             "the dials fit in a row — the scrolling rail is not needed")
+    /// Every iPhone width currently in service, narrowest to widest.
+    private let widths: [CGFloat] = [320, 375, 390, 393, 402, 430, 440]
+
+    /// The point of the whole exercise: the row fills the width it is given
+    /// and never spills past it.
+    func testTheRowFitsEveryScreen() {
+        for w in widths {
+            let scale = PlateMetrics.dialScale(forWidth: w)
+            let row = PlateMetrics.dialWeights.reduce(0, +) * scale
+                + PlateMetrics.dialSpacing * CGFloat(PlateMetrics.dialWeights.count - 1)
+                + PlateMetrics.rowPadding * 2
+            XCTAssertLessThanOrEqual(row, w + 0.5, "the dials spill off a \(w)pt screen")
+        }
     }
 
-    func testThreeTimesIsTheSizeAsked() {
-        XCTAssertEqual(DialStrip.scale, 3)
+    /// A wider phone earns bigger dials. If this inverted, the largest screens
+    /// would get the smallest controls.
+    func testAWiderPhoneGetsBiggerDials() {
+        XCTAssertGreaterThan(PlateMetrics.dialScale(forWidth: 440),
+                             PlateMetrics.dialScale(forWidth: 375))
     }
 
-    /// The rail has to be tall enough for the largest dial *and* its label, or
-    /// the shutter dial is cropped by the frame that holds it.
-    func testTheRailFitsItsTallestDial() {
-        XCTAssertGreaterThanOrEqual(DialStrip.height, 70 * DialStrip.scale,
-                                    "the shutter dial would be cropped")
-        XCTAssertGreaterThan(DialStrip.height, 70 * DialStrip.scale,
-                             "no room left for the label under it")
+    /// The proportions are the design; only the scale is the device's. The
+    /// shutter dial is always the largest and always the same ratio to the
+    /// smallest, whatever it is scaled by.
+    func testTheProportionsHoldAtEverySize() {
+        for w in widths {
+            let big = PlateMetrics.dialDiameter(weight: 70, forWidth: w)
+            let small = PlateMetrics.dialDiameter(weight: 44, forWidth: w)
+            XCTAssertEqual(big / small, 70.0 / 44.0, accuracy: 0.001)
+        }
     }
 
-    /// The plate is the switch row alone now. It still has to clear a 54pt
-    /// square switch under the 46pt inset above it.
-    func testThePlateStillFitsItsSwitchRow() {
-        XCTAssertGreaterThanOrEqual(TopPlateBand.height, 46 + 54)
+    /// Clamped at both ends so a freak width cannot produce a dial too small to
+    /// grip or one that swallows the frame.
+    func testTheScaleIsClampedAtBothEnds() {
+        XCTAssertEqual(PlateMetrics.dialScale(forWidth: 40), PlateMetrics.minScale)
+        XCTAssertEqual(PlateMetrics.dialScale(forWidth: 4000), PlateMetrics.maxScale)
+        XCTAssertGreaterThan(PlateMetrics.dialScale(forWidth: 0), 0, "a zero width must not divide by zero")
     }
 
-    /// And it must stay slim: it is translucent and the picture runs behind it,
-    /// so every point it grows is a point of frame it dims.
-    func testThePlateStaysSlim() {
-        XCTAssertLessThanOrEqual(TopPlateBand.height, 130,
-                                 "the plate is dimming more of the frame than it needs")
+    /// The switches scale too, and never fall under Apple's minimum target on
+    /// any phone — including the narrowest.
+    func testSwitchesNeverFallBelowTheMinimumTarget() {
+        for w in widths {
+            XCTAssertGreaterThanOrEqual(PlateMetrics.switchSide(forWidth: w), 44,
+                                        "switch is under the 44pt minimum at \(w)pt")
+        }
     }
 
-    /// In landscape the rail and the barrel share the ground edge, so the
-    /// barrel is inset past the rail. Without that they draw on top of one
-    /// another — the same fault that put film on the shutter.
-    func testTheBarrelClearsTheRailOnTheGroundEdge() {
-        let barrelInset = DialStrip.height + 4
-        XCTAssertGreaterThan(barrelInset, DialStrip.height,
-                             "the barrel would be drawn over the rail")
+    /// The plate is deep enough for what it holds, in both states, at every
+    /// width — otherwise the shutter dial is cropped by its own plate.
+    func testThePlateFitsItsContentsEverywhere() {
+        for w in widths {
+            let open = PlateMetrics.plateHeight(proOpen: true, forWidth: w)
+            let closed = PlateMetrics.plateHeight(proOpen: false, forWidth: w)
+            XCTAssertGreaterThanOrEqual(
+                open,
+                PlateMetrics.switchRowHeight(forWidth: w) + PlateMetrics.stripHeight(forWidth: w),
+                "the dials would be cropped at \(w)pt"
+            )
+            XCTAssertGreaterThan(open, closed, "opening the plate must make room")
+            XCTAssertGreaterThanOrEqual(closed, PlateMetrics.switchSide(forWidth: w),
+                                        "the switch row would be cropped at \(w)pt")
+        }
+    }
+
+    /// And it must not run away with the screen: even open, the plate leaves
+    /// the majority of a phone's height to the picture.
+    func testThePlateLeavesTheFrameMostOfTheScreen() {
+        // Shortest screen currently in service.
+        let shortest: CGFloat = 568
+        XCTAssertLessThan(PlateMetrics.plateHeight(proOpen: true, forWidth: 320),
+                          shortest * 0.5,
+                          "the plate takes more than half the shortest screen")
     }
 }
 
@@ -1214,7 +1252,12 @@ final class PlateSwitchTests: XCTestCase {
     /// The plate has to be tall enough for the taller switch row plus the inset
     /// above it, in both states.
     func testThePlateClearsTheSwitchRow() {
-        XCTAssertGreaterThanOrEqual(TopPlateBand.height, 46 + 54)
+        for width in [CGFloat(375), 393, 440] {
+            XCTAssertGreaterThanOrEqual(
+                TopPlateBand.height(proOpen: false, width: width),
+                PlateMetrics.switchSide(forWidth: width)
+            )
+        }
     }
 }
 
@@ -1236,13 +1279,13 @@ final class ViewfinderRegionTests: XCTestCase {
     private let screen = CGSize(width: 393, height: 852)
 
     func testTheRegionStartsBelowThePlate() {
-        let plate = TopPlateBand.height
+        let plate = TopPlateBand.height(proOpen: true, width: screen.width)
         XCTAssertEqual(region(in: screen, plate: plate).minY, plate,
                        "a band would start inside the plate")
     }
 
     func testTheRegionEndsAboveTheRelease() {
-        let r = region(in: screen, plate: TopPlateBand.height)
+        let r = region(in: screen, plate: TopPlateBand.height(proOpen: true, width: screen.width))
         XCTAssertLessThanOrEqual(r.maxY, screen.height - 160,
                                  "a band would come down onto the shutter row")
     }
@@ -1250,7 +1293,7 @@ final class ViewfinderRegionTests: XCTestCase {
     /// The band is laid out along the region's height, so that length must never
     /// exceed the region — an inset of zero would put its ends on the boundary.
     func testTheBandIsShorterThanTheRegionItSitsIn() {
-        let r = region(in: screen, plate: TopPlateBand.height)
+        let r = region(in: screen, plate: TopPlateBand.height(proOpen: true, width: screen.width))
         XCTAssertLessThan(r.height - 28, r.height)
         XCTAssertGreaterThan(r.height - 28, 0, "the band would collapse")
     }
@@ -1280,7 +1323,7 @@ final class ViewfinderRegionTests: XCTestCase {
     /// And both still have to fit inside the picture rather than pushing the
     /// second one out of the frame.
     func testBothSkyBandsFitInsideTheRegion() {
-        let r = region(in: screen, plate: TopPlateBand.height)
+        let r = region(in: screen, plate: TopPlateBand.height(proOpen: true, width: screen.width))
         let outermost: CGFloat = 54
         let innerInset: CGFloat = 62
         let innerThickness: CGFloat = 118
@@ -1292,7 +1335,7 @@ final class ViewfinderRegionTests: XCTestCase {
     /// would flip the band inside out rather than merely crowd it.
     func testTheRegionNeverInverts() {
         let tiny = CGSize(width: 320, height: 480)
-        let r = region(in: tiny, plate: TopPlateBand.height)
+        let r = region(in: tiny, plate: TopPlateBand.height(proOpen: true, width: tiny.width))
         XCTAssertGreaterThan(r.height, 0)
     }
 }
