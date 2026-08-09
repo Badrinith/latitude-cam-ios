@@ -579,6 +579,10 @@ struct PlateDial: View {
     var barrelReading: String
     @Binding var value: Double
     var stops: Int
+    /// The ladder engraved round the face, in ladder order. A real dial is
+    /// marked with the values it selects, and a knob with no scale on it can
+    /// only be read by turning it and watching something else change.
+    var scaleLabels: [String] = []
     var diameter: CGFloat
     var highlighted: Bool = false
     var rotation: Angle = .zero
@@ -706,8 +710,28 @@ struct PlateDial: View {
                 .overlay {
                     Circle().strokeBorder(Color.black.opacity(0.6), lineWidth: 1)
                 }
+                // The pad is sunk, so the rim casts onto it from the top left
+                // and it catches a thin bounce along its lower edge. Two arcs,
+                // one light source — the same one lighting the shoulder.
+                .overlay {
+                    Circle()
+                        .strokeBorder(
+                            LinearGradient(
+                                colors: [Color.black.opacity(0.72), .clear,
+                                         Color.white.opacity(0.10)],
+                                startPoint: .topLeading, endPoint: .bottomTrailing
+                            ),
+                            lineWidth: max(1, diameter * 0.03)
+                        )
+                        .blur(radius: max(0.5, diameter * 0.012))
+                }
                 .padding(diameter * 0.19)
                 .shadow(color: .black.opacity(0.6), radius: diameter * 0.02, y: 1)
+
+            // The engraved scale. Fixed to the body while the pointer turns —
+            // the arrangement on a top-plate dial, and the one that lets the
+            // value be read at a glance without moving anything.
+            scaleRing
 
             // Engraved index notch: cut into the metal, so it is a dark groove
             // with a lit lower lip rather than a painted line.
@@ -758,6 +782,119 @@ struct PlateDial: View {
                 onReset()
             }
         )
+    }
+
+    /// The detent the pointer is currently standing on.
+    private var activeDetent: Int { KnobMath.detent(value, stops: stops) }
+
+    /// Where a detent sits on the sweep. Each one owns a slice of the 0…1
+    /// travel, and its mark belongs at the middle of that slice — the same
+    /// place `KnobMath.detent` will hand back when the pointer is there, so a
+    /// mark can never light up while the reading says something else.
+    private func angle(forDetent index: Int) -> Double {
+        guard stops > 0 else { return 0 }
+        return KnobMath.pointerAngle(for: (Double(index) + 0.5) / Double(stops))
+    }
+
+    /// Numerals are only legible above a certain size — a real number, in
+    /// points, not a fraction of the dial: 6pt of engraved type is unreadable
+    /// whether it sits on a small dial or a large one. Below that the dial
+    /// keeps its ticks, which still say where in the travel you are.
+    /// Only on a dial whose centre is empty. The big shutter dial carries its
+    /// reading in the middle of the pad, and that is where the numerals would
+    /// have to go — there is no metal outside the rim to engrave, only the
+    /// next dial along. A face says one thing or the other, not both.
+    private var showsNumerals: Bool {
+        diameter * 0.115 >= 7.5 && !scaleLabels.isEmpty
+            && inlineReading == nil && !compact
+    }
+
+    /// Which marks get a numeral beside them. All of them would be a smear at
+    /// any size the plate can afford, so the ladder is sampled to about five
+    /// and the ends are always among them — the stops you navigate by.
+    private var numeralDetents: [Int] {
+        guard stops > 1 else { return [0] }
+        let stride = max(1, Int((Double(stops) / 5).rounded()))
+        var marks = Swift.stride(from: 0, to: stops, by: stride).map { $0 }
+        if marks.last != stops - 1 { marks.append(stops - 1) }
+        return marks
+    }
+
+    /// Engraved numerals are cut small, so they are shortened to the part that
+    /// distinguishes them: the denominator of a shutter speed, the number of an
+    /// f-stop. The unit is already named under the dial.
+    private func engraved(_ label: String) -> String {
+        if label.hasPrefix("1/") { return String(label.dropFirst(2)) }
+        if label.hasPrefix("f/") { return String(label.dropFirst(2)) }
+        // Colour temperature is marked in thousands. "5600K" is five glyphs on
+        // a face that has room for three, and the trailing zeroes are the ones
+        // carrying no information.
+        if label.hasSuffix("K"), let kelvin = Int(label.dropLast()) {
+            return String(format: "%.1f", Double(kelvin) / 1000)
+        }
+        return label
+    }
+
+    /// Where a numeral sits, measured from the dial's centre. Zero degrees is
+    /// straight up and the sweep runs clockwise, which is why x takes the sine
+    /// and y the negated cosine.
+    private func numeralOffset(forDetent index: Int) -> CGSize {
+        let radians = angle(forDetent: index) * .pi / 180
+        // Inside the tick ring, on the brushed pad — outside the rim there is
+        // no metal to engrave, only the neighbouring dial.
+        let radius = diameter * 0.185
+        return CGSize(width: radius * sin(radians), height: -radius * cos(radians))
+    }
+
+    /// The scale: one mark per detent round the sweep, with the one under the
+    /// pointer lit. Cut into the metal like the index notch — a dark groove
+    /// with a bright lower lip — rather than printed on top of it.
+    private var scaleRing: some View {
+        ZStack {
+            ForEach(0..<max(stops, 1), id: \.self) { index in
+                let live = index == activeDetent
+                let marked = numeralDetents.contains(index)
+
+                ZStack {
+                    Capsule()
+                        .fill(Color.black.opacity(0.7))
+                        .frame(width: max(1, diameter * 0.016),
+                               height: diameter * (marked ? 0.075 : 0.05))
+                    Capsule()
+                        .fill(live ? Accent.amber
+                                   : Color.white.opacity(marked ? 0.5 : 0.26))
+                        .frame(width: max(0.8, diameter * 0.011),
+                               height: diameter * (marked ? 0.065 : 0.042))
+                }
+                .offset(y: -diameter * 0.285)
+                .rotationEffect(.degrees(angle(forDetent: index)))
+            }
+
+            if showsNumerals {
+                ForEach(numeralDetents, id: \.self) { index in
+                    if index < scaleLabels.count {
+                        Text(engraved(scaleLabels[index]))
+                            .font(.mono(max(6, diameter * 0.115), .semibold))
+                            .foregroundStyle(
+                                index == activeDetent
+                                    ? Accent.amber
+                                    : Color(hex: 0xBDB6A6).opacity(0.85)
+                            )
+                            .shadow(color: .black.opacity(0.9), radius: 0.5, y: 0.5)
+                            .fixedSize()
+                            // Placed round the dial by polar coordinates, and
+                            // never turned with it: engraved numerals on a
+                            // fixed scale stand upright on the body. Rotating
+                            // the numeral into place and back out again is the
+                            // same position by a longer route, and one that
+                            // leaves the glyph's own baseline tilted.
+                            .offset(numeralOffset(forDetent: index))
+                            .rotationEffect(rotation)
+                    }
+                }
+            }
+        }
+        .animation(.easeOut(duration: 0.14), value: activeDetent)
     }
 
     /// The grip. Ridges rather than wedges, each with a lit face and a dark
@@ -1500,24 +1637,33 @@ struct DialStrip: View {
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(alignment: .center, spacing: PlateMetrics.dialSpacing) {
+                // Each scale is the ladder the dial actually indexes, so mark
+                // and reading can never disagree. That rules out the "A"-headed
+                // label lists: those carry an extra entry the stop count knows
+                // nothing about, and every mark after it would be off by one.
                 dial(.aperture, label: AppState.apertureLabels[app.apertureIndex],
                      name: "APERTURE", reading: AppState.apertureLabels[app.apertureIndex],
-                     value: apertureBinding, stops: AppState.apertureStops.count, base: 44)
+                     value: apertureBinding, stops: AppState.apertureStops.count,
+                     scale: AppState.apertureLabels, base: 44)
 
                 dial(.iso, label: app.isoLabel, name: "ISO", reading: app.isoLabel,
-                     value: $app.iso, stops: AppState.isoStops.count, base: 50)
+                     value: $app.iso, stops: AppState.isoStops.count,
+                     scale: AppState.isoStops.map(String.init), base: 50)
 
                 dial(.shutter, label: "SHUTTER", name: "SHUTTER", reading: app.shutterLabel,
-                     value: $app.shutter, stops: AppState.shutterStops.count, base: 70,
+                     value: $app.shutter, stops: AppState.shutterStops.count,
+                     scale: AppState.shutterStops.map { "1/\($0)" }, base: 70,
                      inline: app.shutterLabel, highlighted: true)
 
                 dial(.white, label: app.kelvinLabel, name: "WHITE BALANCE",
                      reading: app.kelvinLabel, value: $app.whiteBalance,
-                     stops: AppState.whiteBalanceStops.count, base: 50)
+                     stops: AppState.whiteBalanceStops.count,
+                     scale: AppState.whiteBalanceLabels, base: 50)
 
                 dial(.exposure, label: String(format: "%+.1fEV", app.evValue),
                      name: "EXPOSURE", reading: String(format: "%+.1f EV", app.evValue),
-                     value: $app.exposureComp, stops: AppState.evDetents, base: 44)
+                     value: $app.exposureComp, stops: AppState.evDetents,
+                     scale: AppState.exposureLabels, base: 44)
             }
             .frame(maxWidth: .infinity)
             .padding(.horizontal, PlateMetrics.rowPadding)
@@ -1533,13 +1679,13 @@ struct DialStrip: View {
 
     private func dial(
         _ key: ActiveDial.Key, label: String, name: String, reading: String,
-        value: Binding<Double>, stops: Int, base: CGFloat,
+        value: Binding<Double>, stops: Int, scale: [String] = [], base: CGFloat,
         inline: String? = nil, highlighted: Bool = false
     ) -> some View {
         PlateDial(
             label: label, inlineReading: inline,
             barrelKey: key, barrelName: name, barrelReading: reading,
-            value: value, stops: stops,
+            value: value, stops: stops, scaleLabels: scale,
             diameter: PlateMetrics.dialDiameter(weight: base, forWidth: width),
             highlighted: highlighted, rotation: rotation, compact: compact,
             receded: focused != nil && focused != key,

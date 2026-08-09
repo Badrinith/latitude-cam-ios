@@ -785,6 +785,58 @@ final class CaptureExifOrientationTests: XCTestCase {
 // reads as fine on the page and as broken in the hand. Pinned here rather than
 // discovered on device.
 
+/// The engraved scale round each dial face. A mark in the wrong place is worse
+/// than no mark: it is a camera telling you it is at f/5.6 when it is at f/8.
+@MainActor
+final class DialScaleTests: XCTestCase {
+
+    /// Every scale handed to a dial must be as long as the ladder that dial
+    /// indexes. The "A"-headed label lists carry an extra entry the stop count
+    /// knows nothing about, and engraving one of those puts every mark after
+    /// the first off by one.
+    func testEachEngravedScaleMatchesItsStopCount() {
+        XCTAssertEqual(AppState.apertureLabels.count, AppState.apertureStops.count)
+        XCTAssertEqual(AppState.isoStops.map(String.init).count, AppState.isoStops.count)
+        XCTAssertEqual(AppState.shutterStops.map { "1/\($0)" }.count, AppState.shutterStops.count)
+        XCTAssertEqual(AppState.whiteBalanceLabels.count, AppState.whiteBalanceStops.count)
+        XCTAssertEqual(AppState.exposureLabels.count, AppState.evDetents)
+    }
+
+    /// The "A" lists are the trap this guards against — if they ever lost their
+    /// leading entry the test above would start passing for the wrong reason.
+    func testTheAutoHeadedListsAreStillOneLongerThanTheirLadders() {
+        XCTAssertEqual(AppState.isoLabels.count, AppState.isoStops.count + 1)
+        XCTAssertEqual(AppState.shutterLabels.count, AppState.shutterStops.count + 1)
+    }
+
+    /// A mark sits at the middle of the slice of travel its detent owns, so the
+    /// detent the pointer reports when it is over a mark is that mark's own.
+    /// Get this wrong and the lit mark drifts off the reading near the ends.
+    func testTheMarkForADetentReadsBackAsThatDetent() {
+        for stops in [7, 8, 11] {
+            for index in 0..<stops {
+                let centre = (Double(index) + 0.5) / Double(stops)
+                XCTAssertEqual(
+                    KnobMath.detent(centre, stops: stops), index,
+                    "stop \(index) of \(stops) does not read back as itself"
+                )
+            }
+        }
+    }
+
+    /// And the marks run in ladder order round the sweep — the first at the low
+    /// stop, the last at the high one, never doubling back.
+    func testMarksAscendAcrossTheSweep() {
+        let stops = 8
+        let angles = (0..<stops).map {
+            KnobMath.pointerAngle(for: (Double($0) + 0.5) / Double(stops))
+        }
+        XCTAssertEqual(angles, angles.sorted(), "the scale is not monotonic")
+        XCTAssertGreaterThan(angles.first!, -KnobMath.sweep / 2)
+        XCTAssertLessThan(angles.last!, KnobMath.sweep / 2)
+    }
+}
+
 final class KnobMathTests: XCTestCase {
 
     func testMidValueSitsStraightUp() {
