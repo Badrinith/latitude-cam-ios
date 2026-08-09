@@ -31,6 +31,139 @@ final class AppStateWiringTests: XCTestCase {
         super.tearDown()
     }
 
+    // MARK: - What the barrel reads
+
+    /// Turning the shutter or ISO dial has to take the camera off automatic.
+    ///
+    /// It did not: `PlateDial` called `onEngage` at the start of every turn,
+    /// but the strip never supplied one, so the dial wrote a new position while
+    /// `autoExposure` stayed true — the camera kept metering for itself and the
+    /// reading rendered as "AUTO" however far the dial was turned.
+    func testTurningShutterOrISOLeavesAutomatic() {
+        for engage in [\AppState.shutter, \AppState.iso] as [ReferenceWritableKeyPath<AppState, Double>] {
+            let app = AppState()
+            XCTAssertTrue(app.autoExposure, "a fresh camera meters for itself")
+
+            // What onEngage does, followed by what the turn does.
+            app.autoExposure = false
+            app[keyPath: engage] = 0.8
+
+            XCTAssertFalse(app.autoExposure)
+            XCTAssertNotEqual(app.shutterLabel, "AUTO")
+            XCTAssertNotEqual(app.isoLabel, "ISO A")
+        }
+    }
+
+    /// Every dial's reading has to change when its dial moves. A reading that
+    /// is pinned to one string — "AUTO", or the value from before the turn —
+    /// looks like a dead control.
+    func testEveryDialsReadingFollowsItsOwnValue() {
+        let app = AppState()
+        app.autoExposure = false
+
+        func readings(_ positions: [Double],
+                      set: (Double) -> Void,
+                      read: () -> String) -> [String] {
+            positions.map { set($0); return read() }
+        }
+
+        let low = 0.05, high = 0.95
+
+        let shutter = readings([low, high], set: { app.shutter = $0 }, read: { app.shutterLabel })
+        XCTAssertNotEqual(shutter[0], shutter[1], "shutter reads the same at both ends")
+
+        let iso = readings([low, high], set: { app.iso = $0 }, read: { app.isoLabel })
+        XCTAssertNotEqual(iso[0], iso[1], "ISO reads the same at both ends")
+
+        let kelvin = readings([low, high], set: { app.whiteBalance = $0 }, read: { app.kelvinLabel })
+        XCTAssertNotEqual(kelvin[0], kelvin[1], "white balance reads the same at both ends")
+
+        let ev = readings([low, high], set: { app.exposureComp = $0 }, read: { app.exposureLabel })
+        XCTAssertNotEqual(ev[0], ev[1], "exposure reads the same at both ends")
+
+        let aperture = readings([low, high], set: { app.aperture = $0 }, read: { app.apertureLabel })
+        XCTAssertNotEqual(aperture[0], aperture[1], "aperture reads the same at both ends")
+    }
+
+    /// And a reset has to be visible in the reading immediately — the barrel
+    /// takes its text from the app rather than from what the dial was last
+    /// built with, so there is no frame where it still shows the old value.
+    func testAResetIsVisibleInTheReadingAtOnce() {
+        let app = AppState()
+        app.autoExposure = false
+        app.whiteBalance = 0.95
+        let moved = app.kelvinLabel
+
+        app.whiteBalance = AppState.defaultControls.whiteBalance
+        XCTAssertNotEqual(app.kelvinLabel, moved,
+                          "the reading still shows the pre-reset value")
+
+        app.aperture = 0.95
+        let movedAperture = app.apertureLabel
+        app.aperture = AppState.defaultControls.aperture
+        XCTAssertNotEqual(app.apertureLabel, movedAperture)
+    }
+
+    // MARK: - Reset, undo, redo
+
+    /// Every PRO control must survive the round trip through a snapshot.
+    ///
+    /// Aperture did not: it was missing from `ControlSnapshot` entirely, so
+    /// reset left it wherever it was, undo and redo stepped straight over it,
+    /// and the "already at the default" guard could not tell it had moved.
+    /// This moves all five off their defaults at once and asserts the reset
+    /// brings back every one — a control added to the plate but not to the
+    /// snapshot fails here rather than on a device.
+    func testResetReturnsEveryProControlToItsDefault() {
+        let app = AppState()
+        let defaults = AppState.defaultControls
+
+        app.autoExposure = false
+        app.aperture = 0.9
+        app.iso = 0.9
+        app.shutter = 0.9
+        app.whiteBalance = 0.9
+        app.exposureComp = 0.9
+
+        app.resetControls()
+
+        XCTAssertEqual(app.aperture, defaults.aperture, accuracy: 0.0001, "aperture")
+        XCTAssertEqual(app.iso, defaults.iso, accuracy: 0.0001, "iso")
+        XCTAssertEqual(app.shutter, defaults.shutter, accuracy: 0.0001, "shutter")
+        XCTAssertEqual(app.whiteBalance, defaults.whiteBalance, accuracy: 0.0001, "white balance")
+        XCTAssertEqual(app.exposureComp, defaults.exposureComp, accuracy: 0.0001, "exposure")
+        XCTAssertEqual(app.autoExposure, defaults.autoExposure, "auto exposure")
+    }
+
+    /// The guard that makes reset a no-op has to see the same controls the
+    /// reset does. With aperture outside the snapshot, moving only aperture
+    /// left the app insisting it was "already at the default".
+    func testMovingOnlyApertureCountsAsAChange() {
+        let app = AppState()
+        app.aperture = AppState.defaultControls.aperture
+        XCTAssertEqual(app.controls, AppState.defaultControls,
+                       "a fresh app should start at the defaults")
+
+        app.aperture = 0.9
+        XCTAssertNotEqual(app.controls, AppState.defaultControls,
+                          "a moved aperture must register as a change")
+    }
+
+    /// Undo has to carry every control back too, not just the ones that happen
+    /// to be in the struct.
+    func testUndoRestoresApertureAlongWithTheRest() {
+        let app = AppState()
+        app.aperture = 0.75
+        let before = app.aperture
+
+        app.resetControls()
+        XCTAssertNotEqual(app.aperture, before, accuracy: 0.0001)
+
+        app.undoControls()
+        XCTAssertEqual(app.aperture, before, accuracy: 0.0001,
+                       "undo stepped over aperture")
+    }
+
     // MARK: - Opening zoom
 
     /// The camera reports where its wide lens sits, and the app adopts that

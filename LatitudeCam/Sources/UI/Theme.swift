@@ -379,7 +379,24 @@ final class AppState: ObservableObject {
     /// separate depth must not leave the control claiming it did.
     @Published private(set) var portrait = false
     /// Ladder position for the aperture barrel.
-    @Published var apertureIndex = 2 { didSet { syncCamera() } }
+    /// Aperture's position on its ladder, 0…1 — continuous, like every other
+    /// control here.
+    ///
+    /// It used to be stored as the index alone, which made it the one dial that
+    /// could not be turned slowly. A scrub recomputed the position *from the
+    /// rounded index* on every frame, so movement smaller than half a stop was
+    /// discarded rather than accumulated: the control did nothing until it
+    /// jumped a whole stop. Worst with the body turned, where the drag is
+    /// projected onto the rotated axis and each frame's delta is smaller still.
+    @Published var aperture: Double = 2.5 / 8 { didSet { syncCamera() } }
+
+    /// The stop the position currently falls on. Derived, so index and position
+    /// cannot disagree — and published through `aperture`, so views reading it
+    /// still update.
+    var apertureIndex: Int {
+        get { stopIndex(Self.apertureStops.count, at: aperture) }
+        set { aperture = position(forIndex: newValue, of: Self.apertureStops.count) }
+    }
 
     static let apertureStops: [Double] = [1.4, 2.0, 2.8, 4.0, 5.6, 8.0, 11.0, 16.0]
     static var apertureLabels: [String] {
@@ -941,6 +958,11 @@ final class AppState: ObservableObject {
         var iso: Double
         var whiteBalance: Double
         var exposureComp: Double
+        /// Aperture was absent from this snapshot, which made it invisible to
+        /// everything that travels through one: reset left it where it was,
+        /// undo and redo stepped over it, and the "already at the default"
+        /// guard could not see it had been moved.
+        var aperture: Double
         var focusPeaking: Bool
         var autoExposure: Bool
         var autoFocus: Bool
@@ -952,6 +974,9 @@ final class AppState: ObservableObject {
         filmID: "neutral", intensity: 0.8,
         grain: false, halation: false, vignette: false,
         shutter: 0.36, iso: 0.50, whiteBalance: 0.64, exposureComp: 0.5,
+        // f/2.8 — the third stop, expressed the way every other position here
+        // is, as the centre of its slice of the ladder.
+        aperture: 2.5 / 8,
         focusPeaking: true, autoExposure: true,
         autoFocus: true, focus: 1.0, metering: "MATRIX"
     )
@@ -971,7 +996,8 @@ final class AppState: ObservableObject {
             filmID: selectedFilm.id, intensity: intensity,
             grain: grainOn, halation: halationOn, vignette: vignetteOn,
             shutter: shutter, iso: iso, whiteBalance: whiteBalance,
-            exposureComp: exposureComp, focusPeaking: focusPeaking,
+            exposureComp: exposureComp, aperture: aperture,
+            focusPeaking: focusPeaking,
             autoExposure: autoExposure,
             autoFocus: autoFocus, focus: focus, metering: metering
         )
@@ -989,6 +1015,7 @@ final class AppState: ObservableObject {
         iso = snapshot.iso
         whiteBalance = snapshot.whiteBalance
         exposureComp = snapshot.exposureComp
+        aperture = snapshot.aperture
         focusPeaking = snapshot.focusPeaking
         autoExposure = snapshot.autoExposure
         autoFocus = snapshot.autoFocus

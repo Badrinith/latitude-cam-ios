@@ -824,6 +824,63 @@ final class DialScaleTests: XCTestCase {
         }
     }
 
+    /// The pointer and the lit numeral must name the same setting.
+    ///
+    /// Every dial reads its position through one of three routes — the pointer
+    /// angle, the lit detent, and the label the HUD prints — and they are
+    /// written in three different places. This walks each ladder stop and
+    /// asserts all three agree, which is the claim "the dial reflects what it
+    /// controls" reduced to something that can fail in CI.
+    func testTheLitMarkAndTheReadingNameTheSameStop() {
+        let app = AppState()
+        app.autoExposure = false
+
+        for (index, speed) in AppState.shutterStops.enumerated() {
+            app.shutterIndex = index + 1          // ladder index 0 is A
+            XCTAssertEqual(KnobMath.detent(app.shutter, stops: AppState.shutterStops.count),
+                           index, "the lit mark is not on stop \(speed)")
+            XCTAssertEqual(app.shutterLabel, "1/\(speed)",
+                           "the reading disagrees with the lit mark")
+        }
+
+        for (index, speed) in AppState.isoStops.enumerated() {
+            app.isoIndex = index + 1
+            XCTAssertEqual(KnobMath.detent(app.iso, stops: AppState.isoStops.count), index)
+            XCTAssertEqual(app.isoLabel, "ISO \(speed)")
+        }
+
+        for (index, kelvin) in AppState.whiteBalanceStops.enumerated() {
+            app.whiteBalanceIndex = index
+            XCTAssertEqual(KnobMath.detent(app.whiteBalance,
+                                           stops: AppState.whiteBalanceStops.count), index)
+            XCTAssertEqual(app.kelvinLabel, "\(kelvin)K")
+        }
+
+        for index in 0..<AppState.apertureStops.count {
+            app.apertureIndex = index
+            XCTAssertEqual(KnobMath.detent(app.aperture,
+                                           stops: AppState.apertureStops.count), index)
+            XCTAssertEqual(app.apertureLabel, AppState.apertureLabels[index])
+        }
+    }
+
+    /// The face is five concentric bands drawn by five unrelated pieces of
+    /// code. Nothing may share one — the amber focus ring sat at 0.44 and ran
+    /// straight through the numerals, cutting every one of them in half, and
+    /// that is only visible on a device with a dial held down.
+    func testNothingOnTheDialFaceSharesABand() {
+        typealias Band = PlateDial.Band
+
+        XCTAssertLessThan(Band.pointer.upperBound, Band.focusRing,
+                          "the focus ring is drawn over the pointer")
+        XCTAssertLessThan(Band.focusRing, Band.ticks.lowerBound,
+                          "the focus ring is drawn over the scale marks")
+        XCTAssertLessThan(Band.ticks.upperBound, Band.numerals.lowerBound,
+                          "the marks and their numerals collide")
+        XCTAssertLessThanOrEqual(Band.numerals.upperBound, Band.rim,
+                                 "the numerals run off the edge of the knob")
+    }
+
     /// And the marks run in ladder order round the sweep — the first at the low
     /// stop, the last at the high one, never doubling back.
     func testMarksAscendAcrossTheSweep() {

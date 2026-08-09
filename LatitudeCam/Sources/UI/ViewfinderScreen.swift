@@ -506,7 +506,10 @@ struct ViewfinderScreen: View {
         case .exposure:
             app.exposureComp = AppState.defaultControls.exposureComp
         case .aperture:
-            app.apertureIndex = 2
+            // From the same defaults as the others. A literal index here is a
+            // second opinion about what "default aperture" means, and the two
+            // drift apart silently.
+            app.aperture = AppState.defaultControls.aperture
         }
         activeDial = nil
     }
@@ -517,14 +520,10 @@ struct ViewfinderScreen: View {
     private func scrub(_ key: ActiveDial.Key, by delta: Double) {
         switch key {
         case .aperture:
-            let last = AppState.apertureStops.count - 1
-            let current = last > 0 ? Double(app.apertureIndex) / Double(last) : 0
-            let next = KnobMath.clamp(current + delta)
-            let index = min(last, max(0, Int((next * Double(last)).rounded())))
-            if index != app.apertureIndex {
-                app.apertureIndex = index
-                Haptics.detent()
-            }
+            // The same continuous step every other control takes. Rounding to
+            // an index here and reading it back next frame is what threw away
+            // every movement short of half a stop.
+            step(\.aperture, by: delta, stops: AppState.apertureStops.count)
         case .iso:
             // Same reason as the dial: a value the camera is not reading is not
             // a control.
@@ -547,29 +546,55 @@ struct ViewfinderScreen: View {
         if KnobMath.detent(app[keyPath: path], stops: stops) != before { Haptics.detent() }
     }
 
+    /// What the named control reads *now*.
+    ///
+    /// The single place the barrel gets its text, so it can never disagree with
+    /// the plate. The dial used to hand its own reading along with the turn,
+    /// but a view's stored properties are the values it was last *built* with —
+    /// so the string arrived one render stale and the barrel showed the reading
+    /// from before the change that summoned it. Most visible on a reset, where
+    /// the old value hung there until something else redrew.
+    private func reading(of key: ActiveDial.Key) -> String {
+        switch key {
+        case .aperture: return AppState.apertureLabels[app.apertureIndex]
+        case .iso:      return app.isoLabel
+        case .shutter:  return app.shutterLabel
+        case .white:    return app.kelvinLabel
+        case .exposure: return String(format: "%+.1f EV", app.evValue)
+        }
+    }
+
+    /// And where it sits on its ladder, for the barrel's travel.
+    private func position(of key: ActiveDial.Key) -> Double {
+        switch key {
+        case .aperture: return app.aperture
+        case .iso:      return app.iso
+        case .shutter:  return app.shutter
+        case .white:    return app.whiteBalance
+        case .exposure: return app.exposureComp
+        }
+    }
+
     /// Keeps the reading under the index current while the barrel is dragged,
     /// and restarts the clock that retires it.
     private func refreshBarrel(_ key: ActiveDial.Key) {
-        let reading: String
-        let value: Double
-        switch key {
-        case .aperture:
-            reading = AppState.apertureLabels[app.apertureIndex]
-            let last = Double(AppState.apertureStops.count - 1)
-            value = last > 0 ? Double(app.apertureIndex) / last : 0
-        case .iso:      reading = app.isoLabel;     value = app.iso
-        case .shutter:  reading = app.shutterLabel; value = app.shutter
-        case .white:    reading = app.kelvinLabel;  value = app.whiteBalance
-        case .exposure: reading = String(format: "%+.1f EV", app.evValue); value = app.exposureComp
-        }
-        showBarrel(ActiveDial(key: key, name: activeDial?.name ?? "", reading: reading, value: value))
+        present(key, name: activeDial?.name ?? "")
     }
 
     /// Shows the barrel for the dial being turned, and starts the clock that
     /// retires it. Restarted on every change, so a long adjustment keeps it up
     /// and letting go puts it away.
+    ///
+    /// Only the key and the name are taken from the caller. The reading and the
+    /// position are read from the app, so what the barrel shows is what the
+    /// camera is set to rather than what the dial believed a frame ago.
     private func showBarrel(_ dial: ActiveDial) {
-        activeDial = dial
+        present(dial.key, name: dial.name)
+    }
+
+    private func present(_ key: ActiveDial.Key, name: String) {
+        activeDial = ActiveDial(key: key, name: name,
+                                reading: reading(of: key), value: position(of: key))
         dialIdleTask?.cancel()
         dialIdleTask = Task { @MainActor in
             try? await Task.sleep(for: .seconds(1.4))

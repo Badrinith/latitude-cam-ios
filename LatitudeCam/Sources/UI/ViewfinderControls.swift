@@ -626,7 +626,7 @@ struct PlateDial: View {
         // Scale, not frame. A size change would reflow the row and shove the
         // neighbouring dials sideways every time one was touched; a transform
         // is invisible to layout, so nothing moves but the dial in the hand.
-        .scaleEffect(pressing ? 1.22 : (receded ? 0.94 : 1), anchor: .center)
+        .scaleEffect(pressing ? Self.pressScale : (receded ? 0.94 : 1), anchor: .center)
         .opacity(receded ? 0.42 : 1)
         .zIndex(pressing ? 1 : 0)
         // Enough mass to read as something rising to meet the thumb rather
@@ -739,21 +739,26 @@ struct PlateDial: View {
                 Capsule()
                     .fill(Color.black.opacity(0.75))
                     .frame(width: max(2, diameter * 0.042),
-                           height: diameter * 0.17)
+                           height: diameter * 0.12)
                 Capsule()
                     .fill(Accent.amber.opacity(pressing ? 1 : 0.92))
                     .frame(width: max(1.5, diameter * 0.028),
-                           height: diameter * 0.15)
+                           height: diameter * 0.10)
             }
-            .offset(y: -diameter * 0.385)
+            // Innermost band, 0.09–0.21. On the pad rather than out on the rim,
+            // where it sat on top of the numerals and hid whichever one it was
+            // pointing at — the one you most needed to read.
+            .offset(y: -diameter * 0.15)
             .rotationEffect(.degrees(KnobMath.pointerAngle(for: value)))
 
-            // Focus ring, inside its own bounds: the plate clips, and a glow
-            // spilling past the metal would be sheared off at the edge.
+            // Focus ring, on the pad well inside the scale. At 0.44 it ran
+            // straight through the numerals on the rim and cut every one of
+            // them in half. The face is a stack of concentric bands now —
+            // pointer, ring, ticks, numerals — and this one owns 0.245.
             Circle()
                 .strokeBorder(Accent.amber.opacity(pressing ? 0.9 : 0),
                               lineWidth: max(1.2, diameter * 0.02))
-                .padding(diameter * 0.06)
+                .padding(diameter * 0.255)
 
             if let text = compact ? (inlineReading ?? label) : inlineReading {
                 Text(text)
@@ -800,13 +805,46 @@ struct PlateDial: View {
     /// points, not a fraction of the dial: 6pt of engraved type is unreadable
     /// whether it sits on a small dial or a large one. Below that the dial
     /// keeps its ticks, which still say where in the travel you are.
-    /// Only on a dial whose centre is empty. The big shutter dial carries its
-    /// reading in the middle of the pad, and that is where the numerals would
-    /// have to go — there is no metal outside the rim to engrave, only the
-    /// next dial along. A face says one thing or the other, not both.
+    /// Only while the dial is in the hand.
+    ///
+    /// Standing numerals on every face at rest put five sets of small type on
+    /// the plate at once, competing with each other and with the picture, for a
+    /// reading that is already printed under the dial. They belong to the act
+    /// of turning: the moment the thumb lands the face grows, its neighbours
+    /// step back, and the scale you are moving along is the only one shown.
+    ///
+    /// The size test is against the pressed diameter, since that is the only
+    /// size at which these are ever drawn.
+    /// Turned or not. The numerals were kept out of landscape while they sat on
+    /// the centre pad, where the compact layout puts the dial's reading — they
+    /// are on the rim now, so there is nothing left for them to collide with,
+    /// and a scale you can only read in one orientation is half a scale.
     private var showsNumerals: Bool {
-        diameter * 0.115 >= 7.5 && !scaleLabels.isEmpty
-            && inlineReading == nil && !compact
+        pressing && !scaleLabels.isEmpty
+            && diameter * Self.pressScale * 0.115 >= 7.5
+    }
+
+    /// How much the face grows under the thumb. Named because the numerals'
+    /// legibility test depends on it — a press that stopped scaling would
+    /// silently start drawing type too small to read.
+    static let pressScale: CGFloat = 1.22
+
+    /// The concentric bands the face is built from, as fractions of the
+    /// diameter measured from the centre. Nothing may share a band: the amber
+    /// focus ring sat at 0.44 and ran clean through the numerals, cutting every
+    /// one of them in half.
+    ///
+    /// Named so the arrangement can be asserted rather than eyeballed — these
+    /// are five rings drawn by five unrelated pieces of code, and an overlap is
+    /// only visible on a device with a dial held down.
+    enum Band {
+        static let pointer: ClosedRange<CGFloat> = 0.09...0.21
+        static let focusRing: CGFloat = 0.245
+        static let ticks: ClosedRange<CGFloat> = 0.278...0.353
+        /// Numerals are centred on 0.42 and stand about 0.06 tall either side.
+        static let numerals: ClosedRange<CGFloat> = 0.36...0.48
+        /// The knob's own edge.
+        static let rim: CGFloat = 0.5
     }
 
     /// Which marks get a numeral beside them. All of them would be a smear at
@@ -840,9 +878,12 @@ struct PlateDial: View {
     /// and y the negated cosine.
     private func numeralOffset(forDetent index: Int) -> CGSize {
         let radians = angle(forDetent: index) * .pi / 180
-        // Inside the tick ring, on the brushed pad — outside the rim there is
-        // no metal to engrave, only the neighbouring dial.
-        let radius = diameter * 0.185
+        // Out on the knurled rim, not in against the pad. Arc length is what
+        // separates one numeral from the next, and near the centre there is
+        // barely any — five marks over the sweep at a small radius bunch into
+        // a smear however small the type is. This is also where a real dial
+        // carries its numbers.
+        let radius = diameter * 0.42
         return CGSize(width: radius * sin(radians), height: -radius * cos(radians))
     }
 
@@ -866,7 +907,9 @@ struct PlateDial: View {
                         .frame(width: max(0.8, diameter * 0.011),
                                height: diameter * (marked ? 0.065 : 0.042))
                 }
-                .offset(y: -diameter * 0.285)
+                // Third band, 0.278–0.353 — clear of the focus ring below it
+                // and the numerals above.
+                .offset(y: -diameter * 0.315)
                 .rotationEffect(.degrees(angle(forDetent: index)))
             }
 
@@ -880,21 +923,43 @@ struct PlateDial: View {
                                     ? Accent.amber
                                     : Color(hex: 0xBDB6A6).opacity(0.85)
                             )
-                            .shadow(color: .black.opacity(0.9), radius: 0.5, y: 0.5)
                             .fixedSize()
-                            // Placed round the dial by polar coordinates, and
-                            // never turned with it: engraved numerals on a
-                            // fixed scale stand upright on the body. Rotating
-                            // the numeral into place and back out again is the
-                            // same position by a longer route, and one that
-                            // leaves the glyph's own baseline tilted.
-                            .offset(numeralOffset(forDetent: index))
+                            // The rim is knurled, and small type laid straight
+                            // onto that texture is unreadable at any contrast.
+                            // Each numeral gets its own milled flat to sit on.
+                            .padding(.horizontal, diameter * 0.026)
+                            .padding(.vertical, diameter * 0.008)
+                            .background {
+                                Capsule()
+                                    .fill(Color.black.opacity(0.62))
+                                    .overlay {
+                                        Capsule().strokeBorder(
+                                            Color.white.opacity(0.10), lineWidth: 0.5
+                                        )
+                                    }
+                            }
+                            // Spin the glyph upright *first*, then carry it out
+                            // to its place on the scale. The other order is a
+                            // silent bug: .offset is a render-time translation
+                            // that leaves the layout frame at the dial's
+                            // centre, so a .rotationEffect applied after it
+                            // pivots about the centre of the *dial* and swings
+                            // the numeral's position round the face. At
+                            // rotation .zero that is invisible, which is why
+                            // portrait looked right and landscape had every
+                            // number 90° from the mark it belonged to.
                             .rotationEffect(rotation)
+                            .offset(numeralOffset(forDetent: index))
                     }
                 }
+                // In from the rim rather than straight on, so the scale reads
+                // as rising to meet the thumb along with the face it is cut
+                // into — the same movement, not a caption appearing beside it.
+                .transition(.opacity.combined(with: .scale(scale: 0.86)))
             }
         }
         .animation(.easeOut(duration: 0.14), value: activeDetent)
+        .animation(.spring(response: 0.26, dampingFraction: 0.8), value: showsNumerals)
     }
 
     /// The grip. Ridges rather than wedges, each with a lit face and a dark
@@ -1621,17 +1686,12 @@ struct DialStrip: View {
 
     @State private var focused: ActiveDial.Key?
 
+    /// Straight through to the stored position. It used to round to an index
+    /// on the way in and rebuild the position from that index on the way out,
+    /// which quantised the dial's own travel and made aperture the one control
+    /// that could not be turned slowly.
     private var apertureBinding: Binding<Double> {
-        Binding(
-            get: {
-                let last = Double(AppState.apertureStops.count - 1)
-                return last > 0 ? Double(app.apertureIndex) / last : 0
-            },
-            set: { fresh in
-                let last = AppState.apertureStops.count - 1
-                app.apertureIndex = min(last, max(0, Int((fresh * Double(last)).rounded())))
-            }
-        )
+        Binding(get: { app.aperture }, set: { app.aperture = $0 })
     }
 
     var body: some View {
@@ -1694,8 +1754,32 @@ struct DialStrip: View {
                 withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
                     focused = holding ? key : (focused == key ? nil : focused)
                 }
+                // Touching a dial calls up its barrel, before anything has been
+                // turned. The barrel retires itself after a moment, so a tap
+                // shows you the fine scale and where you are on it and then
+                // gets out of the way — and if you want the precision, it is
+                // already under your thumb to take hold of.
+                guard holding else { return }
+                onDialTurn(ActiveDial(key: key, name: name,
+                                      reading: reading, value: value.wrappedValue))
             },
-            onReset: { onReset(key) }
+            onReset: { onReset(key) },
+            // Touching the shutter or ISO dial is what takes the camera off
+            // automatic — the same as moving the ring on a body that has one.
+            //
+            // PlateDial has always called this at the start of a turn, but the
+            // strip never supplied it, so it did nothing: the dial wrote a new
+            // shutter position while `autoExposure` stayed true, which left the
+            // camera metering for itself and every reading rendering as "AUTO"
+            // no matter how far the dial was turned.
+            onEngage: {
+                switch key {
+                case .iso, .shutter:
+                    if app.autoExposure { app.autoExposure = false }
+                case .aperture, .white, .exposure:
+                    break
+                }
+            }
         )
     }
 }
@@ -1746,17 +1830,12 @@ struct TopPlateBand: View {
         focused != nil && focused != key
     }
 
+    /// Straight through to the stored position. It used to round to an index
+    /// on the way in and rebuild the position from that index on the way out,
+    /// which quantised the dial's own travel and made aperture the one control
+    /// that could not be turned slowly.
     private var apertureBinding: Binding<Double> {
-        Binding(
-            get: {
-                let last = Double(AppState.apertureStops.count - 1)
-                return last > 0 ? Double(app.apertureIndex) / last : 0
-            },
-            set: { fresh in
-                let last = AppState.apertureStops.count - 1
-                app.apertureIndex = min(last, max(0, Int((fresh * Double(last)).rounded())))
-            }
-        )
+        Binding(get: { app.aperture }, set: { app.aperture = $0 })
     }
 
     var body: some View {
