@@ -1823,6 +1823,11 @@ struct TopPlateDeck: View {
     var onResetDial: (ActiveDial.Key) -> Void = { _ in }
     /// The width the deck has been given, so its sizes follow the phone.
     var width: CGFloat = 393
+    /// True while the dial barrel is on screen. The barrel hangs directly under
+    /// the plate — above the instruments, where the dials it belongs to are —
+    /// so the instruments step down by its depth for as long as it is there
+    /// rather than living permanently below a gap that is usually empty.
+    var barrelShowing: Bool = false
 
     var body: some View {
         // The focal control stays in the same station in both orientations;
@@ -1937,13 +1942,13 @@ struct TopPlateDeck: View {
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 16)
-        .padding(.top, 4)
+        .padding(.top, barrelShowing ? Self.barrelClearance : 4)
+        .animation(.easeOut(duration: 0.22), value: barrelShowing)
     }
 
-    /// How far the instruments column reaches below the plate. The dial barrel
-    /// is pinned under the plate too, so it has to clear this or it lands on
-    /// the histogram.
-    static let hudHeight: CGFloat = 150
+    /// The dial barrel's own height plus the air above and below it. The barrel
+    /// sits under the plate and the instruments start beneath it.
+    static let barrelClearance: CGFloat = 62
 
     /// Laid out horizontally and turned as one piece, so no readout is rotated
     /// inside a frame sized for it upright — the fault that clipped the meter
