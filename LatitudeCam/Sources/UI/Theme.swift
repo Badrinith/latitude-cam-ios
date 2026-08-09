@@ -366,6 +366,15 @@ final class AppState: ObservableObject {
     /// nearest — the same way a zoom ring passes through the marked focal lengths
     /// without stopping on them.
     @Published var zoom: Double = 1 { didSet { syncCamera() } }
+    /// Whether the camera has yet told the app where its wide lens sits, so the
+    /// opening zoom can be moved off its placeholder exactly once.
+    ///
+    /// This used to be inferred from `zoom == 1`, which is not a placeholder at
+    /// all: on a virtual back camera the ultra-wide *is* factor 1.0. Every time
+    /// the lens list was republished — which a RAW capture does, because it
+    /// swaps to the physical sensor and back — a genuine 0.5× read as "not set
+    /// yet" and was overwritten with the wide lens.
+    private var hasAdoptedWideZoom = false
     /// Set from what the camera reported, not from the tap — a body that cannot
     /// separate depth must not leave the control claiming it did.
     @Published private(set) var portrait = false
@@ -1107,7 +1116,8 @@ final class AppState: ObservableObject {
         // The wide lens is not at factor 1 on a virtual device, so the camera has
         // to say where it is before the app can start there.
         cameraManager.onLensesReady = { [weak self] wide in
-            guard let self, self.zoom == 1 else { return }
+            guard let self, !self.hasAdoptedWideZoom else { return }
+            self.hasAdoptedWideZoom = true
             self.zoom = Double(wide)
         }
 

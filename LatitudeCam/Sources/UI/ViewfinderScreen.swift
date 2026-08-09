@@ -372,6 +372,24 @@ struct ViewfinderScreen: View {
                 safeTop: safeTop
             )
 
+            // In the stack, between the plate and the deck — not floating over
+            // them on a padding computed from the plate's height. Three separate
+            // attempts to hand-compute that offset each landed the barrel on the
+            // histogram, because the number had to duplicate the plate's own
+            // geometry (its inset, its PRO state) and stay in step with it.
+            //
+            // Here nothing is duplicated: the barrel takes its own height out of
+            // the stack, and the deck below — instruments and all — is pushed
+            // down by exactly that much, whatever the body or the plate is doing.
+            if let activeDial, orientation.edge == .bottom {
+                DialBarrel(dial: activeDial, rotation: .zero,
+                           onScrub: { scrub(activeDial.key, by: $0) })
+                    .padding(.horizontal, 12)
+                    .padding(.top, 10)
+                    .transition(.opacity.combined(with: .offset(y: -10)))
+                    .zIndex(4)
+            }
+
             TopPlateDeck(
                 rotation: orientation.angle,
                 landscape: orientation.edge != .bottom,
@@ -381,8 +399,7 @@ struct ViewfinderScreen: View {
                 onFilmSim: { app.go(.filmSim) },
                 onLibrary: { app.go(.library) },
                 onFire: fire,
-                width: width,
-                barrelShowing: activeDial != nil && orientation.edge == .bottom
+                width: width
             )
             .background(alignment: .bottom) {
                 deckShade
@@ -397,24 +414,6 @@ struct ViewfinderScreen: View {
             }
         }
         .ignoresSafeArea(edges: .top)
-        // Portrait: the barrel hangs under the plate, where the dials are.
-        .overlay(alignment: .top) {
-            if let activeDial, orientation.edge == .bottom {
-                DialBarrel(dial: activeDial, rotation: .zero,
-                           onScrub: { scrub(activeDial.key, by: $0) })
-                    .padding(.horizontal, 12)
-                    // safeTop matters here. Omitted, this defaulted to 46 while
-                    // the plate itself was built with the real inset (59 on the
-                    // larger bodies), so the barrel was drawn 13pt higher than
-                    // the plate actually ends — tucked under its own metal, and
-                    // the clearance below it measured from the wrong place.
-                    .padding(.top, TopPlateBand.height(proOpen: app.proMode,
-                                                       width: width,
-                                                       safeTop: safeTop) + 10)
-                    .transition(.opacity.combined(with: .offset(y: -10)))
-                    .zIndex(4)
-            }
-        }
         // Turned, both bands go against the edges that are physically up and
         // down rather than the ones the portrait layout calls top and bottom.
         // Pinning them to .top and .bottom is what put the barrel over the

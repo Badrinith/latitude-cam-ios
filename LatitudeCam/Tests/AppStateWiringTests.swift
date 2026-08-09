@@ -31,6 +31,31 @@ final class AppStateWiringTests: XCTestCase {
         super.tearDown()
     }
 
+    // MARK: - Opening zoom
+
+    /// The camera reports where its wide lens sits, and the app adopts that
+    /// once — to move off the placeholder it starts on. It must not adopt it
+    /// again later, because "later" includes every RAW capture: shooting a DNG
+    /// swaps to the physical sensor and back, and republishing the lens list is
+    /// part of coming back.
+    ///
+    /// The old guard asked `zoom == 1`, which is not a placeholder on a virtual
+    /// back camera — the ultra-wide is factor 1.0 exactly. So a RAW frame shot
+    /// at 0.5× came back at 1×.
+    func testTheWideLensIsAdoptedOnceAndNeverReimposed() {
+        let app = AppState()
+        let wide: CGFloat = 2
+
+        app.cameraManager.onLensesReady?(wide)
+        XCTAssertEqual(app.zoom, Double(wide), "the placeholder should give way to the real wide factor")
+
+        // The 0.5× lens on this body. Numerically the value the old sentinel
+        // mistook for "not set yet".
+        app.zoom = 1
+        app.cameraManager.onLensesReady?(wide)
+        XCTAssertEqual(app.zoom, 1, "a republished lens list must not move the lens the user chose")
+    }
+
     // MARK: - Film strip
 
     func testSelectingFilmReachesTheRenderPipeline() {

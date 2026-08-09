@@ -1823,11 +1823,6 @@ struct TopPlateDeck: View {
     var onResetDial: (ActiveDial.Key) -> Void = { _ in }
     /// The width the deck has been given, so its sizes follow the phone.
     var width: CGFloat = 393
-    /// True while the dial barrel is on screen. The barrel hangs directly under
-    /// the plate — above the instruments, where the dials it belongs to are —
-    /// so the instruments step down by its depth for as long as it is there
-    /// rather than living permanently below a gap that is usually empty.
-    var barrelShowing: Bool = false
 
     var body: some View {
         // The focal control stays in the same station in both orientations;
@@ -1859,15 +1854,13 @@ struct TopPlateDeck: View {
         .overlay(alignment: .topTrailing) {
             instruments
                 .padding(.trailing, 14)
-                // Upright the plate is directly above, and the dial barrel
-                // drops out from under it whenever a dial is turned. The barrel
-                // belongs there — beside the dials it reports on — so the
-                // readouts sit *below* it and step down only while it is out.
-                // At rest there is nothing between them and the plate, which is
-                // what a flat 64 was costing: the histogram sat low all the
-                // time to leave room for something usually absent.
-                .padding(.top, landscape ? 12 : (barrelShowing ? Self.barrelClearance : 12))
-                .animation(.easeOut(duration: 0.22), value: barrelShowing)
+                // The same small gap either way up. The barrel used to be
+                // budgeted for here with a flat 64, which held the histogram
+                // low all day for something on screen 1.4s at a time — and
+                // still collided with it, because a hand-written offset cannot
+                // track the plate's own height. The barrel is laid out in the
+                // stack above this now and displaces it directly.
+                .padding(.top, 12)
         }
         // Landscape film is not drawn here at all. Pinned to .bottom it landed
         // on the shutter — the release lives at that edge too. Turned, "the
@@ -1943,9 +1936,6 @@ struct TopPlateDeck: View {
         .padding(.top, 14)
     }
 
-    /// The dial barrel's own height (46) plus the air above and below it. The
-    /// barrel hangs under the plate and the instruments start beneath it.
-    static let barrelClearance: CGFloat = 68
 
     /// Laid out horizontally and turned as one piece, so no readout is rotated
     /// inside a frame sized for it upright — the fault that clipped the meter
