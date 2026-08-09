@@ -1631,3 +1631,62 @@ final class RevealHandleTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(targetHeight, 44, "the handle is below the minimum target")
     }
 }
+
+// MARK: - Rotated views keep their upright footprint
+
+/// The fault behind two rounds of overlap, stated as arithmetic.
+///
+/// A rotated view keeps the layout size it had before the rotation. Turn a
+/// 90x10 hint ninety degrees and it *occupies* 10x90 while still *claiming*
+/// 90x10 — so it spills 80pt into whatever sits below it, which is how the film
+/// strip landed on the focal-length pill. The fix is to book the turned
+/// footprint, and these pin that the booked space is big enough.
+final class RotatedFootprintTests: XCTestCase {
+
+    /// What a view occupies once turned a quarter turn.
+    private func turned(_ size: CGSize) -> CGSize {
+        CGSize(width: size.height, height: size.width)
+    }
+
+    func testAQuarterTurnSwapsTheDimensions() {
+        XCTAssertEqual(turned(CGSize(width: 90, height: 10)), CGSize(width: 10, height: 90))
+    }
+
+    /// The film strip's upright size, and the frame booked for it when turned.
+    func testTheTurnedFilmStripFitsTheFrameBookedForIt() {
+        let upright = CGSize(width: 170, height: 100)
+        let booked = CGSize(width: 108, height: 172)
+        let needs = turned(upright)
+        XCTAssertLessThanOrEqual(needs.width, booked.width,
+                                 "the turned strip is wider than its frame")
+        XCTAssertLessThanOrEqual(needs.height, booked.height,
+                                 "the turned strip is taller than its frame — it will spill onto the pill")
+    }
+
+    /// And the upright frame still fits it the other way round.
+    func testTheUprightFilmStripFitsItsUprightFrame() {
+        let upright = CGSize(width: 170, height: 100)
+        let booked = CGSize(width: 180, height: 108)
+        XCTAssertLessThanOrEqual(upright.width, booked.width)
+        XCTAssertLessThanOrEqual(upright.height, booked.height)
+    }
+
+    /// The pill does not turn, but its lettering does — so the text's width has
+    /// to clear the pill's height, not its width. "0.5×" at 13pt is about 34pt.
+    func testTheTurnedLetteringClearsThePillsShortSide() {
+        let pill = CGSize(width: 104, height: 46)
+        let lettering = CGSize(width: 34, height: 16)
+        XCTAssertLessThanOrEqual(turned(lettering).height, pill.height,
+                                 "the turned reading hangs out of the capsule")
+        XCTAssertLessThanOrEqual(turned(lettering).width, pill.width)
+    }
+
+    /// The same string with the front glyph beside it is what would not fit,
+    /// which is why the glyph steps out when the body turns.
+    func testTheGlyphWouldNotHaveFit() {
+        let withGlyph = CGSize(width: 60, height: 16)
+        let pill = CGSize(width: 104, height: 46)
+        XCTAssertGreaterThan(turned(withGlyph).height, pill.height,
+                             "if this fits, the glyph need not be dropped in landscape")
+    }
+}

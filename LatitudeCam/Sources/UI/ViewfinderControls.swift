@@ -868,19 +868,20 @@ struct DialBarrel: View {
 
 /// The film-stock carousel: glass rather than a solid card, so the picture reads
 /// through it. Swiping steps stock by stock with a detent each time.
+/// The film carousel.
+///
+/// Nothing in here rotates. A rotated view keeps its *unrotated* layout size, so
+/// turning the pieces individually left the strip reserving 90pt of width for a
+/// hint that had become 90pt of height — and it spilled straight down onto the
+/// focal-length pill. The host turns the whole strip once and reserves the
+/// turned footprint, which is the only arrangement where the space it claims
+/// matches the space it occupies.
 struct FilmCardStack: View {
     @EnvironmentObject var app: AppState
     var rotation: Angle = .zero
-    /// Turned, the strip sits on the ground-facing edge and its lettering comes
-    /// up the other way — so the names take an extra half turn to face the
-    /// reader. The cards themselves keep the plain rotation; it is only the
-    /// text that was upside down.
+    /// Kept for the call sites; the strip no longer turns anything internally.
     var invertNames: Bool = false
     var onOpen: () -> Void
-
-    private var nameRotation: Angle {
-        invertNames ? rotation + .degrees(180) : rotation
-    }
 
     @State private var drag: CGFloat = 0
 
@@ -899,7 +900,6 @@ struct FilmCardStack: View {
                 .font(.mono(8, .semibold))
                 .kerning(1.4)
                 .foregroundStyle(Color.white.opacity(0.34))
-                .rotationEffect(nameRotation)
         }
         .contentShape(Rectangle())
         .onTapGesture { Haptics.tap(); onOpen() }
@@ -982,7 +982,6 @@ struct FilmCardStack: View {
                 .mask(LinearGradient(colors: [.white, .clear], startPoint: .top, endPoint: .bottom))
         }
         .shadow(color: .black.opacity(0.45), radius: 8, y: 5)
-        .rotationEffect(rotation)
         .zIndex(2)
     }
 
@@ -997,7 +996,6 @@ struct FilmCardStack: View {
                     .foregroundStyle(Color.white.opacity(0.72))
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
-                    .rotationEffect(invertNames ? .degrees(180) : .zero)
             }
             .padding(4)
             .frame(width: 40, height: 58)
@@ -1010,7 +1008,6 @@ struct FilmCardStack: View {
                     .strokeBorder(Color.white.opacity(0.2), lineWidth: 1)
             }
             .opacity(0.45)
-            .rotationEffect(rotation)
         } else {
             Color.clear.frame(width: 40, height: 58)
         }
@@ -1095,15 +1092,20 @@ struct PlateLensRow: View {
             ticks
             Capsule().strokeBorder(Tone.hairline, lineWidth: 0.5)
 
+            // Turned, the lettering has to fit across the pill's short side —
+            // 46pt. "0.5×" at 13pt is about 34 and clears it; the same string
+            // at 15 with the front glyph beside it is nearer 60 and would hang
+            // out of the capsule. So the glyph steps out when the body turns
+            // and the front camera is shown by the tint instead.
             HStack(spacing: 6) {
-                if usingFront {
+                if usingFront && rotation == .zero {
                     Image(systemName: "person.fill")
                         .font(.system(size: 10, weight: .semibold))
                         .foregroundStyle(Accent.amber)
                 }
                 Text(reading)
-                    .font(.mono(15, .bold))
-                    .foregroundStyle(Accent.amber)
+                    .font(.mono(rotation == .zero ? 15 : 13, .bold))
+                    .foregroundStyle(usingFront ? Tone.primary : Accent.amber)
                     .contentTransition(.numericText())
                     .fixedSize()
             }
@@ -1486,21 +1488,6 @@ struct TopPlateBand: View {
         .frame(height: Self.height(proOpen: app.proMode, width: width))
         .frame(maxWidth: .infinity)
         .clipped()
-        // Points the way the dials will come back from: down in portrait,
-        // in from the trailing edge when the body is turned.
-        .overlay(alignment: compact ? .trailing : .bottom) {
-            if !app.proMode {
-                RevealHandle(label: "PRO",
-                             symbol: compact ? "chevron.right" : "chevron.down",
-                             rotation: rotation) {
-                    withAnimation(.spring(response: 0.4, dampingFraction: 0.86)) {
-                        app.proMode = true
-                    }
-                }
-                .padding(compact ? .trailing : .bottom, 4)
-                .transition(.opacity.combined(with: .scale(scale: 0.8)))
-            }
-        }
         // Swipe the instruments away when they are in the way: up in portrait,
         // left when the body is turned — both are "push it off the frame" in
         // the direction the plate actually sits.
@@ -1669,8 +1656,14 @@ struct TopPlateDeck: View {
         // rotated band and supplied its own angle; back in the stack the
         // regular `rotation` already faces it the right way, and adding 180
         // on top turned every stock name upside down.
-        FilmCardStack(rotation: rotation, invertNames: false, onOpen: onFilmSim)
-            .padding(.bottom, 14)
+        FilmCardStack(rotation: .zero, invertNames: false, onOpen: onFilmSim)
+            .fixedSize()
+            .rotationEffect(rotation)
+            // Width and height swap when the body turns, because the strip
+            // does. Booking the upright footprint for a turned strip is what
+            // put it on top of the lens pill.
+            .frame(width: landscape ? 108 : 180, height: landscape ? 172 : 108)
+            .padding(.bottom, landscape ? 6 : 14)
             .gesture(
                 // Down puts it away, the same "push it off the frame" the plate
                 // answers to. The carousel's own swipe is horizontal, so the two

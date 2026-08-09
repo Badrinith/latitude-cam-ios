@@ -374,6 +374,23 @@ struct ViewfinderScreen: View {
             }
         }
         .ignoresSafeArea(edges: .top)
+        // The PRO handle sits below the plate, over the picture, rather than on
+        // the plate's own bottom edge — there it crowded the switch row and was
+        // shaved by the plate's clip. Out here it is clear of the metal and low
+        // enough to reach.
+        .overlay(alignment: .top) {
+            if !app.proMode {
+                RevealHandle(label: "PRO", symbol: "chevron.down",
+                             rotation: orientation.angle) {
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.86)) {
+                        app.proMode = true
+                    }
+                }
+                .padding(.top, TopPlateBand.height(proOpen: false, width: width) + 18)
+                .transition(.opacity.combined(with: .scale(scale: 0.85)))
+                .zIndex(5)
+            }
+        }
         // Portrait: the barrel hangs under the plate, where the dials are.
         .overlay(alignment: .top) {
             if let activeDial, orientation.edge == .bottom {
