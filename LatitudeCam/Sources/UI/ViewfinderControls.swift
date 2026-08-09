@@ -548,7 +548,12 @@ struct PlateDial: View {
     /// inside the face — a rotated word needs its width in the frame's height,
     /// so "SHUTTER" under the dial climbed back over it once the body turned.
     var compact: Bool = false
+    /// True while a *different* dial is being held. The one in hand comes
+    /// forward and the rest step back, so the row reads as one control being
+    /// used rather than five competing for the eye.
+    var receded: Bool = false
     var onTurn: (ActiveDial) -> Void = { _ in }
+    var onFocusChange: (Bool) -> Void = { _ in }
     /// Called once when a turn begins. Shutter and ISO use it to come off A:
     /// touching the dial is what takes a camera out of auto, and without it the
     /// dial moved while the exposure stayed exactly where it was.
@@ -557,6 +562,10 @@ struct PlateDial: View {
     @State private var lastAngle: Double?
     @State private var lastDetent: Int?
     @State private var engaged = false
+    /// Held-down state. @GestureState rather than @State on purpose: it resets
+    /// itself the moment the gesture ends *or is cancelled*, so a touch that
+    /// slides away can never leave the dial stranded at its enlarged size.
+    @GestureState private var pressing = false
 
     var body: some View {
         VStack(spacing: 4) {
@@ -564,9 +573,23 @@ struct PlateDial: View {
             if !compact {
                 Text(label)
                     .font(.mono(7, .semibold))
-                    .foregroundStyle(highlighted ? Accent.amber : Color(hex: 0x8A8478))
+                    .foregroundStyle(
+                        pressing ? Tone.primary
+                            : (highlighted ? Accent.amber : Color(hex: 0x8A8478))
+                    )
             }
         }
+        // Scale, not frame. A size change would reflow the row and shove the
+        // neighbouring dials sideways every time one was touched; a transform
+        // is invisible to layout, so nothing moves but the dial in the hand.
+        .scaleEffect(pressing ? 1.22 : (receded ? 0.94 : 1), anchor: .center)
+        .opacity(receded ? 0.42 : 1)
+        .zIndex(pressing ? 1 : 0)
+        // Enough mass to read as something rising to meet the thumb rather
+        // than a number being tweened.
+        .animation(.spring(response: 0.28, dampingFraction: 0.74), value: pressing)
+        .animation(.spring(response: 0.34, dampingFraction: 0.86), value: receded)
+        .onChange(of: pressing) { _, now in onFocusChange(now) }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(barrelName)
         .accessibilityValue(barrelReading)
@@ -587,8 +610,17 @@ struct PlateDial: View {
                 .overlay {
                     Circle().strokeBorder(Ink.base, lineWidth: diameter > 60 ? 3 : 2)
                 }
-                .shadow(color: .black.opacity(diameter > 60 ? 0.6 : 0.5),
-                        radius: diameter > 60 ? 3 : 2, y: 2)
+                // The focus ring sits inside the dial's own bounds rather than
+                // haloing them: the plate clips, and a glow spilling past the
+                // metal would be sheared off at its edge.
+                .overlay {
+                    Circle()
+                        .strokeBorder(Accent.amber.opacity(pressing ? 0.9 : 0), lineWidth: 1.5)
+                        .padding(diameter > 60 ? 4 : 3)
+                }
+                .shadow(color: .black.opacity(pressing ? 0.75 : (diameter > 60 ? 0.6 : 0.5)),
+                        radius: pressing ? 10 : (diameter > 60 ? 3 : 2),
+                        y: pressing ? 6 : 2)
 
             Capsule()
                 .fill(Accent.amber)
@@ -637,6 +669,9 @@ struct PlateDial: View {
 
     private var turn: some Gesture {
         DragGesture(minimumDistance: 0)
+            // Fires on touch-down, before any movement, so the dial is already
+            // up by the time the thumb begins to turn it.
+            .updating($pressing) { _, state, _ in state = true }
             .onChanged { drag in
                 let centre = CGPoint(x: diameter / 2, y: diameter / 2)
                 let angle = atan2(drag.location.y - centre.y,
@@ -990,6 +1025,21 @@ struct TopPlateBand: View {
 
     static func height(proOpen: Bool) -> CGFloat { proOpen ? height : collapsedHeight }
 
+    /// Which dial is being held, so the others can step back.
+    @State private var focused: ActiveDial.Key?
+
+    private func focus(_ key: ActiveDial.Key) -> (Bool) -> Void {
+        { holding in
+            withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
+                focused = holding ? key : (focused == key ? nil : focused)
+            }
+        }
+    }
+
+    private func receded(_ key: ActiveDial.Key) -> Bool {
+        focused != nil && focused != key
+    }
+
     private var apertureBinding: Binding<Double> {
         Binding(
             get: {
@@ -1108,21 +1158,24 @@ struct TopPlateBand: View {
                           value: apertureBinding,
                           stops: AppState.apertureStops.count,
                           diameter: 44, rotation: rotation, compact: compact,
-                          onTurn: onDialTurn)
+                          receded: receded(.aperture), onTurn: onDialTurn,
+                          onFocusChange: focus(.aperture))
 
                 PlateDial(label: app.isoLabel,
                           barrelKey: .iso, barrelName: "ISO", barrelReading: app.isoLabel,
                           value: $app.iso,
                           stops: AppState.isoStops.count,
                           diameter: 50, rotation: rotation, compact: compact,
-                          onTurn: onDialTurn,
+                          receded: receded(.iso), onTurn: onDialTurn,
+                          onFocusChange: focus(.iso),
                           onEngage: { app.autoExposure = false })
 
                 PlateDial(label: "SHUTTER", inlineReading: app.shutterLabel,
                           barrelKey: .shutter, barrelName: "SHUTTER", barrelReading: app.shutterLabel,
                           value: $app.shutter, stops: AppState.shutterStops.count,
                           diameter: 70, highlighted: true, rotation: rotation,
-                          compact: compact, onTurn: onDialTurn,
+                          compact: compact, receded: receded(.shutter), onTurn: onDialTurn,
+                          onFocusChange: focus(.shutter),
                           onEngage: { app.autoExposure = false })
 
                 PlateDial(label: app.kelvinLabel,
@@ -1130,14 +1183,16 @@ struct TopPlateBand: View {
                           value: $app.whiteBalance,
                           stops: AppState.whiteBalanceStops.count,
                           diameter: 50, rotation: rotation, compact: compact,
-                          onTurn: onDialTurn)
+                          receded: receded(.white), onTurn: onDialTurn,
+                          onFocusChange: focus(.white))
 
                 PlateDial(label: String(format: "%+.1fEV", app.evValue),
                           barrelKey: .exposure, barrelName: "EXPOSURE",
                           barrelReading: String(format: "%+.1f EV", app.evValue),
                           value: $app.exposureComp, stops: AppState.evDetents,
                           diameter: 44, rotation: rotation, compact: compact,
-                          onTurn: onDialTurn)
+                          receded: receded(.exposure), onTurn: onDialTurn,
+                          onFocusChange: focus(.exposure))
             }
             .frame(maxWidth: .infinity)
         }
