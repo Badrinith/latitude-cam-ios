@@ -43,6 +43,20 @@ final class DeviceOrientation: ObservableObject {
     private static let flat = 0.80
 
     init() {
+        // A forced orientation for screenshots. The app is portrait-locked and
+        // this Xcode ships no Simulator.app, so without this the turned layout
+        // can only be seen on a physical phone — which is why so much of it was
+        // fixed blind. LAT_ORIENTATION=left|right pins the reading and skips
+        // the sensor entirely.
+        if let forced = ProcessInfo.processInfo.environment["LAT_ORIENTATION"] {
+            switch forced {
+            case "left":  angle = .degrees(90);  edge = .leading
+            case "right": angle = .degrees(-90); edge = .trailing
+            default:      angle = .zero;         edge = .bottom
+            }
+            return
+        }
+
         // Read from gravity rather than from UIDevice.
         //
         // UIDevice.orientation is the interface's idea of which way is up, and

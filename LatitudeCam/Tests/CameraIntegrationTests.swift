@@ -1885,8 +1885,8 @@ final class RotationAnchorTests: XCTestCase {
 /// positive one, so the same movement of the thumb drove them opposite ways.
 final class ScrubSenseTests: XCTestCase {
 
-    private func filmStep(_ along: CGFloat) -> Int { along > 0 ? 1 : -1 }
-    private func lensStep(_ along: CGFloat) -> Int { along > 0 ? 1 : -1 }
+    private func filmStep(_ along: CGFloat) -> Int { along < 0 ? 1 : -1 }
+    private func lensStep(_ along: CGFloat) -> Int { along < 0 ? 1 : -1 }
 
     func testTheTwoControlsAgreeOnWhichWayIsForward() {
         for along in [CGFloat(60), -60] {
@@ -1895,10 +1895,14 @@ final class ScrubSenseTests: XCTestCase {
         }
     }
 
-    func testForwardIsPositiveTravelForBoth() {
-        XCTAssertEqual(filmStep(60), 1)
-        XCTAssertEqual(lensStep(60), 1)
-        XCTAssertEqual(filmStep(-60), -1)
-        XCTAssertEqual(lensStep(-60), -1)
+    /// Forward is negative travel for both. Which way round that is matters far
+    /// less than the two agreeing — a pair of controls that runs together can be
+    /// flipped in one edit, while a pair that disagrees is wrong in one
+    /// orientation whichever way it is set.
+    func testForwardIsNegativeTravelForBoth() {
+        XCTAssertEqual(filmStep(-60), 1)
+        XCTAssertEqual(lensStep(-60), 1)
+        XCTAssertEqual(filmStep(60), -1)
+        XCTAssertEqual(lensStep(60), -1)
     }
 }

@@ -975,12 +975,10 @@ struct FilmCardStack: View {
                 let step = along - drag
                 if abs(step) > 46 {
                     drag = along
-                    // Same sense as the focal-length barrel. Film advanced on a
-                    // negative step while the lens advanced on a positive one,
-                    // so the two ran opposite ways from the same movement —
-                    // which is exactly what "works in the opposite direction"
-                    // describes.
-                    move(by: step > 0 ? 1 : -1)
+                    // Forward is a negative step, matching the focal-length
+                    // barrel. Both were running the other way: a drag towards
+                    // the head of the strip was walking back down it.
+                    move(by: step < 0 ? 1 : -1)
                 }
             }
             .onEnded { _ in drag = 0 }
@@ -1161,7 +1159,11 @@ struct PlateLensRow: View {
                 Text(reading)
                     .font(.mono(rotation == .zero ? 15 : 13, .bold))
                     .foregroundStyle(usingFront ? Tone.primary : Accent.amber)
-                    .contentTransition(.numericText())
+                    // No numericText transition. It renders the glyphs through
+                    // a separate path that does not carry the rotationEffect,
+                    // so the reading stayed upright while everything around it
+                    // turned — visible in a simulator screenshot at last,
+                    // rather than guessed at.
                     .fixedSize()
             }
             .rotationEffect(rotation)
@@ -1252,7 +1254,11 @@ struct PlateLensRow: View {
                 let moved = along - travel
                 guard abs(moved) >= 44 else { return }
                 travel = along
-                step(by: moved > 0 ? 1 : -1)
+                // Negative is forward, the same sense the film strip uses. A
+                // control that agrees with itself in one orientation and
+                // disagrees in the other is worse than one that is simply
+                // backwards, so the two are pinned together.
+                step(by: moved < 0 ? 1 : -1)
             }
             .onEnded { _ in travel = 0 }
     }
@@ -1561,7 +1567,9 @@ struct TopPlateBand: View {
         // thing the clip took; here it sits on the picture, centred, right
         // where the dials appear from.
         .overlay(alignment: .bottom) {
-            proControl.offset(y: 30)
+            // Far enough below the metal to clear it outright. At 30 it still
+            // grazed the plate's lower edge.
+            proControl.offset(y: 54)
         }
         .zIndex(2)
         // Swipe the instruments away when they are in the way: up in portrait,
@@ -1757,7 +1765,10 @@ struct TopPlateDeck: View {
         .overlay(alignment: .topTrailing) {
             instruments
                 .padding(.trailing, 14)
-                .padding(.top, 12)
+                // Upright there is a plate above and nothing crowding the
+                // right edge, so the column can drop clear of it. Turned, the
+                // frame is already the top of the picture and it stays put.
+                .padding(.top, landscape ? 12 : 46)
         }
         // Landscape film is not drawn here at all. Pinned to .bottom it landed
         // on the shutter — the release lives at that edge too. Turned, "the
@@ -1788,7 +1799,12 @@ struct TopPlateDeck: View {
     ) -> some View {
         HStack(spacing: 8) {
             LiveHistogramView(frames: camera.frames, style: histogramStyle)
+            // Capped. The status line is a sentence when something is wrong
+            // ("camera access denied — settings › latitude"), and at full width
+            // it pushed the histogram clean off the other edge of the screen.
             CameraStatusPill(camera: camera)
+                .frame(maxWidth: 132)
+                .fixedSize(horizontal: false, vertical: true)
             MeterReadout(frames: camera.frames, rotation: .zero)
 
             if let wide = camera.lenses.first(where: { $0.id == "wide" }) {
@@ -1848,9 +1864,9 @@ struct TopPlateDeck: View {
         // top leaves the rendered column hanging ~127pt above that frame —
         // off the top of the deck, which is why it disappeared entirely once
         // the body was turned. Centring puts the rendering where the frame is.
-        .frame(width: landscape ? 64 : 300,
-               height: landscape ? 330 : 62,
-               alignment: landscape ? .center : .leading)
+        .frame(width: landscape ? 64 : nil,
+               height: landscape ? 330 : nil,
+               alignment: .center)
         .allowsHitTesting(false)
     }
 
@@ -1885,6 +1901,10 @@ struct TopPlateDeck: View {
                     .frame(width: landscape ? 70 : 138,
                            height: landscape ? 116 : 84)
                     .contentShape(Rectangle())
+                    // Air between the strip and the release. They were touching:
+                    // the outer film card sat against the shutter ring, which
+                    // reads as one control rather than two.
+                    .padding(.trailing, 10)
 
                 Spacer(minLength: 0)
 
