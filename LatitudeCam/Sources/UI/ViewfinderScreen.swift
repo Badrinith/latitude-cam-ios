@@ -408,16 +408,6 @@ struct ViewfinderScreen: View {
                         thickness: 54, at: skyEdge, in: geo.size
                     )
 
-                    // Film moves to the leading side of the frame, beside the
-                    // release rather than opposite it — asked for, and it keeps
-                    // the sky edge for reading and the ground edge for turning.
-                    rotatedBand(
-                        TopPlateDeck.landscapeFilm(rotation: .zero,
-                                                   onOpen: { app.go(.filmSim) }),
-                        thickness: 118, at: .leading, in: geo.size
-                    )
-                    .opacity(activeDial == nil ? 1 : 0.25)
-
                     if let activeDial {
                         rotatedBand(
                             DialBarrel(dial: activeDial, rotation: .zero,

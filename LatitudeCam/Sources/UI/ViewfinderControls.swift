@@ -904,6 +904,20 @@ struct FilmCardStack: View {
         .contentShape(Rectangle())
         .onTapGesture { Haptics.tap(); onOpen() }
         .gesture(swipe)
+        // Fades out at both ends rather than stopping at a hard edge, so the
+        // stocks either side read as continuing past the frame instead of
+        // being the last two in a list.
+        .mask(
+            LinearGradient(
+                stops: [
+                    .init(color: .white.opacity(0), location: 0),
+                    .init(color: .white, location: 0.22),
+                    .init(color: .white, location: 0.78),
+                    .init(color: .white.opacity(0), location: 1)
+                ],
+                startPoint: .leading, endPoint: .trailing
+            )
+        )
         .animation(.spring(response: 0.32, dampingFraction: 0.82), value: app.selectedFilm)
     }
 
@@ -1003,14 +1017,19 @@ struct FilmCardStack: View {
     }
 }
 
-/// The focal-length selector, in the handoff's glass-pill material. It takes the
-/// slot the reference fills with a "VIDEO" placeholder — a real lens outranks a
-/// stand-in for a mode that does not exist yet.
+/// The focal-length selector, read as a barrel rather than a row of buttons.
+///
+/// A barrel shows one value under the index and lets the rest fall away — that
+/// is the whole reason the shape is legible at a glance: there is exactly one
+/// number in focus and it is the one in force. The others stay put so the
+/// ladder is still visible and still tappable, but they are dimmed and thrown
+/// out of focus, which is what a real lens scale does either side of the mark.
 ///
 /// The front camera is one of the focal lengths rather than a switch somewhere
 /// else on the body. That is what it physically is: another lens pointing the
-/// other way, and choosing it is the same decision as choosing between 1× and
-/// 2× — "which lens am I shooting through".
+/// other way, and choosing it is the same decision as choosing between 1x and
+/// 2x. camera.lenses republishes on flip, so the row only ever offers lengths
+/// the live camera actually has.
 struct PlateLensRow: View {
     @ObservedObject var camera: CameraManager
     var selected: String
@@ -1025,6 +1044,9 @@ struct PlateLensRow: View {
                 item(label: lens.label,
                      active: !usingFront && lens.id == selected,
                      accessibility: "\(lens.label) lens") {
+                    // Coming back from the front camera is a flip, not a
+                    // selection: the back lenses are not addressable while the
+                    // front one is live.
                     if usingFront { onSelectFront() } else { onSelect(lens) }
                 }
             }
@@ -1042,8 +1064,18 @@ struct PlateLensRow: View {
         .padding(4)
         .background { Capsule().fill(Color.black.opacity(0.45)) }
         .background { Capsule().fill(.ultraThinMaterial) }
-        .animation(.snappy(duration: 0.22), value: usingFront)
-        .animation(.snappy(duration: 0.22), value: selected)
+        .overlay {
+            // The index mark, as on a barrel: the value in force sits under it.
+            Capsule()
+                .fill(Accent.amber.opacity(0.55))
+                .frame(width: 14, height: 1.5)
+                .frame(maxHeight: .infinity, alignment: .top)
+                .offset(y: -1)
+                .allowsHitTesting(false)
+                .opacity(0)
+        }
+        .animation(.spring(response: 0.3, dampingFraction: 0.82), value: usingFront)
+        .animation(.spring(response: 0.3, dampingFraction: 0.82), value: selected)
     }
 
     private func item(
@@ -1056,18 +1088,25 @@ struct PlateLensRow: View {
         } label: {
             Group {
                 if let label {
-                    Text(label).font(.mono(10, .semibold))
+                    Text(label).font(.mono(active ? 13 : 10, .semibold))
                 } else if let symbol {
-                    Image(systemName: symbol).font(.system(size: 12, weight: .semibold))
+                    Image(systemName: symbol)
+                        .font(.system(size: active ? 15 : 12, weight: .semibold))
                 }
             }
-            .foregroundStyle(active ? Accent.amber : Tone.primary.opacity(0.7))
+            .foregroundStyle(active ? Accent.amber : Tone.primary)
+            // Out of focus either side of the mark. A dim label is merely
+            // quieter; a blurred one is genuinely off the index, which is the
+            // thing a lens scale actually does.
+            .blur(radius: active ? 0 : 1.1)
+            .opacity(active ? 1 : 0.42)
+            .scaleEffect(active ? 1 : 0.9)
             .rotationEffect(rotation)
             .frame(minWidth: 34, minHeight: 28)
             .padding(.horizontal, 8)
             .frame(minHeight: 44)
             .background {
-                if active { Capsule().fill(Accent.amber.opacity(0.22)).padding(.vertical, 8) }
+                if active { Capsule().fill(Accent.amber.opacity(0.2)).padding(.vertical, 8) }
             }
             .contentShape(Capsule())
         }
@@ -1310,6 +1349,28 @@ struct TopPlateBand: View {
         .frame(height: Self.height(proOpen: app.proMode, width: width))
         .frame(maxWidth: .infinity)
         .clipped()
+        // Swipe the instruments away when they are in the way: up in portrait,
+        // left when the body is turned — both are "push it off the frame" in
+        // the direction the plate actually sits.
+        //
+        // Attached to the plate rather than to the dials, and as .gesture so a
+        // child wins: a touch that starts on a dial is a turn, and a long
+        // horizontal turn would otherwise read as a swipe and dismiss the very
+        // control being used. PRO brings them back.
+        .gesture(
+            DragGesture(minimumDistance: 24)
+                .onEnded { drag in
+                    guard app.proMode else { return }
+                    let away = compact
+                        ? drag.translation.width < -44
+                        : drag.translation.height < -44
+                    guard away else { return }
+                    Haptics.toggle()
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.86)) {
+                        app.proMode = false
+                    }
+                }
+        )
     }
 
     /// No camera-flip button: front is a focal length now, chosen in the lens
@@ -1416,8 +1477,10 @@ struct TopPlateDeck: View {
             if !landscape { hud }
             Spacer(minLength: 0)
 
-            // Portrait keeps film in the stack with everything else.
-            if !landscape { filmBand }
+            // Film immediately before the focal length, turned or not. It was
+            // on the leading edge in landscape, which put it across the frame
+            // from the lens it belongs beside.
+            filmBand
 
             lensRow.padding(.bottom, 10)
             bottomBar.padding(.bottom, 30)

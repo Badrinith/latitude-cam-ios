@@ -1479,3 +1479,43 @@ final class GravityOrientationTests: XCTestCase {
         }
     }
 }
+
+// MARK: - Dismissing the instruments
+
+/// The plate can be swiped away when it is in the way — up in portrait, left
+/// when the body is turned. The direction is orientation-dependent, which is
+/// exactly the sort of thing that is easy to get backwards and invisible until
+/// a swipe dismisses nothing.
+final class PlateDismissTests: XCTestCase {
+
+    /// Mirrors the plate's gesture: `compact` is true when the body is turned.
+    private func dismisses(compact: Bool, dx: CGFloat, dy: CGFloat) -> Bool {
+        compact ? dx < -44 : dy < -44
+    }
+
+    func testPortraitDismissesOnAnUpwardSwipe() {
+        XCTAssertTrue(dismisses(compact: false, dx: 0, dy: -80))
+        XCTAssertFalse(dismisses(compact: false, dx: 0, dy: 80), "swiping down must not dismiss")
+    }
+
+    func testLandscapeDismissesOnALeftwardSwipe() {
+        XCTAssertTrue(dismisses(compact: true, dx: -80, dy: 0))
+        XCTAssertFalse(dismisses(compact: true, dx: 80, dy: 0), "swiping right must not dismiss")
+    }
+
+    /// The two orientations must not answer to each other's direction, or a
+    /// turn of the body silently changes what a swipe does.
+    func testEachOrientationIgnoresTheOtherAxis() {
+        XCTAssertFalse(dismisses(compact: false, dx: -200, dy: 0),
+                       "a sideways swipe dismissed the portrait plate")
+        XCTAssertFalse(dismisses(compact: true, dx: 0, dy: -200),
+                       "an upward swipe dismissed the turned plate")
+    }
+
+    /// A small movement is a touch that wandered, not a dismissal — the plate
+    /// carries dials that are dragged, so the threshold has to clear a stray.
+    func testASmallDriftDoesNotDismiss() {
+        XCTAssertFalse(dismisses(compact: false, dx: 0, dy: -20))
+        XCTAssertFalse(dismisses(compact: true, dx: -20, dy: 0))
+    }
+}
