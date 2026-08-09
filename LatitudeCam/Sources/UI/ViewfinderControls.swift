@@ -1937,8 +1937,13 @@ struct TopPlateDeck: View {
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 16)
-        .padding(.top, 14)
+        .padding(.top, 4)
     }
+
+    /// How far the instruments column reaches below the plate. The dial barrel
+    /// is pinned under the plate too, so it has to clear this or it lands on
+    /// the histogram.
+    static let hudHeight: CGFloat = 150
 
     /// Laid out horizontally and turned as one piece, so no readout is rotated
     /// inside a frame sized for it upright — the fault that clipped the meter

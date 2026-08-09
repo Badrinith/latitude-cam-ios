@@ -402,7 +402,8 @@ struct ViewfinderScreen: View {
                 DialBarrel(dial: activeDial, rotation: .zero,
                            onScrub: { scrub(activeDial.key, by: $0) })
                     .padding(.horizontal, 12)
-                    .padding(.top, TopPlateBand.height(proOpen: app.proMode, width: width) + 10)
+                    .padding(.top, TopPlateBand.height(proOpen: app.proMode, width: width)
+                             + TopPlateDeck.hudHeight + 10)
                     .transition(.opacity.combined(with: .offset(y: -10)))
                     .zIndex(4)
             }
