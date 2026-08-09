@@ -1625,6 +1625,7 @@ struct TopPlateBand: View {
                 .overlay(alignment: .bottom) {
                     Rectangle().fill(Color(hex: 0x0A0A0A).opacity(0.6)).frame(height: 1)
                 }
+                .opacity(app.proMode ? 0 : 1)
 
             VStack(spacing: 0) {
                 utilities.padding(.top, max(46, safeTop + 10))
@@ -1636,6 +1637,7 @@ struct TopPlateBand: View {
                 proControl
                     .padding(.top, PlateMetrics.proGap(forWidth: width))
                     .padding(.bottom, 6)
+                    .frame(maxWidth: .infinity, alignment: .center)
 
                 if app.proMode {
                     DialStrip(rotation: rotation, compact: compact,
