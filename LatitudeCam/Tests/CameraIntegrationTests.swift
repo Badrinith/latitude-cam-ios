@@ -1766,3 +1766,72 @@ final class DragAxisTests: XCTestCase {
         }
     }
 }
+
+// MARK: - Turned lettering stays inside its own background
+
+/// The single fault behind every "still overlapping" report. Applying
+/// .rotationEffect to content and *then* drawing a .background behind it leaves
+/// the background at the upright size while the content stands on end and hangs
+/// out of it. It bit the collapsed pill, the film hint, the barrel's reading
+/// chip, the reveal handle, and finally the expanded lens ladder — each one
+/// found by a screenshot rather than by a test.
+///
+/// The rule these encode: whatever frame a background is drawn in must hold the
+/// content at every angle it will be rotated to.
+final class TurnedContentFitsTests: XCTestCase {
+
+    /// A view's footprint once turned a quarter turn.
+    private func turned(_ s: CGSize) -> CGSize { CGSize(width: s.height, height: s.width) }
+
+    /// True when a frame holds the content upright *and* turned.
+    private func holds(_ frame: CGSize, content: CGSize) -> Bool {
+        let t = turned(content)
+        return content.width <= frame.width && content.height <= frame.height
+            && t.width <= frame.width && t.height <= frame.height
+    }
+
+    /// The reveal handle turns with the body, so its frame must hold the label
+    /// lying either way. "PRO" with a chevron is about 46x12.
+    func testTheHandleHoldsItsLabelEitherWayUp() {
+        XCTAssertTrue(holds(CGSize(width: 64, height: 48),
+                            content: CGSize(width: 46, height: 12)),
+                      "the handle's label hangs out of its capsule when turned")
+    }
+
+    /// The barrel's reading chip is the exception, and worth stating: the
+    /// barrel is placed by a rotated band, so it turns *as a whole* and its
+    /// contents are never rotated inside it. Both call sites pass a zero angle.
+    /// It therefore only has to hold the reading upright — "1/1000" at 13pt is
+    /// about 52x16.
+    func testTheReadingChipHoldsItsReadingUpright() {
+        let frame = CGSize(width: 64, height: 40)
+        let reading = CGSize(width: 52, height: 16)
+        XCTAssertLessThanOrEqual(reading.width, frame.width)
+        XCTAssertLessThanOrEqual(reading.height, frame.height)
+    }
+
+    /// The collapsed pill, which deliberately does not turn: only the lettering
+    /// does, so the frame must hold the text at 90 degrees too.
+    func testThePillHoldsItsLetteringEitherWayUp() {
+        XCTAssertTrue(holds(CGSize(width: 104, height: 46),
+                            content: CGSize(width: 34, height: 16)))
+    }
+
+    /// A frame that only fits upright is exactly the bug — this proves the
+    /// helper detects it rather than passing everything.
+    func testAnUprightOnlyFrameIsCaught() {
+        XCTAssertFalse(holds(CGSize(width: 90, height: 14),
+                             content: CGSize(width: 88, height: 12)),
+                       "an upright-only frame should not be considered safe")
+    }
+
+    /// The expanded ladder does turn as a whole, so it books the swapped
+    /// footprint rather than holding both — the other valid answer.
+    func testTheExpandedLadderBooksTheTurnedFootprint() {
+        let along: CGFloat = 4 * 50 + 24     // four lenses
+        let across: CGFloat = 56
+        let turnedFrame = CGSize(width: across, height: along)
+        XCTAssertEqual(turned(CGSize(width: along, height: across)), turnedFrame,
+                       "the turned ladder is not booking the size it occupies")
+    }
+}

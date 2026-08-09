@@ -862,16 +862,19 @@ struct DialBarrel: View {
                 .frame(width: 1.5)
                 .shadow(color: Accent.amber.opacity(0.7), radius: 4)
 
-            Text(dial.reading)
-                .font(.mono(13, .bold))
-                .foregroundStyle(Tone.primary)
-                .rotationEffect(rotation)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 3)
-                .background {
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(Ink.base.opacity(0.8))
-                }
+            // Background first, then the turned lettering inside a frame that
+            // holds it. The other way round the chip drew at the upright size
+            // while the reading stood on end and hung out of it.
+            ZStack {
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(Ink.base.opacity(0.8))
+                Text(dial.reading)
+                    .font(.mono(13, .bold))
+                    .foregroundStyle(Tone.primary)
+                    .fixedSize()
+                    .rotationEffect(rotation)
+            }
+            .frame(width: 64, height: 40)
         }
         .frame(height: 46)
         .background {
@@ -1167,40 +1170,46 @@ struct PlateLensRow: View {
     /// Under the thumb: the whole ladder, larger, with everything but the value
     /// in force thrown out of focus. You are choosing, so you get to see what
     /// there is to choose from — and only then.
+    ///
+    /// Built background-first, like the collapsed pill. It was built the other
+    /// way — rotation applied to the row, *then* a .background behind it — so
+    /// the capsule drew at the upright 220pt-wide frame while the turned row
+    /// stood 220pt tall and stuck straight out of it, over the film strip. That
+    /// is the same fault as the collapsed pill and the film hint, in the one
+    /// place it had not been fixed.
     private var expanded: some View {
-        HStack(spacing: 4) {
-            ForEach(camera.lenses) { lens in
-                let active = lens.id == selected
-                Text(lens.label)
-                    .font(.mono(active ? 17 : 13, .bold))
-                    .foregroundStyle(active ? Accent.amber : Tone.primary)
-                    .blur(radius: active ? 0 : 1.4)
-                    .opacity(active ? 1 : 0.4)
-                    .scaleEffect(active ? 1 : 0.88)
-                    .frame(minWidth: 46, minHeight: 44)
-                    .background {
-                        if active {
-                            Capsule().fill(Accent.amber.opacity(0.18))
+        let turned = rotation != .zero
+        let along = CGFloat(max(camera.lenses.count, 1)) * 50 + 24
+        let across: CGFloat = 56
+
+        return ZStack {
+            Capsule().fill(Color.black.opacity(0.55))
+            Capsule().fill(.ultraThinMaterial)
+            Capsule().strokeBorder(Accent.amber.opacity(0.5), lineWidth: 1)
+
+            HStack(spacing: 4) {
+                ForEach(camera.lenses) { lens in
+                    let active = lens.id == selected
+                    Text(lens.label)
+                        .font(.mono(active ? 17 : 13, .bold))
+                        .foregroundStyle(active ? Accent.amber : Tone.primary)
+                        .blur(radius: active ? 0 : 1.4)
+                        .opacity(active ? 1 : 0.4)
+                        .scaleEffect(active ? 1 : 0.88)
+                        .frame(minWidth: 46, minHeight: 44)
+                        .background {
+                            if active { Capsule().fill(Accent.amber.opacity(0.18)) }
                         }
-                    }
+                }
             }
+            .fixedSize()
+            .rotationEffect(rotation)
         }
-        .rotationEffect(rotation)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .background {
-            ZStack {
-                Capsule().fill(Color.black.opacity(0.55))
-                Capsule().fill(.ultraThinMaterial)
-            }
-        }
-        .overlay { Capsule().strokeBorder(Accent.amber.opacity(0.5), lineWidth: 1) }
-        .overlay(alignment: .top) {
-            Capsule()
-                .fill(Accent.amber)
-                .frame(width: 14, height: 2)
-                .offset(y: 2)
-        }
+        // The ladder lies along the strip, so its frame turns with it. Booking
+        // the upright footprint for a turned ladder is what put it across the
+        // film cards.
+        .frame(width: turned ? across : along,
+               height: turned ? along : across)
         .shadow(color: .black.opacity(0.6), radius: 14, y: 6)
         .transition(.scale(scale: 0.86).combined(with: .opacity))
     }
@@ -1268,25 +1277,30 @@ struct RevealHandle: View {
             Haptics.tap()
             action()
         }) {
-            HStack(spacing: 5) {
-                Image(systemName: symbol)
-                    .font(.system(size: 9, weight: .bold))
-                Text(label)
-                    .font(.mono(7.5, .semibold))
-                    .kerning(1.4)
-            }
-            .foregroundStyle(Accent.amber.opacity(0.95))
-            .rotationEffect(rotation)
-            .padding(.horizontal, 10)
-            .frame(minWidth: 44, minHeight: 28)
-            .background {
+            // Background first, then the turned label inside a frame square
+            // enough to hold it either way up. Rotated after its own padding,
+            // the lettering stood on end and hung out of the capsule.
+            ZStack {
                 Capsule().fill(Color.black.opacity(0.5))
+                Capsule().fill(.ultraThinMaterial)
+                Capsule().strokeBorder(Accent.amber.opacity(0.35), lineWidth: 0.5)
+
+                HStack(spacing: 5) {
+                    Image(systemName: symbol)
+                        .font(.system(size: 9, weight: .bold))
+                    Text(label)
+                        .font(.mono(7.5, .semibold))
+                        .kerning(1.4)
+                }
+                .foregroundStyle(Accent.amber.opacity(0.95))
+                .fixedSize()
+                .rotationEffect(rotation)
             }
-            .background { Capsule().fill(.ultraThinMaterial) }
-            .overlay { Capsule().strokeBorder(Accent.amber.opacity(0.35), lineWidth: 0.5) }
-            // 44 of target under 28 of paint: this is deliberately unobtrusive,
-            // and something unobtrusive still has to be easy to hit.
-            .frame(minHeight: 44)
+            // Square enough to hold the label lying either way. 62x44 was not:
+            // turned, a 46pt label needs 46 of height and had 44, so the
+            // lettering hung out of the capsule. Caught by a test rather than
+            // by another screenshot.
+            .frame(width: 64, height: 48)
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
