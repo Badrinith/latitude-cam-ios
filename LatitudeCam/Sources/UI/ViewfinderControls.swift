@@ -1768,7 +1768,14 @@ struct TopPlateDeck: View {
                 // Upright there is a plate above and nothing crowding the
                 // right edge, so the column can drop clear of it. Turned, the
                 // frame is already the top of the picture and it stays put.
-                .padding(.top, landscape ? 12 : 46)
+                //
+                // 46 used to be enough on its own, but the PRO handle hangs
+                // off the *bottom* of the plate at +54 (see proControl below),
+                // which put its bottom edge 8pt below where this row started —
+                // an amber capsule sitting in the middle of the status text.
+                // 64 clears it with room to spare, whatever the plate's own
+                // height is doing with PRO open or closed.
+                .padding(.top, landscape ? 12 : 64)
         }
         // Landscape film is not drawn here at all. Pinned to .bottom it landed
         // on the shutter — the release lives at that edge too. Turned, "the
