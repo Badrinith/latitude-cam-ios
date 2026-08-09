@@ -975,7 +975,12 @@ struct FilmCardStack: View {
                 let step = along - drag
                 if abs(step) > 46 {
                     drag = along
-                    move(by: step < 0 ? 1 : -1)
+                    // Same sense as the focal-length barrel. Film advanced on a
+                    // negative step while the lens advanced on a positive one,
+                    // so the two ran opposite ways from the same movement —
+                    // which is exactly what "works in the opposite direction"
+                    // describes.
+                    move(by: step > 0 ? 1 : -1)
                 }
             }
             .onEnded { _ in drag = 0 }
@@ -1628,7 +1633,9 @@ struct TopPlateBand: View {
                     .font(.system(size: 8, weight: .bold))
             }
             .foregroundStyle(app.proMode ? Accent.amber : Color(hex: 0xC9C2B4))
-            .rotationEffect(rotation)
+            // Deliberately not rotated. The word is three letters and reads
+            // perfectly well upright at any angle; turning it only made it
+            // harder to find. The arrow carries the state instead.
             .frame(width: 84, height: 34)
             .background {
                 Capsule()
@@ -1832,9 +1839,18 @@ struct TopPlateDeck: View {
         )
         .fixedSize()
         .rotationEffect(rotation)
-        .frame(width: landscape ? 62 : 300,
-               height: landscape ? 300 : 62,
-               alignment: landscape ? .top : .leading)
+        // Turned, the row becomes a column: it books 64 across and 330 down,
+        // which is the footprint it actually occupies once rotated. Booking the
+        // upright 300x62 is what left it outside its own frame and clipped away
+        // to nothing.
+        // Centred, not top-aligned. rotationEffect turns a view about the
+        // centre of its *own* layout box, so aligning the outer frame to the
+        // top leaves the rendered column hanging ~127pt above that frame —
+        // off the top of the deck, which is why it disappeared entirely once
+        // the body was turned. Centring puts the rendering where the frame is.
+        .frame(width: landscape ? 64 : 300,
+               height: landscape ? 330 : 62,
+               alignment: landscape ? .center : .leading)
         .allowsHitTesting(false)
     }
 
@@ -1862,8 +1878,12 @@ struct TopPlateDeck: View {
                     .fixedSize()
                     .scaleEffect(landscape ? 0.66 : 0.8)
                     .rotationEffect(rotation)
-                    .frame(width: landscape ? 78 : 132,
-                           height: landscape ? 128 : 82)
+                    // Scaling and rotating both leave the layout size alone, so
+                    // the frame has to be the size the strip ends up: turned and
+                    // at 0.66 that is about 66 x 112. Booking more than it
+                    // occupies is what pushed it off centre from the release.
+                    .frame(width: landscape ? 70 : 138,
+                           height: landscape ? 116 : 84)
                     .contentShape(Rectangle())
 
                 Spacer(minLength: 0)

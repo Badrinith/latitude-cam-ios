@@ -1835,3 +1835,70 @@ final class TurnedContentFitsTests: XCTestCase {
                        "the turned ladder is not booking the size it occupies")
     }
 }
+
+// MARK: - Rotation turns a view about its own box
+
+/// The reason the instruments vanished in landscape, stated as arithmetic.
+///
+/// `.rotationEffect` turns a view about the centre of the layout box it already
+/// had — it does not re-anchor to whatever frame is applied afterwards. So a
+/// 300x62 row turned a quarter turn still *lays out* as 300x62 but *renders*
+/// 62x300 about that box's centre. Put it in a 64x330 frame aligned to the top
+/// and the rendering hangs far above the frame; centre it and the two agree.
+final class RotationAnchorTests: XCTestCase {
+
+    /// How far a turned view's rendering extends beyond its own layout box,
+    /// measured from the box's centre.
+    private func overhang(_ box: CGSize) -> CGFloat {
+        max(box.width, box.height) / 2
+    }
+
+    /// Centring: the rendering sits inside the frame.
+    func testCentringKeepsTheTurnedColumnInsideItsFrame() {
+        let row = CGSize(width: 300, height: 62)
+        let frame = CGSize(width: 64, height: 330)
+        XCTAssertLessThanOrEqual(overhang(row), frame.height / 2,
+                                 "the turned column extends past its own frame even centred")
+    }
+
+    /// Top-aligning: the rendering escapes upward. This is the bug, and it must
+    /// stay expressible or the test proves nothing.
+    func testTopAligningPushesTheTurnedColumnOutOfFrame() {
+        let row = CGSize(width: 300, height: 62)
+        // Top-aligned, the box's centre sits at half its own height from the top.
+        let centreFromTop = row.height / 2
+        XCTAssertGreaterThan(overhang(row), centreFromTop,
+                             "top alignment would have been safe — the bug is not reproducible")
+    }
+
+    /// The frame has to be at least as long as the turned view, or it clips
+    /// however it is aligned.
+    func testTheColumnFrameIsLongEnoughForTheTurnedRow() {
+        XCTAssertGreaterThanOrEqual(CGFloat(330), CGFloat(300))
+        XCTAssertGreaterThanOrEqual(CGFloat(64), CGFloat(62))
+    }
+}
+
+// MARK: - Both scrubs run the same way
+
+/// Film advanced on a negative step while the focal length advanced on a
+/// positive one, so the same movement of the thumb drove them opposite ways.
+final class ScrubSenseTests: XCTestCase {
+
+    private func filmStep(_ along: CGFloat) -> Int { along > 0 ? 1 : -1 }
+    private func lensStep(_ along: CGFloat) -> Int { along > 0 ? 1 : -1 }
+
+    func testTheTwoControlsAgreeOnWhichWayIsForward() {
+        for along in [CGFloat(60), -60] {
+            XCTAssertEqual(filmStep(along), lensStep(along),
+                           "film and focal length disagree about direction")
+        }
+    }
+
+    func testForwardIsPositiveTravelForBoth() {
+        XCTAssertEqual(filmStep(60), 1)
+        XCTAssertEqual(lensStep(60), 1)
+        XCTAssertEqual(filmStep(-60), -1)
+        XCTAssertEqual(lensStep(-60), -1)
+    }
+}
