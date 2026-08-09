@@ -219,6 +219,10 @@ struct ViewfinderScreen: View {
     /// Bellows only. Kept here rather than inside the drawer so the drawer's
     /// position survives the deck being rebuilt by an unrelated state change.
     @State private var bellowsOpen = false
+    /// The chrome's width, captured where it is known so the preview inset can
+    /// use the same plate height the plate itself uses.
+    @State private var chromeWidth: CGFloat = 393
+    @State private var chromeSafeTop: CGFloat = 46
 
     /// Top Plate only. Set while a dial is turning and cleared a beat after it
     /// stops, which is what puts the barrel on screen and takes it away again.
@@ -278,9 +282,16 @@ struct ViewfinderScreen: View {
                         .zIndex(3)
                 }
             }
-            // The plate is translucent now, so the picture runs the full height
-            // behind it instead of being inset below opaque metal — the top of
-            // the frame is visible rather than paid for.
+            // With the dials out, the picture starts below them. Running the
+            // frame behind the plate means the top of what the camera sees is
+            // under metal — fine when the plate is a thin switch strip, wrong
+            // when it is a full deck of dials, because the part of the shot
+            // being composed is the part that is covered.
+            .padding(.top, controlStyle == "Top Plate" && app.proMode
+                     ? TopPlateBand.height(proOpen: true, width: chromeWidth, safeTop: chromeSafeTop) : 0)
+            // Always bleeds past every edge; only the top inset holds it clear
+            // of the dials. Constraining any edge left a strip of bare
+            // background showing under the picture — the bar below the release.
             .ignoresSafeArea()
 
             chrome
@@ -346,6 +357,7 @@ struct ViewfinderScreen: View {
     private var topPlateChrome: some View {
         GeometryReader { chrome in
         let width = chrome.size.width
+        let safeTop = chrome.safeAreaInsets.top
         VStack(spacing: 0) {
             TopPlateBand(
                 rotation: orientation.angle,
@@ -356,7 +368,8 @@ struct ViewfinderScreen: View {
                 aspect: aspect,
                 onDialTurn: showBarrel,
                 onResetDial: resetDial,
-                width: width
+                width: width,
+                safeTop: safeTop
             )
 
             TopPlateDeck(
@@ -367,10 +380,19 @@ struct ViewfinderScreen: View {
                 onSettings: { app.go(.settings) },
                 onFilmSim: { app.go(.filmSim) },
                 onLibrary: { app.go(.library) },
-                onFire: fire
+                onFire: fire,
+                width: width
             )
             .background(alignment: .bottom) {
-                deckShade.frame(height: 260)
+                deckShade
+                    .frame(height: PlateMetrics.deckShadeHeight(forWidth: width))
+                    // Gone while the dials are out. With the plate deep and the
+                    // picture inset below it, the shade had nothing left to
+                    // back and read as a black band under the release.
+                    .opacity(app.proMode ? 0 : 1)
+                    // Stops where the controls stop. Drawn past them it is a
+                    // black band under the release with nothing in it.
+                    .allowsHitTesting(false)
             }
         }
         .ignoresSafeArea(edges: .top)

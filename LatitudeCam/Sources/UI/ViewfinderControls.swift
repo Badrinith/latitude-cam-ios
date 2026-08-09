@@ -969,15 +969,20 @@ struct FilmCardStack: View {
     private var swipe: some Gesture {
         DragGesture(minimumDistance: 14)
             .onChanged { value in
-                let along = DragAxis.along(value.translation, rotation: rotation)
-                let across = DragAxis.across(value.translation, rotation: rotation)
+                // Screen-horizontal in both orientations, deliberately.
+                //
+                // The focal length runs along its own axis, so turning the body
+                // turns its gesture too. Film does not: left-to-right is
+                // left-to-right whichever way the phone is held. The two being
+                // opposite is the point — one is a scale you travel along, the
+                // other a shelf you sweep across, and giving both the same axis
+                // is what made them feel like they were fighting each other.
+                let along = value.translation.width
+                let across = value.translation.height
                 guard abs(along) > abs(across) else { return }
                 let step = along - drag
                 if abs(step) > 46 {
                     drag = along
-                    // Forward is a negative step, matching the focal-length
-                    // barrel. Both were running the other way: a drag towards
-                    // the head of the strip was walking back down it.
                     move(by: step < 0 ? 1 : -1)
                 }
             }
@@ -1098,6 +1103,10 @@ struct PlateLensRow: View {
 
     var body: some View {
         collapsed
+            // Hidden only when something replaces it. The ladder was gated to
+            // portrait while the pill hid itself in both, so a swipe with the
+            // body turned drew nothing at all — the control vanished under the
+            // thumb exactly when it was being used.
             .opacity(scrubbing ? 0 : 1)
             // The open ladder is an overlay, so it costs the layout nothing.
             // Sized into the stack it would shove the release and the film
@@ -1106,7 +1115,7 @@ struct PlateLensRow: View {
                 // In landscape the focal control stays a compact pill beside
                 // the shutter. The large ladder would otherwise cross the
                 // rotated histogram band, while a swipe still changes lenses.
-                if scrubbing && rotation == .zero { expanded.fixedSize() }
+                if scrubbing { expanded }
             }
             .contentShape(Capsule())
             .gesture(scrub)
@@ -1190,7 +1199,6 @@ struct PlateLensRow: View {
     /// is the same fault as the collapsed pill and the film hint, in the one
     /// place it had not been fixed.
     private var expanded: some View {
-        let turned = rotation != .zero
         let along = CGFloat(max(camera.lenses.count, 1)) * 50 + 24
         let across: CGFloat = 56
 
@@ -1203,6 +1211,10 @@ struct PlateLensRow: View {
                 ForEach(camera.lenses) { lens in
                     let active = lens.id == selected
                     Text(lens.label)
+                        // Only the lettering turns. The ladder keeps the shape
+                        // it has upright — turning the whole thing made it a
+                        // vertical capsule, which is not the same control.
+                        .rotationEffect(rotation)
                         .font(.mono(active ? 17 : 13, .bold))
                         .foregroundStyle(active ? Accent.amber : Tone.primary)
                         .blur(radius: active ? 0 : 1.4)
@@ -1215,13 +1227,12 @@ struct PlateLensRow: View {
                 }
             }
             .fixedSize()
-            .rotationEffect(rotation)
         }
-        // The ladder lies along the strip, so its frame turns with it. Booking
-        // the upright footprint for a turned ladder is what put it across the
-        // film cards.
-        .frame(width: turned ? across : along,
-               height: turned ? along : across)
+        // One shape in both orientations, exactly as upright. The ladder used
+        // to swap its dimensions with the body, which turned a wide row of
+        // focal lengths into an elongated capsule — a different control, not a
+        // rotated one.
+        .frame(width: along, height: across)
         .shadow(color: .black.opacity(0.6), radius: 14, y: 6)
         .transition(.scale(scale: 0.86).combined(with: .opacity))
     }
@@ -1250,9 +1261,20 @@ struct PlateLensRow: View {
         DragGesture(minimumDistance: 6)
             .updating($scrubbing) { _, state, _ in state = true }
             .onChanged { drag in
-                let along = DragAxis.along(drag.translation, rotation: rotation)
+                // Whichever axis the thumb actually travelled on, rather than
+                // the one the rotation says it should have. Two attempts to
+                // derive it from the angle both failed on device while
+                // appearing correct in code, so this stops asserting what the
+                // gesture must be and reads what it is: a vertical drag scrubs
+                // when the body is turned, a horizontal one when it is not,
+                // and neither depends on the angle being what we think.
+                let t = drag.translation
+                let along = abs(t.height) > abs(t.width) ? t.height : t.width
                 let moved = along - travel
-                guard abs(moved) >= 44 else { return }
+                // 26, not 44. A lens ladder is four stops; asking for 44pt each
+                // made a two-stop change a 90pt drag on a control the size of a
+                // thumbnail.
+                guard abs(moved) >= 26 else { return }
                 travel = along
                 // Negative is forward, the same sense the film strip uses. A
                 // control that agrees with itself in one orientation and
@@ -1378,15 +1400,67 @@ enum PlateMetrics {
     }
 
     /// The switch row: the inset above it plus the switch itself.
-    static func switchRowHeight(forWidth width: CGFloat) -> CGFloat {
-        // Reserve a separate line beneath the utilities for the PRO reveal.
-        46 + switchSide(forWidth: width) + 38
+    static func switchRowHeight(forWidth width: CGFloat, safeTop: CGFloat = 46) -> CGFloat {
+        // The real top inset, not a guessed 46: the plate ignores the safe area
+        // so its metal reaches the top of the glass, which means it has to put
+        // the inset back itself — and at 46 the switch row ran under the
+        // Dynamic Island on the bodies that have 59.
+        //
+        // Then the switches, the gap, the PRO control, and its own small tail.
+        max(46, safeTop + 10) + switchSide(forWidth: width)
+            + proGap(forWidth: width) + proControlHeight + 6
     }
 
-    static func plateHeight(proOpen: Bool, forWidth width: CGFloat) -> CGFloat {
+    /// The film strip's footprint. Square on purpose: a square frame is the
+    /// same size turned as upright, so rotating the strip cannot move it or
+    /// change what it displaces. Derived from the body like everything else.
+    static func filmSide(forWidth width: CGFloat) -> CGFloat {
+        min(190, max(120, width * 0.36))
+    }
+
+    /// The roll thumbnail, matched across the release so the two flank it
+    /// evenly rather than one dwarfing the other.
+    static func rollSide(forWidth width: CGFloat) -> CGFloat {
+        min(76, max(48, width * 0.14))
+    }
+
+    /// The bar that holds film, release and roll. Tall enough for the largest
+    /// of them whichever way the body is held.
+    static func bottomBarHeight(forWidth width: CGFloat) -> CGFloat {
+        max(filmSide(forWidth: width), 96) + 8
+    }
+
+    /// The shaded band behind the bottom controls, sized to what it holds —
+    /// the bar, the focal row above it, and equal air top and bottom. It was a
+    /// flat 260 while the bar grew with the phone, so the controls sat at the
+    /// top of the band with a third of it empty underneath.
+    static func deckShadeHeight(forWidth width: CGFloat) -> CGFloat {
+        bottomBarHeight(forWidth: width) + focalRowHeight + shadeMargin
+    }
+
+    /// The focal-length row and the gap under it.
+    static let focalRowHeight: CGFloat = 56
+    /// The gap between the switch row and the PRO control, and the control's
+    /// own height. Scaled to the body like everything else on the plate.
+    static func proGap(forWidth width: CGFloat) -> CGFloat {
+        min(22, max(12, width * 0.034))
+    }
+    static let proControlHeight: CGFloat = 34
+
+    /// Air above the group inside the shaded band.
+    static let shadeMargin: CGFloat = 10
+    /// And under it. Deliberately smaller than the margin above: the group
+    /// belongs low in the band, near the hand, not floating in its middle.
+    static let bottomInset: CGFloat = 0
+
+    static func plateHeight(proOpen: Bool, forWidth width: CGFloat, safeTop: CGFloat = 46) -> CGFloat {
         proOpen
-            ? switchRowHeight(forWidth: width) + stripHeight(forWidth: width) + 10
-            : switchRowHeight(forWidth: width)
+            // Open, the dial labels sit under the dials and need room inside
+            // the plate or "SHUTTER" is clipped at the metal's edge.
+            ? switchRowHeight(forWidth: width, safeTop: safeTop) + stripHeight(forWidth: width) + 14
+            // Closed, exactly what it holds — the button's own bottom padding
+            // and nothing more. Surplus here is blank metal under it.
+            : switchRowHeight(forWidth: width, safeTop: safeTop)
     }
 }
 
@@ -1497,13 +1571,18 @@ struct TopPlateBand: View {
     var onResetDial: (ActiveDial.Key) -> Void = { _ in }
     /// The width the plate has been given, so its sizes follow the phone.
     var width: CGFloat
+    /// The real top safe-area inset. The plate ignores the safe area so its
+    /// metal reaches the top of the glass, which means it has to put the inset
+    /// back itself — at a hardcoded 46 the switch row ran under the Dynamic
+    /// Island on the larger bodies, which have 59.
+    var safeTop: CGFloat = 46
 
     /// Deferred to PlateMetrics so the plate is as deep as the phone needs and
     /// no deeper. With PRO off it is the switch row alone: the camera is on
     /// auto and every dial would read AUTO, and a control displaying a value it
     /// is not setting is worse than no control.
-    static func height(proOpen: Bool, width: CGFloat) -> CGFloat {
-        PlateMetrics.plateHeight(proOpen: proOpen, forWidth: width)
+    static func height(proOpen: Bool, width: CGFloat, safeTop: CGFloat = 46) -> CGFloat {
+        PlateMetrics.plateHeight(proOpen: proOpen, forWidth: width, safeTop: safeTop)
     }
 
     /// Which dial is being held, so the others can step back.
@@ -1548,7 +1627,15 @@ struct TopPlateBand: View {
                 }
 
             VStack(spacing: 0) {
-                utilities.padding(.top, 46)
+                utilities.padding(.top, max(46, safeTop + 10))
+
+                // In the stack, not floating over it. As an overlay it sat in a
+                // different layer from the switch row, so it collided with the
+                // buttons above it and no amount of padding inside the overlay
+                // could push it clear — the overlay was anchored, not flowed.
+                proControl
+                    .padding(.top, PlateMetrics.proGap(forWidth: width))
+                    .padding(.bottom, 6)
 
                 if app.proMode {
                     DialStrip(rotation: rotation, compact: compact,
@@ -1559,18 +1646,14 @@ struct TopPlateBand: View {
                 }
             }
         }
-        .frame(height: Self.height(proOpen: app.proMode, width: width))
+        .frame(height: Self.height(proOpen: app.proMode, width: width, safeTop: safeTop))
         .frame(maxWidth: .infinity)
         .clipped()
         // Hung under the plate rather than inside it. On the plate it competed
         // with the switch row for the same 46pt of inset and was the first
         // thing the clip took; here it sits on the picture, centred, right
         // where the dials appear from.
-        .overlay(alignment: .bottom) {
-            // Far enough below the metal to clear it outright. At 30 it still
-            // grazed the plate's lower edge.
-            proControl.offset(y: 54)
-        }
+
         .zIndex(2)
         // Swipe the instruments away when they are in the way: up in portrait,
         // left when the body is turned — both are "push it off the frame" in
@@ -1736,6 +1819,8 @@ struct TopPlateDeck: View {
     var onFire: () -> Void
     var onDialTurn: (ActiveDial) -> Void = { _ in }
     var onResetDial: (ActiveDial.Key) -> Void = { _ in }
+    /// The width the deck has been given, so its sizes follow the phone.
+    var width: CGFloat = 393
 
     var body: some View {
         // The focal control stays in the same station in both orientations;
@@ -1757,7 +1842,9 @@ struct TopPlateDeck: View {
             filmBand
 
             lensRow.padding(.bottom, 12)
-            bottomBar.padding(.bottom, 26)
+            // Equal air under the bar as above the focal row, so the group sits
+            // centred in the shaded band rather than pinned to its top.
+            bottomBar.padding(.bottom, PlateMetrics.bottomInset)
         }
         // Histogram and metering directly under the dials, on the trailing
         // side — the top of the frame when the body is turned, and out of the
@@ -1899,31 +1986,41 @@ struct TopPlateDeck: View {
                 // turn, so the turned strip books the space it occupies.
                 FilmCardStack(rotation: rotation, invertNames: false, onOpen: onFilmSim)
                     .fixedSize()
-                    .scaleEffect(landscape ? 0.66 : 0.8)
+                    .scaleEffect(0.92)
                     .rotationEffect(rotation)
                     // Scaling and rotating both leave the layout size alone, so
                     // the frame has to be the size the strip ends up: turned and
                     // at 0.66 that is about 66 x 112. Booking more than it
                     // occupies is what pushed it off centre from the release.
-                    .frame(width: landscape ? 70 : 138,
-                           height: landscape ? 116 : 84)
+                    // One square frame in both orientations. The icons were
+                    // being re-framed on turn, which moved them across the bar
+                    // — asked not to. A square is the same size at any angle,
+                    // so the strip turns in place and displaces nothing.
+                    .frame(width: PlateMetrics.filmSide(forWidth: width),
+                           height: PlateMetrics.filmSide(forWidth: width))
                     .contentShape(Rectangle())
-                    // Air between the strip and the release. They were touching:
-                    // the outer film card sat against the shutter ring, which
-                    // reads as one control rather than two.
-                    .padding(.trailing, 10)
 
                 Spacer(minLength: 0)
 
                 Button { onLibrary() } label: {
                     LibraryThumbnail(gallery: app.gallery)
+                        // Matched to the film strip across the release: the two
+                        // flank it, and a roll a third the size of the stock
+                        // beside it read as an afterthought.
+                        .scaleEffect(1.5)
+                        .rotationEffect(rotation)
+                        // The same width the film strip claims on the other
+                        // side. They flank the release, so unequal flanks put
+                        // the release off centre however it is aligned.
+                        .frame(width: PlateMetrics.filmSide(forWidth: width),
+                               height: PlateMetrics.rollSide(forWidth: width))
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Library")
             }
             .padding(.horizontal, 22)
         }
-        .frame(height: landscape ? 132 : 96)
+        .frame(height: PlateMetrics.bottomBarHeight(forWidth: width))
     }
 }
 
