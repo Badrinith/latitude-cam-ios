@@ -68,6 +68,44 @@ enum KnobMath {
     static func clamp(_ value: Double) -> Double { min(1, max(0, value)) }
 }
 
+// MARK: - Which way is along
+
+/// Projects a drag onto a control that has been turned with the body.
+///
+/// The app is portrait-locked, so a strip lying across the screen in portrait
+/// is lying *up and down* it once the phone is sideways — and the finger that
+/// moves along it moves vertically, not horizontally. Reading
+/// `translation.width` regardless is why the film strip and the focal length
+/// could not be scrubbed when the body was turned: the gesture was measuring
+/// the axis the control no longer lay on.
+///
+/// Sign matters as much as axis. A +90 turn maps the control's own forward
+/// direction onto screen-down; a -90 turn maps it onto screen-up. Getting that
+/// backwards runs every scale the wrong way.
+enum DragAxis {
+
+    /// Movement along the control, in its own direction of travel.
+    static func along(_ translation: CGSize, rotation: Angle) -> CGFloat {
+        switch Int(rotation.degrees.rounded()) {
+        case 90:   return translation.height
+        case -90:  return -translation.height
+        case 180, -180: return -translation.width
+        default:   return translation.width
+        }
+    }
+
+    /// Movement across it — the axis a dismissal uses, so the two never
+    /// compete for the same movement.
+    static func across(_ translation: CGSize, rotation: Angle) -> CGFloat {
+        switch Int(rotation.degrees.rounded()) {
+        case 90:   return -translation.width
+        case -90:  return translation.width
+        case 180, -180: return -translation.height
+        default:   return translation.height
+        }
+    }
+}
+
 // MARK: - The knob
 
 /// A knurled rotary knob over a 0…1 binding.
@@ -852,12 +890,13 @@ struct DialBarrel: View {
         .gesture(
             DragGesture(minimumDistance: 2)
                 .onChanged { drag in
-                    defer { lastX = drag.location.x }
+                    let along = DragAxis.along(drag.translation, rotation: rotation)
+                    defer { lastX = along }
                     guard let previous = lastX else { return }
                     // 260pt of travel covers the range: long enough that a stop
                     // is a deliberate movement, short enough to cross the whole
                     // ladder without lifting a thumb.
-                    onScrub(Double(drag.location.x - previous) / 260)
+                    onScrub(Double(along - previous) / 260)
                 }
                 .onEnded { _ in lastX = nil }
         )
@@ -921,15 +960,18 @@ struct FilmCardStack: View {
         .animation(.spring(response: 0.32, dampingFraction: 0.82), value: app.selectedFilm)
     }
 
-    /// Horizontal only, and only when the drag is clearly horizontal — a
-    /// vertical component belongs to the system edge gestures, not to us.
+    /// Along the strip, whichever way the strip is lying. Upright that is a
+    /// horizontal drag; turned it is a vertical one, because the strip turned
+    /// with the body and the finger follows it.
     private var swipe: some Gesture {
         DragGesture(minimumDistance: 14)
             .onChanged { value in
-                guard abs(value.translation.width) > abs(value.translation.height) else { return }
-                let step = value.translation.width - drag
+                let along = DragAxis.along(value.translation, rotation: rotation)
+                let across = DragAxis.across(value.translation, rotation: rotation)
+                guard abs(along) > abs(across) else { return }
+                let step = along - drag
                 if abs(step) > 46 {
-                    drag = value.translation.width
+                    drag = along
                     move(by: step < 0 ? 1 : -1)
                 }
             }
@@ -1187,9 +1229,10 @@ struct PlateLensRow: View {
         DragGesture(minimumDistance: 6)
             .updating($scrubbing) { _, state, _ in state = true }
             .onChanged { drag in
-                let moved = drag.translation.width - travel
+                let along = DragAxis.along(drag.translation, rotation: rotation)
+                let moved = along - travel
                 guard abs(moved) >= 44 else { return }
-                travel = drag.translation.width
+                travel = along
                 step(by: moved > 0 ? 1 : -1)
             }
             .onEnded { _ in travel = 0 }
@@ -1670,9 +1713,12 @@ struct TopPlateDeck: View {
                 // never compete for the same movement.
                 DragGesture(minimumDistance: 24)
                     .onEnded { drag in
-                        guard drag.translation.height > 44,
-                              abs(drag.translation.height) > abs(drag.translation.width)
-                        else { return }
+                        // Across the strip, not down the screen: turned, "away"
+                        // is a different direction, and the carousel owns the
+                        // along axis.
+                        let across = DragAxis.across(drag.translation, rotation: rotation)
+                        let along = DragAxis.along(drag.translation, rotation: rotation)
+                        guard across > 44, abs(across) > abs(along) else { return }
                         Haptics.toggle()
                         withAnimation(.spring(response: 0.4, dampingFraction: 0.86)) {
                             filmHidden = true

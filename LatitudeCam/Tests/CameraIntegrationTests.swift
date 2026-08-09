@@ -1690,3 +1690,79 @@ final class RotatedFootprintTests: XCTestCase {
                              "if this fits, the glyph need not be dropped in landscape")
     }
 }
+
+// MARK: - Which way is along
+
+/// The app is portrait-locked, so a strip lying across the screen upright lies
+/// up and down it once the phone is sideways — and the finger that moves along
+/// it moves vertically, not horizontally. Every scrub read `translation.width`
+/// regardless, which is why film and the focal length could not be scrubbed
+/// when the body was turned.
+///
+/// Sign matters as much as axis: a +90 turn maps the control's forward
+/// direction onto screen-down, a -90 turn onto screen-up. Backwards runs every
+/// scale the wrong way, which is invisible in code and immediate in the hand.
+final class DragAxisTests: XCTestCase {
+
+    private let right = CGSize(width: 100, height: 0)
+    private let down  = CGSize(width: 0, height: 100)
+
+    func testUprightAlongIsHorizontal() {
+        XCTAssertEqual(DragAxis.along(right, rotation: .zero), 100)
+        XCTAssertEqual(DragAxis.along(down, rotation: .zero), 0)
+    }
+
+    /// Turned anticlockwise, forward is down the screen.
+    func testTurnedAnticlockwiseAlongIsDownward() {
+        XCTAssertEqual(DragAxis.along(down, rotation: .degrees(90)), 100)
+        XCTAssertEqual(DragAxis.along(right, rotation: .degrees(90)), 0)
+    }
+
+    /// Turned the other way, forward is up the screen.
+    func testTurnedClockwiseAlongIsUpward() {
+        XCTAssertEqual(DragAxis.along(down, rotation: .degrees(-90)), -100)
+    }
+
+    /// The two landscapes must run opposite ways. If they agreed, one of them
+    /// would scrub backwards.
+    func testTheTwoLandscapesRunOppositeWays() {
+        XCTAssertEqual(DragAxis.along(down, rotation: .degrees(90)),
+                       -DragAxis.along(down, rotation: .degrees(-90)))
+    }
+
+    /// Along and across are perpendicular at every angle — that is what stops a
+    /// scrub and a dismissal claiming the same movement.
+    func testAlongAndAcrossNeverClaimTheSameMovement() {
+        for angle in [0.0, 90, -90, 180] {
+            let r = Angle.degrees(angle)
+            XCTAssertEqual(abs(DragAxis.along(right, rotation: r))
+                            + abs(DragAxis.across(right, rotation: r)), 100,
+                           accuracy: 0.001,
+                           "a purely horizontal drag split across both axes at \(angle)°")
+            XCTAssertEqual(abs(DragAxis.along(down, rotation: r))
+                            + abs(DragAxis.across(down, rotation: r)), 100,
+                           accuracy: 0.001)
+        }
+    }
+
+    /// A drag along the strip must never register as across it, whatever the
+    /// angle — otherwise scrubbing film would dismiss it.
+    func testScrubbingNeverReadsAsDismissing() {
+        for angle in [0.0, 90, -90] {
+            let r = Angle.degrees(angle)
+            let alongDrag = angle == 0 ? right : down
+            XCTAssertEqual(DragAxis.across(alongDrag, rotation: r), 0, accuracy: 0.001,
+                           "a scrub registered as a dismissal at \(angle)°")
+        }
+    }
+
+    /// Magnitude survives every turn: a 100pt drag is 100pt of travel whichever
+    /// way the phone is held, so a stop costs the same movement in both.
+    func testTravelCostsTheSameInEveryOrientation() {
+        for angle in [0.0, 90, -90, 180] {
+            let r = Angle.degrees(angle)
+            let drag = angle == 0 || abs(angle) == 180 ? right : down
+            XCTAssertEqual(abs(DragAxis.along(drag, rotation: r)), 100, accuracy: 0.001)
+        }
+    }
+}
