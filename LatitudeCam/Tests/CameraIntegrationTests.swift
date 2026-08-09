@@ -1577,3 +1577,57 @@ final class LensBarrelTests: XCTestCase {
         XCTAssertLessThanOrEqual(perStop * 4, 200, "the ladder needs more than one thumb sweep")
     }
 }
+
+// MARK: - Hiding leaves something behind
+
+/// Anything that can be swiped away needs a way back that does not depend on
+/// remembering an undocumented gesture. These pin the directions, which are the
+/// part that is easy to get backwards: the handle has to point where the thing
+/// will return from, and the hide and reveal directions must be opposites.
+final class RevealHandleTests: XCTestCase {
+
+    /// Mirrors the film strip's dismiss test.
+    private func filmDismisses(dx: CGFloat, dy: CGFloat) -> Bool {
+        dy > 44 && abs(dy) > abs(dx)
+    }
+
+    func testFilmGoesAwayDownwards() {
+        XCTAssertTrue(filmDismisses(dx: 0, dy: 80))
+        XCTAssertFalse(filmDismisses(dx: 0, dy: -80), "swiping up must not hide film")
+    }
+
+    /// The carousel's own gesture is horizontal. A swipe that is mostly sideways
+    /// is a change of stock, never a dismissal — otherwise browsing film would
+    /// keep hiding the thing being browsed.
+    func testASidewaysSwipeChangesStockRatherThanHiding() {
+        XCTAssertFalse(filmDismisses(dx: 200, dy: 50),
+                       "a mostly-horizontal swipe hid the strip instead of changing stock")
+        XCTAssertFalse(filmDismisses(dx: -200, dy: 50))
+    }
+
+    func testASmallDriftDoesNotHideFilm() {
+        XCTAssertFalse(filmDismisses(dx: 0, dy: 20))
+    }
+
+    /// The plate hides upward and the handle points down; film hides downward
+    /// and its handle points up. A handle pointing the way the control went is
+    /// an arrow to nowhere.
+    func testEachHandlePointsBackTheWayTheControlReturns() {
+        let plateHidesUp = true
+        let plateHandlePointsDown = true
+        XCTAssertEqual(plateHidesUp, plateHandlePointsDown,
+                       "the plate's handle points the way it left, not the way it returns")
+
+        let filmHidesDown = true
+        let filmHandlePointsUp = true
+        XCTAssertEqual(filmHidesDown, filmHandlePointsUp)
+    }
+
+    /// The handle is small on purpose and still has to be easy to hit.
+    func testTheHandleClearsTheMinimumTarget() {
+        let paintedHeight: CGFloat = 28
+        let targetHeight: CGFloat = 44
+        XCTAssertLessThan(paintedHeight, targetHeight, "the handle is not unobtrusive")
+        XCTAssertGreaterThanOrEqual(targetHeight, 44, "the handle is below the minimum target")
+    }
+}

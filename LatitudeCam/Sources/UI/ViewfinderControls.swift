@@ -1038,6 +1038,10 @@ struct PlateLensRow: View {
     var onSelectFront: () -> Void
 
     @State private var travel: CGFloat = 0
+    /// Held-down state. @GestureState for the same reason the dials use it: it
+    /// resets the moment the gesture ends or is cancelled, so a thumb that
+    /// slides off cannot leave the ladder stuck open over the frame.
+    @GestureState private var scrubbing = false
 
     private var index: Int {
         camera.lenses.firstIndex { $0.id == selected } ?? 0
@@ -1048,57 +1052,113 @@ struct PlateLensRow: View {
     }
 
     var body: some View {
-        HStack(spacing: 6) {
-            if usingFront {
-                Image(systemName: "person.fill")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(Accent.amber)
+        collapsed
+            .opacity(scrubbing ? 0 : 1)
+            // The open ladder is an overlay, so it costs the layout nothing.
+            // Sized into the stack it would shove the release and the film
+            // strip down the screen every time a lens was touched.
+            .overlay {
+                if scrubbing { expanded.fixedSize() }
             }
-            Text(reading)
-                .font(.mono(14, .bold))
-                .foregroundStyle(Accent.amber)
-                .contentTransition(.numericText())
-                .fixedSize()
-        }
-        .rotationEffect(rotation)
-        .padding(.horizontal, 14)
-        .frame(minWidth: 74, minHeight: 40)
-        .background {
-            ZStack {
-                Capsule().fill(Color.black.opacity(0.45))
-                Capsule().fill(.ultraThinMaterial)
-                // The scale behind the value, so the pill reads as a barrel
-                // rather than a badge. It moves with the value.
-                ticks
+            .contentShape(Capsule())
+            .gesture(scrub)
+            .simultaneousGesture(
+                TapGesture(count: 2).onEnded {
+                    Haptics.toggle()
+                    onSelectFront()
+                }
+            )
+            .animation(.spring(response: 0.3, dampingFraction: 0.8), value: scrubbing)
+            .animation(.spring(response: 0.28, dampingFraction: 0.82), value: selected)
+            .animation(.snappy(duration: 0.2), value: usingFront)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Focal length")
+            .accessibilityValue(usingFront ? "\(reading), front camera" : reading)
+            .accessibilityHint("Swipe across to change lens, double tap for the front camera")
+            .accessibilityAdjustableAction { direction in
+                step(by: direction == .increment ? 1 : -1)
             }
-        }
-        .overlay {
+    }
+
+    /// At rest: the value in force and nothing else.
+    ///
+    /// The pill itself never turns — only the lettering inside it does. It was
+    /// built the other way round, with the rotation applied to the content
+    /// before the frame that draws the capsule, so the text swung out of its
+    /// own background and landed on the film strip while the empty capsule
+    /// stayed behind. A fixed frame with the text rotated inside it cannot come
+    /// apart like that, whatever angle the body is held at.
+    private var collapsed: some View {
+        ZStack {
+            Capsule().fill(Color.black.opacity(0.45))
+            Capsule().fill(.ultraThinMaterial)
+            ticks
             Capsule().strokeBorder(Tone.hairline, lineWidth: 0.5)
+
+            HStack(spacing: 6) {
+                if usingFront {
+                    Image(systemName: "person.fill")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(Accent.amber)
+                }
+                Text(reading)
+                    .font(.mono(15, .bold))
+                    .foregroundStyle(Accent.amber)
+                    .contentTransition(.numericText())
+                    .fixedSize()
+            }
+            .rotationEffect(rotation)
         }
+        // Square enough that the lettering fits across the pill turned as well
+        // as level — a wide, shallow pill clips its own text at 90 degrees.
+        .frame(width: 104, height: 46)
         .overlay(alignment: .top) {
-            // The index the value sits under.
             Capsule()
                 .fill(Accent.amber)
                 .frame(width: 12, height: 1.5)
                 .offset(y: 3)
         }
-        .contentShape(Capsule())
-        .gesture(scrub)
-        .simultaneousGesture(
-            TapGesture(count: 2).onEnded {
-                Haptics.toggle()
-                onSelectFront()
+    }
+
+    /// Under the thumb: the whole ladder, larger, with everything but the value
+    /// in force thrown out of focus. You are choosing, so you get to see what
+    /// there is to choose from — and only then.
+    private var expanded: some View {
+        HStack(spacing: 4) {
+            ForEach(camera.lenses) { lens in
+                let active = lens.id == selected
+                Text(lens.label)
+                    .font(.mono(active ? 17 : 13, .bold))
+                    .foregroundStyle(active ? Accent.amber : Tone.primary)
+                    .blur(radius: active ? 0 : 1.4)
+                    .opacity(active ? 1 : 0.4)
+                    .scaleEffect(active ? 1 : 0.88)
+                    .frame(minWidth: 46, minHeight: 44)
+                    .background {
+                        if active {
+                            Capsule().fill(Accent.amber.opacity(0.18))
+                        }
+                    }
             }
-        )
-        .animation(.spring(response: 0.28, dampingFraction: 0.82), value: selected)
-        .animation(.snappy(duration: 0.2), value: usingFront)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Focal length")
-        .accessibilityValue(usingFront ? "\(reading), front camera" : reading)
-        .accessibilityHint("Swipe across to change lens, double tap for the front camera")
-        .accessibilityAdjustableAction { direction in
-            step(by: direction == .increment ? 1 : -1)
         }
+        .rotationEffect(rotation)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background {
+            ZStack {
+                Capsule().fill(Color.black.opacity(0.55))
+                Capsule().fill(.ultraThinMaterial)
+            }
+        }
+        .overlay { Capsule().strokeBorder(Accent.amber.opacity(0.5), lineWidth: 1) }
+        .overlay(alignment: .top) {
+            Capsule()
+                .fill(Accent.amber)
+                .frame(width: 14, height: 2)
+                .offset(y: 2)
+        }
+        .shadow(color: .black.opacity(0.6), radius: 14, y: 6)
+        .transition(.scale(scale: 0.86).combined(with: .opacity))
     }
 
     private var ticks: some View {
@@ -1123,6 +1183,7 @@ struct PlateLensRow: View {
     /// enough that the whole ladder is one short drag.
     private var scrub: some Gesture {
         DragGesture(minimumDistance: 6)
+            .updating($scrubbing) { _, state, _ in state = true }
             .onChanged { drag in
                 let moved = drag.translation.width - travel
                 guard abs(moved) >= 44 else { return }
@@ -1140,6 +1201,54 @@ struct PlateLensRow: View {
         }
         Haptics.detent()
         onSelect(camera.lenses[next])
+    }
+}
+
+/// The mark left behind when something has been swiped away.
+///
+/// A control that can be hidden needs somewhere to have gone. Without this the
+/// swipe is indistinguishable from the feature disappearing, and the way back
+/// is a gesture nobody was told about — so what is left is small, points the
+/// way the thing will return from, and answers to a tap as well as a swipe.
+struct RevealHandle: View {
+    var label: String
+    var symbol: String
+    var rotation: Angle = .zero
+    var action: () -> Void
+
+    @State private var breathing = false
+
+    var body: some View {
+        Button(action: {
+            Haptics.tap()
+            action()
+        }) {
+            HStack(spacing: 5) {
+                Image(systemName: symbol)
+                    .font(.system(size: 9, weight: .bold))
+                Text(label)
+                    .font(.mono(7.5, .semibold))
+                    .kerning(1.4)
+            }
+            .foregroundStyle(Accent.amber.opacity(0.95))
+            .rotationEffect(rotation)
+            .padding(.horizontal, 10)
+            .frame(minWidth: 44, minHeight: 28)
+            .background {
+                Capsule().fill(Color.black.opacity(0.5))
+            }
+            .background { Capsule().fill(.ultraThinMaterial) }
+            .overlay { Capsule().strokeBorder(Accent.amber.opacity(0.35), lineWidth: 0.5) }
+            // 44 of target under 28 of paint: this is deliberately unobtrusive,
+            // and something unobtrusive still has to be easy to hit.
+            .frame(minHeight: 44)
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .opacity(breathing ? 1 : 0.62)
+        .animation(.easeInOut(duration: 1.6).repeatForever(autoreverses: true), value: breathing)
+        .onAppear { breathing = true }
+        .accessibilityLabel("Show \(label.lowercased())")
     }
 }
 
@@ -1377,6 +1486,21 @@ struct TopPlateBand: View {
         .frame(height: Self.height(proOpen: app.proMode, width: width))
         .frame(maxWidth: .infinity)
         .clipped()
+        // Points the way the dials will come back from: down in portrait,
+        // in from the trailing edge when the body is turned.
+        .overlay(alignment: compact ? .trailing : .bottom) {
+            if !app.proMode {
+                RevealHandle(label: "PRO",
+                             symbol: compact ? "chevron.right" : "chevron.down",
+                             rotation: rotation) {
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.86)) {
+                        app.proMode = true
+                    }
+                }
+                .padding(compact ? .trailing : .bottom, 4)
+                .transition(.opacity.combined(with: .scale(scale: 0.8)))
+            }
+        }
         // Swipe the instruments away when they are in the way: up in portrait,
         // left when the body is turned — both are "push it off the frame" in
         // the direction the plate actually sits.
@@ -1496,6 +1620,8 @@ struct TopPlateDeck: View {
     var onDialTurn: (ActiveDial) -> Void = { _ in }
     var onResetDial: (ActiveDial.Key) -> Void = { _ in }
 
+    @State private var filmHidden = false
+
     var body: some View {
         VStack(spacing: 0) {
             // Turned, the instruments go on a rotated band at the sky edge —
@@ -1523,9 +1649,43 @@ struct TopPlateDeck: View {
     /// on, but PRO now reveals the dials on the plate — which drive the same
     /// four values. Two sets of controls for one set of numbers is one set too
     /// many, so the cluster is gone from here and film keeps the band.
-    private var filmBand: some View {
-        FilmCardStack(rotation: rotation, invertNames: landscape, onOpen: onFilmSim)
+    @ViewBuilder private var filmBand: some View {
+        if filmHidden {
+            RevealHandle(label: "FILM", symbol: "chevron.up", rotation: rotation) {
+                withAnimation(.spring(response: 0.4, dampingFraction: 0.86)) {
+                    filmHidden = false
+                }
+            }
+            .padding(.bottom, 10)
+            .transition(.opacity)
+        } else {
+            filmStrip
+                .transition(.opacity.combined(with: .offset(y: 20)))
+        }
+    }
+
+    private var filmStrip: some View {
+        // No inversion. The extra half turn was correct while film rode a
+        // rotated band and supplied its own angle; back in the stack the
+        // regular `rotation` already faces it the right way, and adding 180
+        // on top turned every stock name upside down.
+        FilmCardStack(rotation: rotation, invertNames: false, onOpen: onFilmSim)
             .padding(.bottom, 14)
+            .gesture(
+                // Down puts it away, the same "push it off the frame" the plate
+                // answers to. The carousel's own swipe is horizontal, so the two
+                // never compete for the same movement.
+                DragGesture(minimumDistance: 24)
+                    .onEnded { drag in
+                        guard drag.translation.height > 44,
+                              abs(drag.translation.height) > abs(drag.translation.width)
+                        else { return }
+                        Haptics.toggle()
+                        withAnimation(.spring(response: 0.4, dampingFraction: 0.86)) {
+                            filmHidden = true
+                        }
+                    }
+            )
     }
 
     /// The same strip, without the portrait padding, for the screen to hang on
