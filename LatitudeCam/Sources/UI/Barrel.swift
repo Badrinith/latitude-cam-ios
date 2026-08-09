@@ -43,14 +43,22 @@ final class DeviceOrientation: ObservableObject {
     private static let flat = 0.80
 
     init() {
-        // Read from the accelerometer rather than from UIDevice.
+        // Read from gravity rather than from UIDevice.
         //
         // UIDevice.orientation is the interface's idea of which way is up, and
         // it is entangled with what the app declares it supports and with the
         // rotation lock in Control Centre — which is exactly the coupling this
         // is meant not to have. Gravity is not a setting: it says which way the
         // phone is being held whatever the phone has been told to do about it.
-        if motion.isAccelerometerAvailable {
+        // Device motion's gravity vector is filtered, so a hand moving while
+        // framing does not briefly make the labels snap back to portrait.
+        if motion.isDeviceMotionAvailable {
+            motion.deviceMotionUpdateInterval = 0.2
+            motion.startDeviceMotionUpdates(to: .main) { [weak self] data, _ in
+                guard let self, let gravity = data?.gravity else { return }
+                self.apply(x: gravity.x, y: gravity.y, z: gravity.z)
+            }
+        } else if motion.isAccelerometerAvailable {
             motion.accelerometerUpdateInterval = 0.2
             motion.startAccelerometerUpdates(to: .main) { [weak self] data, _ in
                 guard let self, let a = data?.acceleration else { return }
@@ -69,6 +77,7 @@ final class DeviceOrientation: ObservableObject {
     }
 
     deinit {
+        motion.stopDeviceMotionUpdates()
         motion.stopAccelerometerUpdates()
         if let token {
             NotificationCenter.default.removeObserver(token)

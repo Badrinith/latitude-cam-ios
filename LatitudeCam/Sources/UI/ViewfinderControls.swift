@@ -1100,16 +1100,14 @@ struct PlateLensRow: View {
             // Sized into the stack it would shove the release and the film
             // strip down the screen every time a lens was touched.
             .overlay {
-                if scrubbing { expanded.fixedSize() }
+                // In landscape the focal control stays a compact pill beside
+                // the shutter. The large ladder would otherwise cross the
+                // rotated histogram band, while a swipe still changes lenses.
+                if scrubbing && rotation == .zero { expanded.fixedSize() }
             }
             .contentShape(Capsule())
             .gesture(scrub)
-            .simultaneousGesture(
-                TapGesture(count: 2).onEnded {
-                    Haptics.toggle()
-                    onSelectFront()
-                }
-            )
+            .simultaneousGesture(frontCameraGesture)
             .animation(.spring(response: 0.3, dampingFraction: 0.8), value: scrubbing)
             .animation(.spring(response: 0.28, dampingFraction: 0.82), value: selected)
             .animation(.snappy(duration: 0.2), value: usingFront)
@@ -1120,6 +1118,13 @@ struct PlateLensRow: View {
             .accessibilityAdjustableAction { direction in
                 step(by: direction == .increment ? 1 : -1)
             }
+    }
+
+    private var frontCameraGesture: some Gesture {
+        TapGesture(count: 2).onEnded {
+            Haptics.toggle()
+            onSelectFront()
+        }
     }
 
     /// At rest: the value in force and nothing else.
@@ -1363,7 +1368,8 @@ enum PlateMetrics {
 
     /// The switch row: the inset above it plus the switch itself.
     static func switchRowHeight(forWidth width: CGFloat) -> CGFloat {
-        46 + switchSide(forWidth: width) + 8
+        // Reserve a separate line beneath the utilities for the PRO reveal.
+        46 + switchSide(forWidth: width) + 38
     }
 
     static func plateHeight(proOpen: Bool, forWidth width: CGFloat) -> CGFloat {
@@ -1545,6 +1551,14 @@ struct TopPlateBand: View {
         .frame(height: Self.height(proOpen: app.proMode, width: width))
         .frame(maxWidth: .infinity)
         .clipped()
+        // Hung under the plate rather than inside it. On the plate it competed
+        // with the switch row for the same 46pt of inset and was the first
+        // thing the clip took; here it sits on the picture, centred, right
+        // where the dials appear from.
+        .overlay(alignment: .bottom) {
+            proControl.offset(y: 30)
+        }
+        .zIndex(2)
         // Swipe the instruments away when they are in the way: up in portrait,
         // left when the body is turned — both are "push it off the frame" in
         // the direction the plate actually sits.
@@ -1590,8 +1604,6 @@ struct TopPlateBand: View {
             utility(text: aspect, on: false, label: "Aspect ratio", action: onCycleAspect)
             utility(systemImage: "gearshape", on: false, label: "Settings", action: onSettings)
 
-            // Only while the dials are out. With PRO off there is nothing
-            // manual set, so there is nothing to put back.
             if app.proMode {
                 utility(systemImage: "arrow.counterclockwise", on: false,
                         label: "Reset controls") {
@@ -1599,6 +1611,52 @@ struct TopPlateBand: View {
                 }
                 .transition(.opacity.combined(with: .scale(scale: 0.8)))
             }
+        }
+    }
+
+    /// The dedicated control under the utilities reveals or hides the dial
+    /// deck. Its arrow turns with gravity, not with the locked interface.
+    private var proControl: some View {
+        Button {
+            togglePro()
+        } label: {
+            HStack(spacing: 4) {
+                Text("PRO")
+                    .font(.mono(8, .bold))
+                    .kerning(1.1)
+                Image(systemName: app.proMode ? "chevron.up" : "chevron.down")
+                    .font(.system(size: 8, weight: .bold))
+            }
+            .foregroundStyle(app.proMode ? Accent.amber : Color(hex: 0xC9C2B4))
+            .rotationEffect(rotation)
+            .frame(width: 84, height: 34)
+            .background {
+                Capsule()
+                    .fill(Color.black.opacity(0.16))
+                    .overlay {
+                        Capsule()
+                            .strokeBorder(
+                                app.proMode ? Accent.amber.opacity(0.68) : Color.white.opacity(0.22),
+                                lineWidth: 0.8
+                            )
+                    }
+            }
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 20).onEnded { drag in
+                guard max(abs(drag.translation.width), abs(drag.translation.height)) > 38 else { return }
+                togglePro()
+            }
+        )
+        .accessibilityLabel(app.proMode ? "Hide pro controls" : "Show pro controls")
+    }
+
+    private func togglePro() {
+        Haptics.toggle()
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.86)) {
+            app.proMode.toggle()
         }
     }
 
@@ -1664,15 +1722,18 @@ struct TopPlateDeck: View {
     var onDialTurn: (ActiveDial) -> Void = { _ in }
     var onResetDial: (ActiveDial.Key) -> Void = { _ in }
 
-    @State private var filmHidden = false
-
     var body: some View {
+        // The focal control stays in the same station in both orientations;
+        // only its engraving rotates with the body.
+        portraitDeck
+    }
+
+    private var portraitDeck: some View {
         VStack(spacing: 0) {
             // Turned, the instruments go on a rotated band at the sky edge —
             // laid out horizontally inside it and rotated as one piece. Rotating
             // each readout inside a portrait-shaped frame is what clipped the
             // meter to ".8 0" and lapped it over the zoom.
-            if !landscape { hud }
             Spacer(minLength: 0)
 
             // Film immediately before the focal length, turned or not. It was
@@ -1680,8 +1741,16 @@ struct TopPlateDeck: View {
             // from the lens it belongs beside.
             filmBand
 
-            lensRow.padding(.bottom, 10)
-            bottomBar.padding(.bottom, 30)
+            lensRow.padding(.bottom, 12)
+            bottomBar.padding(.bottom, 26)
+        }
+        // Histogram and metering directly under the dials, on the trailing
+        // side — the top of the frame when the body is turned, and out of the
+        // way of both the release and the film strip.
+        .overlay(alignment: .topTrailing) {
+            instruments
+                .padding(.trailing, 14)
+                .padding(.top, 12)
         }
         // Landscape film is not drawn here at all. Pinned to .bottom it landed
         // on the shutter — the release lives at that edge too. Turned, "the
@@ -1689,56 +1758,11 @@ struct TopPlateDeck: View {
         // places it against the one actually facing the ground.
     }
 
-    /// Film, always. The barrel cluster used to take this band whenever PRO was
-    /// on, but PRO now reveals the dials on the plate — which drive the same
-    /// four values. Two sets of controls for one set of numbers is one set too
-    /// many, so the cluster is gone from here and film keeps the band.
+    /// Film now lives beside the shutter in both orientations. Keeping an empty
+    /// band here prevents the old sky-edge carousel from returning in portrait
+    /// or becoming a rotated slab over the live image in landscape.
     @ViewBuilder private var filmBand: some View {
-        if filmHidden {
-            RevealHandle(label: "FILM", symbol: "chevron.up", rotation: rotation) {
-                withAnimation(.spring(response: 0.4, dampingFraction: 0.86)) {
-                    filmHidden = false
-                }
-            }
-            .padding(.bottom, 10)
-            .transition(.opacity)
-        } else {
-            filmStrip
-                .transition(.opacity.combined(with: .offset(y: 20)))
-        }
-    }
-
-    private var filmStrip: some View {
-        // No inversion. The extra half turn was correct while film rode a
-        // rotated band and supplied its own angle; back in the stack the
-        // regular `rotation` already faces it the right way, and adding 180
-        // on top turned every stock name upside down.
-        FilmCardStack(rotation: .zero, invertNames: false, onOpen: onFilmSim)
-            .fixedSize()
-            .rotationEffect(rotation)
-            // Width and height swap when the body turns, because the strip
-            // does. Booking the upright footprint for a turned strip is what
-            // put it on top of the lens pill.
-            .frame(width: landscape ? 108 : 180, height: landscape ? 172 : 108)
-            .padding(.bottom, landscape ? 6 : 14)
-            .gesture(
-                // Down puts it away, the same "push it off the frame" the plate
-                // answers to. The carousel's own swipe is horizontal, so the two
-                // never compete for the same movement.
-                DragGesture(minimumDistance: 24)
-                    .onEnded { drag in
-                        // Across the strip, not down the screen: turned, "away"
-                        // is a different direction, and the carousel owns the
-                        // along axis.
-                        let across = DragAxis.across(drag.translation, rotation: rotation)
-                        let along = DragAxis.along(drag.translation, rotation: rotation)
-                        guard across > 44, abs(across) > abs(along) else { return }
-                        Haptics.toggle()
-                        withAnimation(.spring(response: 0.4, dampingFraction: 0.86)) {
-                            filmHidden = true
-                        }
-                    }
-            )
+        EmptyView()
     }
 
     /// The same strip, without the portrait padding, for the screen to hang on
@@ -1797,6 +1821,23 @@ struct TopPlateDeck: View {
         .padding(.top, 14)
     }
 
+    /// Laid out horizontally and turned as one piece, so no readout is rotated
+    /// inside a frame sized for it upright — the fault that clipped the meter
+    /// to ".8 0" and lapped it over the zoom.
+    private var instruments: some View {
+        TopPlateDeck.landscapeInstruments(
+            camera: app.cameraManager,
+            zoom: app.zoom,
+            histogramStyle: histogramStyle
+        )
+        .fixedSize()
+        .rotationEffect(rotation)
+        .frame(width: landscape ? 62 : 300,
+               height: landscape ? 300 : 62,
+               alignment: landscape ? .top : .leading)
+        .allowsHitTesting(false)
+    }
+
     private var lensRow: some View {
         PlateLensRow(
             camera: app.cameraManager,
@@ -1812,29 +1853,18 @@ struct TopPlateDeck: View {
         ZStack {
             LeafShutterButton(action: onFire)
 
-            HStack {
-                // Back where it was. Its job is now the plate: on, and all five
-                // dials come down; off, and the shutter dial holds the fort.
-                Button {
-                    Haptics.toggle()
-                    withAnimation(.spring(response: 0.4, dampingFraction: 0.86)) {
-                        app.proMode.toggle()
-                    }
-                } label: {
-                    Text("PRO")
-                        .font(.mono(12, .bold))
-                        .kerning(0.9)
-                        .foregroundStyle(app.proMode ? Ink.base : Tone.secondary)
-                        .rotationEffect(rotation)
-                        .frame(width: 62, height: 44)
-                        .background {
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .fill(app.proMode ? Accent.amber : Color.white.opacity(0.07))
-                        }
-                        .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Pro controls")
+            HStack(spacing: 0) {
+                // Film sits beside the release and centred on it — the same
+                // station in both orientations, turning with the body rather
+                // than jumping to another edge. Its own frame swaps with the
+                // turn, so the turned strip books the space it occupies.
+                FilmCardStack(rotation: rotation, invertNames: false, onOpen: onFilmSim)
+                    .fixedSize()
+                    .scaleEffect(landscape ? 0.66 : 0.8)
+                    .rotationEffect(rotation)
+                    .frame(width: landscape ? 78 : 132,
+                           height: landscape ? 128 : 82)
+                    .contentShape(Rectangle())
 
                 Spacer(minLength: 0)
 
@@ -1844,9 +1874,9 @@ struct TopPlateDeck: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("Library")
             }
-            .padding(.horizontal, 26)
+            .padding(.horizontal, 22)
         }
-        .frame(height: 78)
+        .frame(height: landscape ? 132 : 96)
     }
 }
 

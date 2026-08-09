@@ -374,23 +374,6 @@ struct ViewfinderScreen: View {
             }
         }
         .ignoresSafeArea(edges: .top)
-        // The PRO handle sits below the plate, over the picture, rather than on
-        // the plate's own bottom edge — there it crowded the switch row and was
-        // shaved by the plate's clip. Out here it is clear of the metal and low
-        // enough to reach.
-        .overlay(alignment: .top) {
-            if !app.proMode {
-                RevealHandle(label: "PRO", symbol: "chevron.down",
-                             rotation: orientation.angle) {
-                    withAnimation(.spring(response: 0.4, dampingFraction: 0.86)) {
-                        app.proMode = true
-                    }
-                }
-                .padding(.top, TopPlateBand.height(proOpen: false, width: width) + 18)
-                .transition(.opacity.combined(with: .scale(scale: 0.85)))
-                .zIndex(5)
-            }
-        }
         // Portrait: the barrel hangs under the plate, where the dials are.
         .overlay(alignment: .top) {
             if let activeDial, orientation.edge == .bottom {
@@ -414,17 +397,6 @@ struct ViewfinderScreen: View {
         .overlay {
             if orientation.edge != .bottom {
                 GeometryReader { geo in
-                    // Instruments at the sky edge, laid out horizontally and
-                    // turned as one piece.
-                    rotatedBand(
-                        TopPlateDeck.landscapeInstruments(
-                            camera: app.cameraManager,
-                            zoom: app.zoom,
-                            histogramStyle: histogramStyle
-                        ),
-                        thickness: 54, at: skyEdge, in: geo.size
-                    )
-
                     if let activeDial {
                         rotatedBand(
                             DialBarrel(dial: activeDial, rotation: .zero,
@@ -446,17 +418,6 @@ struct ViewfinderScreen: View {
         .animation(.spring(response: 0.42, dampingFraction: 0.86), value: orientation.edge)
         .animation(.spring(response: 0.34, dampingFraction: 0.84), value: app.proMode)
         .animation(.easeOut(duration: 0.22), value: activeDial)
-        }
-    }
-
-    /// The edge that is physically up. `orientation.edge` is the one facing the
-    /// ground, which is where the thumb falls and therefore where the barrel
-    /// goes; the film strip takes the sky edge opposite it.
-    private var skyEdge: DeviceOrientation.Edge {
-        switch orientation.edge {
-        case .leading:  return .trailing
-        case .trailing: return .leading
-        case .bottom:   return .bottom
         }
     }
 
