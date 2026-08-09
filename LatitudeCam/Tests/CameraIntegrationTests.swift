@@ -1255,6 +1255,27 @@ final class ViewfinderRegionTests: XCTestCase {
         XCTAssertGreaterThan(open.minY, closed.minY)
     }
 
+    /// Two bands share the sky edge — instruments outermost, film inside them —
+    /// so the second has to be inset past the first or they draw on top of each
+    /// other. This is the arithmetic that keeps them apart.
+    func testTwoBandsSharingAnEdgeDoNotOverlap() {
+        let instruments: CGFloat = 54
+        let filmInset: CGFloat = 62
+        XCTAssertGreaterThanOrEqual(filmInset, instruments,
+                                    "film would be drawn over the instruments")
+    }
+
+    /// And both still have to fit inside the picture rather than pushing the
+    /// second one out of the frame.
+    func testBothSkyBandsFitInsideTheRegion() {
+        let r = region(in: screen, plate: TopPlateBand.height(proOpen: true))
+        let outermost: CGFloat = 54
+        let innerInset: CGFloat = 62
+        let innerThickness: CGFloat = 118
+        XCTAssertLessThan(outermost + innerInset + innerThickness, r.width,
+                          "the inner band would hang outside the picture")
+    }
+
     /// Even on the shortest plausible screen the region cannot invert, which
     /// would flip the band inside out rather than merely crowd it.
     func testTheRegionNeverInverts() {

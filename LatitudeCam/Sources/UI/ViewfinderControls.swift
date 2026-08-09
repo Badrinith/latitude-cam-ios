@@ -1164,7 +1164,11 @@ struct TopPlateDeck: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            hud
+            // Turned, the instruments go on a rotated band at the sky edge —
+            // laid out horizontally inside it and rotated as one piece. Rotating
+            // each readout inside a portrait-shaped frame is what clipped the
+            // meter to ".8 0" and lapped it over the zoom.
+            if !landscape { hud }
             Spacer(minLength: 0)
 
             // Portrait keeps film in the stack with everything else.
@@ -1192,6 +1196,33 @@ struct TopPlateDeck: View {
     /// a rotated band when the body is turned.
     static func landscapeFilm(rotation: Angle, onOpen: @escaping () -> Void) -> some View {
         FilmCardStack(rotation: .zero, invertNames: false, onOpen: onOpen)
+    }
+
+    /// The instruments as one horizontal row, for the sky-edge band.
+    ///
+    /// Nothing inside is rotated: the band turns as a whole, so every readout
+    /// keeps its natural width and none of them can clip. That is the same
+    /// reason the switches became squares.
+    static func landscapeInstruments(
+        camera: CameraManager, zoom: Double, histogramStyle: String
+    ) -> some View {
+        HStack(spacing: 8) {
+            LiveHistogramView(frames: camera.frames, style: histogramStyle)
+            CameraStatusPill(camera: camera)
+            MeterReadout(frames: camera.frames, rotation: .zero)
+
+            if let wide = camera.lenses.first(where: { $0.id == "wide" }) {
+                Text(String(format: "%.1f×", zoom / Double(wide.zoom)))
+                    .font(.mono(9, .semibold))
+                    .foregroundStyle(Accent.amber)
+                    .fixedSize()
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background { RoundedRectangle(cornerRadius: 8).fill(Color.black.opacity(0.45)) }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 4)
     }
 
     private var hud: some View {

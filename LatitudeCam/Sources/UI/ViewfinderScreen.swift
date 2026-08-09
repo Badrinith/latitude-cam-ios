@@ -392,6 +392,26 @@ struct ViewfinderScreen: View {
         .overlay {
             if orientation.edge != .bottom {
                 GeometryReader { geo in
+                    // Instruments at the sky edge, laid out horizontally and
+                    // turned as one piece.
+                    rotatedBand(
+                        TopPlateDeck.landscapeInstruments(
+                            camera: app.cameraManager,
+                            zoom: app.zoom,
+                            histogramStyle: histogramStyle
+                        ),
+                        thickness: 54, at: skyEdge, in: geo.size
+                    )
+
+                    // Film sits just inside them, still on the sky side, so the
+                    // ground edge stays clear for the hand.
+                    rotatedBand(
+                        TopPlateDeck.landscapeFilm(rotation: .zero,
+                                                   onOpen: { app.go(.filmSim) }),
+                        thickness: 118, at: skyEdge, in: geo.size, inset: 62
+                    )
+                    .opacity(activeDial == nil ? 1 : 0.25)
+
                     if let activeDial {
                         rotatedBand(
                             DialBarrel(dial: activeDial, rotation: .zero,
@@ -400,16 +420,17 @@ struct ViewfinderScreen: View {
                             thickness: 62, at: orientation.edge, in: geo.size
                         )
                     }
-
-                    rotatedBand(
-                        TopPlateDeck.landscapeFilm(rotation: .zero,
-                                                   onOpen: { app.go(.filmSim) }),
-                        thickness: 118, at: skyEdge, in: geo.size
-                    )
                 }
+                .transition(.opacity)
                 .zIndex(4)
             }
         }
+        // One spring for the whole turn. Portrait and landscape are different
+        // view trees and SwiftUI cannot interpolate between two trees, so the
+        // honest smooth answer is a cross-fade rather than a pretended morph —
+        // and everything that does survive the change (the bands' angle and
+        // centre) rides the same spring, so nothing arrives on its own beat.
+        .animation(.spring(response: 0.42, dampingFraction: 0.86), value: orientation.edge)
         .animation(.spring(response: 0.34, dampingFraction: 0.84), value: app.proMode)
         .animation(.easeOut(duration: 0.22), value: activeDial)
     }
@@ -448,17 +469,18 @@ struct ViewfinderScreen: View {
     /// rather than snap.
     private func rotatedBand<C: View>(
         _ content: C, thickness: CGFloat,
-        at edge: DeviceOrientation.Edge, in size: CGSize
+        at edge: DeviceOrientation.Edge, in size: CGSize,
+        inset: CGFloat = 0
     ) -> some View {
         let region = viewfinderRegion(in: size)
         let centre: CGPoint
         switch edge {
         case .leading:
-            centre = CGPoint(x: region.minX + thickness / 2 + 8, y: region.midY)
+            centre = CGPoint(x: region.minX + inset + thickness / 2 + 8, y: region.midY)
         case .trailing:
-            centre = CGPoint(x: region.maxX - thickness / 2 - 8, y: region.midY)
+            centre = CGPoint(x: region.maxX - inset - thickness / 2 - 8, y: region.midY)
         case .bottom:
-            centre = CGPoint(x: region.midX, y: region.maxY - thickness / 2 - 8)
+            centre = CGPoint(x: region.midX, y: region.maxY - inset - thickness / 2 - 8)
         }
         return content
             // Inset from the picture's ends too, so a band never runs edge to
