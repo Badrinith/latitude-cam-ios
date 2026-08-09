@@ -874,9 +874,13 @@ final class ViewfinderControlStyleTests: XCTestCase {
     /// literal only asserted that nobody had changed it. What matters is that
     /// it stays in the neighbourhood of the spec and that one helper is the
     /// single source for both the band and the inset.
-    func testTheTopPlateBandStaysCloseToTheSpecifiedDepth() {
-        XCTAssertEqual(TopPlateBand.height, 222, accuracy: 24,
-                       "the plate has drifted well away from the handoff's 210")
+    /// The handoff's 210pt plate held five dials. They live on a rail now, so
+    /// the plate is the switch row alone and the depth it needs is a different
+    /// number entirely — what matters is that one constant still feeds both the
+    /// band and everything measured against it.
+    func testTheTopPlateBandIsJustItsSwitchRow() {
+        XCTAssertGreaterThanOrEqual(TopPlateBand.height, 100)
+        XCTAssertLessThanOrEqual(TopPlateBand.height, 130)
     }
 
     /// Every dial on the plate drives a real ladder. A zero-stop dial divides by
@@ -1051,43 +1055,55 @@ final class LeafShutterGeometryTests: XCTestCase {
     }
 }
 
-// MARK: - Plate that opens and closes
+// MARK: - The plate, and the rail that replaced its dials
 
-/// PRO now opens the plate rather than sitting at the bottom of the screen, and
-/// the picture is inset below the plate. Those two numbers have to agree in both
-/// states or the frame slides under opaque metal when PRO is toggled.
-final class TopPlateCollapseTests: XCTestCase {
+/// The dials left the plate for a rail at the bottom of the screen. At 3x they
+/// are 132/150/210/150/132 — near 800pt of row against a 393pt screen — so the
+/// arithmetic that used to keep them on the plate is what these now pin.
+final class DialRailTests: XCTestCase {
 
-    func testTheClosedPlateIsShorterThanTheOpenOne() {
-        XCTAssertLessThan(TopPlateBand.collapsedHeight, TopPlateBand.height,
-                          "closing the plate has to give the picture room back")
+    /// The whole reason the rail scrolls. If this ever came out false, a fixed
+    /// row would fit and the rail would be unnecessary complexity.
+    func testTheDialsCannotFitAcrossTheScreen() {
+        let widest: CGFloat = 393
+        let row = (44 + 50 + 70 + 50 + 44) * DialStrip.scale + 20 * 4 + 52
+        XCTAssertGreaterThan(row, widest,
+                             "the dials fit in a row — the scrolling rail is not needed")
     }
 
-    func testTheHeightHelperMatchesBothConstants() {
-        XCTAssertEqual(TopPlateBand.height(proOpen: true), TopPlateBand.height)
-        XCTAssertEqual(TopPlateBand.height(proOpen: false), TopPlateBand.collapsedHeight)
+    func testThreeTimesIsTheSizeAsked() {
+        XCTAssertEqual(DialStrip.scale, 3)
     }
 
-    /// Closed, the plate is the switch row alone — with PRO off the camera is
-    /// on auto and a dial would only ever read AUTO. It still has to fit that
-    /// row: 46pt of inset above a 44pt target.
-    func testTheClosedPlateFitsItsSwitchRow() {
-        XCTAssertGreaterThanOrEqual(TopPlateBand.collapsedHeight, 90,
-                                    "the switch row would be clipped")
+    /// The rail has to be tall enough for the largest dial *and* its label, or
+    /// the shutter dial is cropped by the frame that holds it.
+    func testTheRailFitsItsTallestDial() {
+        XCTAssertGreaterThanOrEqual(DialStrip.height, 70 * DialStrip.scale,
+                                    "the shutter dial would be cropped")
+        XCTAssertGreaterThan(DialStrip.height, 70 * DialStrip.scale,
+                             "no room left for the label under it")
     }
 
-    /// Closing has to give the frame back the whole dial band, which is the
-    /// entire reason the plate collapses at all.
-    func testClosingGivesBackTheWholeDialBand() {
-        XCTAssertGreaterThanOrEqual(TopPlateBand.height - TopPlateBand.collapsedHeight, 100,
-                                    "closing the plate barely returns any frame")
+    /// The plate is the switch row alone now. It still has to clear a 54pt
+    /// square switch under the 46pt inset above it.
+    func testThePlateStillFitsItsSwitchRow() {
+        XCTAssertGreaterThanOrEqual(TopPlateBand.height, 46 + 54)
     }
 
-    /// Closing still has to buy the picture something back, or the switch is
-    /// decoration.
-    func testClosingTheePlateStillReturnsRoomToTheFrame() {
-        XCTAssertGreaterThanOrEqual(TopPlateBand.height - TopPlateBand.collapsedHeight, 40,
-                                    "closing the plate barely moves the frame")
+    /// And it must stay slim: it is translucent and the picture runs behind it,
+    /// so every point it grows is a point of frame it dims.
+    func testThePlateStaysSlim() {
+        XCTAssertLessThanOrEqual(TopPlateBand.height, 130,
+                                 "the plate is dimming more of the frame than it needs")
+    }
+
+    /// In landscape the rail and the barrel share the ground edge, so the
+    /// barrel is inset past the rail. Without that they draw on top of one
+    /// another — the same fault that put film on the shutter.
+    func testTheBarrelClearsTheRailOnTheGroundEdge() {
+        let barrelInset = DialStrip.height + 4
+        XCTAssertGreaterThan(barrelInset, DialStrip.height,
+                             "the barrel would be drawn over the rail")
     }
 }
 
@@ -1197,10 +1213,8 @@ final class PlateSwitchTests: XCTestCase {
 
     /// The plate has to be tall enough for the taller switch row plus the inset
     /// above it, in both states.
-    func testBothPlateHeightsClearTheSwitchRow() {
-        let needed: CGFloat = 46 + 54
-        XCTAssertGreaterThanOrEqual(TopPlateBand.collapsedHeight, needed)
-        XCTAssertGreaterThanOrEqual(TopPlateBand.height, needed)
+    func testThePlateClearsTheSwitchRow() {
+        XCTAssertGreaterThanOrEqual(TopPlateBand.height, 46 + 54)
     }
 }
 
@@ -1222,15 +1236,13 @@ final class ViewfinderRegionTests: XCTestCase {
     private let screen = CGSize(width: 393, height: 852)
 
     func testTheRegionStartsBelowThePlate() {
-        for open in [true, false] {
-            let plate = TopPlateBand.height(proOpen: open)
-            XCTAssertEqual(region(in: screen, plate: plate).minY, plate,
-                           "a band would start inside the plate")
-        }
+        let plate = TopPlateBand.height
+        XCTAssertEqual(region(in: screen, plate: plate).minY, plate,
+                       "a band would start inside the plate")
     }
 
     func testTheRegionEndsAboveTheRelease() {
-        let r = region(in: screen, plate: TopPlateBand.height(proOpen: true))
+        let r = region(in: screen, plate: TopPlateBand.height)
         XCTAssertLessThanOrEqual(r.maxY, screen.height - 160,
                                  "a band would come down onto the shutter row")
     }
@@ -1238,21 +1250,21 @@ final class ViewfinderRegionTests: XCTestCase {
     /// The band is laid out along the region's height, so that length must never
     /// exceed the region — an inset of zero would put its ends on the boundary.
     func testTheBandIsShorterThanTheRegionItSitsIn() {
-        for open in [true, false] {
-            let r = region(in: screen, plate: TopPlateBand.height(proOpen: open))
-            XCTAssertLessThan(r.height - 28, r.height)
-            XCTAssertGreaterThan(r.height - 28, 0, "the band would collapse")
-        }
+        let r = region(in: screen, plate: TopPlateBand.height)
+        XCTAssertLessThan(r.height - 28, r.height)
+        XCTAssertGreaterThan(r.height - 28, 0, "the band would collapse")
     }
 
     /// Opening the plate eats into the picture, so the region has to shrink with
     /// it — a fixed region would push the band back under the dials the moment
     /// PRO came on.
-    func testOpeningThePlateShrinksTheRegion() {
-        let closed = region(in: screen, plate: TopPlateBand.collapsedHeight)
-        let open = region(in: screen, plate: TopPlateBand.height)
-        XCTAssertLessThan(open.height, closed.height)
-        XCTAssertGreaterThan(open.minY, closed.minY)
+    /// A taller plate always costs the picture height. The relationship has to
+    /// hold whatever the plate is retuned to.
+    func testATallerPlateAlwaysCostsThePicture() {
+        let slim = region(in: screen, plate: 80)
+        let deep = region(in: screen, plate: 160)
+        XCTAssertLessThan(deep.height, slim.height)
+        XCTAssertGreaterThan(deep.minY, slim.minY)
     }
 
     /// Two bands share the sky edge — instruments outermost, film inside them —
@@ -1268,7 +1280,7 @@ final class ViewfinderRegionTests: XCTestCase {
     /// And both still have to fit inside the picture rather than pushing the
     /// second one out of the frame.
     func testBothSkyBandsFitInsideTheRegion() {
-        let r = region(in: screen, plate: TopPlateBand.height(proOpen: true))
+        let r = region(in: screen, plate: TopPlateBand.height)
         let outermost: CGFloat = 54
         let innerInset: CGFloat = 62
         let innerThickness: CGFloat = 118

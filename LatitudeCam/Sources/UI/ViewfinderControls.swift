@@ -554,6 +554,8 @@ struct PlateDial: View {
     var receded: Bool = false
     var onTurn: (ActiveDial) -> Void = { _ in }
     var onFocusChange: (Bool) -> Void = { _ in }
+    /// Double tap puts this one control back to automatic.
+    var onReset: () -> Void = {}
     /// Called once when a turn begins. Shutter and ISO use it to come off A:
     /// touching the dial is what takes a camera out of auto, and without it the
     /// dial moved while the exposure stayed exactly where it was.
@@ -644,6 +646,15 @@ struct PlateDial: View {
         .frame(width: max(diameter, 52), height: max(diameter, 52))
         .contentShape(Circle())
         .gesture(turn)
+        // Simultaneous, because the turn gesture has a zero minimum distance
+        // and would otherwise swallow every tap before the tap recogniser saw
+        // it. A tap moves nothing: the turn needs a first movement to arm.
+        .simultaneousGesture(
+            TapGesture(count: 2).onEnded {
+                Haptics.toggle()
+                onReset()
+            }
+        )
     }
 
     /// Alternating wedges, the handoff's 4° ridges.
@@ -1001,6 +1012,113 @@ struct PlateLensRow: View {
     }
 }
 
+/// The dials, three times their old size and on a rail.
+///
+/// At 3x the five of them are 132 / 150 / 210 / 150 / 132 - close to 800pt of
+/// row against a 393pt screen, so a fixed row is arithmetically impossible.
+/// They scroll instead, which is what makes the size usable at all: the strip
+/// is longer than the glass and you bring the one you want to hand.
+///
+/// The fade states the same idea visually. The left is where a dial has been
+/// scrolled past and is on its way out, so it thins; the right is where the
+/// thumb rests, and everything there is at full strength.
+struct DialStrip: View {
+    @EnvironmentObject var app: AppState
+    var rotation: Angle = .zero
+    var compact: Bool = false
+    var onDialTurn: (ActiveDial) -> Void
+    var onReset: (ActiveDial.Key) -> Void
+
+    /// One constant for the whole size question, so retuning it is one edit.
+    static let scale: CGFloat = 3
+    /// Tallest dial plus its label: what the strip needs from the layout.
+    static var height: CGFloat { 70 * scale + 26 }
+
+    @State private var focused: ActiveDial.Key?
+
+    private var apertureBinding: Binding<Double> {
+        Binding(
+            get: {
+                let last = Double(AppState.apertureStops.count - 1)
+                return last > 0 ? Double(app.apertureIndex) / last : 0
+            },
+            set: { fresh in
+                let last = AppState.apertureStops.count - 1
+                app.apertureIndex = min(last, max(0, Int((fresh * Double(last)).rounded())))
+            }
+        )
+    }
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(alignment: .center, spacing: 20) {
+                dial(.aperture, label: AppState.apertureLabels[app.apertureIndex],
+                     name: "APERTURE", reading: AppState.apertureLabels[app.apertureIndex],
+                     value: apertureBinding, stops: AppState.apertureStops.count, base: 44)
+
+                dial(.iso, label: app.isoLabel, name: "ISO", reading: app.isoLabel,
+                     value: $app.iso, stops: AppState.isoStops.count, base: 50)
+
+                dial(.shutter, label: "SHUTTER", name: "SHUTTER", reading: app.shutterLabel,
+                     value: $app.shutter, stops: AppState.shutterStops.count, base: 70,
+                     inline: app.shutterLabel, highlighted: true)
+
+                dial(.white, label: app.kelvinLabel, name: "WHITE BALANCE",
+                     reading: app.kelvinLabel, value: $app.whiteBalance,
+                     stops: AppState.whiteBalanceStops.count, base: 50)
+
+                dial(.exposure, label: String(format: "%+.1fEV", app.evValue),
+                     name: "EXPOSURE", reading: String(format: "%+.1f EV", app.evValue),
+                     value: $app.exposureComp, stops: AppState.evDetents, base: 44)
+            }
+            .padding(.horizontal, 26)
+            .frame(height: Self.height)
+        }
+        .scrollIndicators(.hidden)
+        // Without this the enlarged dial is cut off at the rail's edge the
+        // moment it is pressed - a scroll view clips its own content, and the
+        // whole point of the press is that it grows.
+        .scrollClipDisabled()
+        .frame(height: Self.height)
+        .mask(fade)
+    }
+
+    private var fade: some View {
+        LinearGradient(
+            stops: [
+                .init(color: .white.opacity(0.28), location: 0),
+                .init(color: .white.opacity(0.75), location: 0.22),
+                .init(color: .white, location: 0.5),
+                .init(color: .white, location: 1)
+            ],
+            startPoint: .leading, endPoint: .trailing
+        )
+    }
+
+    private func dial(
+        _ key: ActiveDial.Key, label: String, name: String, reading: String,
+        value: Binding<Double>, stops: Int, base: CGFloat,
+        inline: String? = nil, highlighted: Bool = false
+    ) -> some View {
+        PlateDial(
+            label: label, inlineReading: inline,
+            barrelKey: key, barrelName: name, barrelReading: reading,
+            value: value, stops: stops,
+            diameter: base * Self.scale,
+            highlighted: highlighted, rotation: rotation, compact: compact,
+            receded: focused != nil && focused != key,
+            onTurn: onDialTurn,
+            onFocusChange: { holding in
+                withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
+                    focused = holding ? key : (focused == key ? nil : focused)
+                }
+            },
+            onReset: { onReset(key) }
+        )
+    }
+}
+
+
 /// The metal plate. PRO lives here now rather than at the bottom of the screen,
 /// and what it does is open and close the plate: the tap that means "I am
 /// setting up" is the same tap that produces the instruments. Closed, the plate
@@ -1015,15 +1133,11 @@ struct TopPlateBand: View {
     var aspect: String
     var onDialTurn: (ActiveDial) -> Void
 
-    /// Open, with all five dials showing.
-    static let height: CGFloat = 222
-    /// Closed — the switch strip alone. No dials, because with PRO off the
-    /// camera is on auto and every one of them would read AUTO: a control that
-    /// displays a value it is not setting is worse than no control, and it was
-    /// costing the frame 70pt to say so.
-    static let collapsedHeight: CGFloat = 108
-
-    static func height(proOpen: Bool) -> CGFloat { proOpen ? height : collapsedHeight }
+    /// The switch row and nothing else. The dials left the plate for a rail at
+    /// the bottom of the screen, where a thumb can reach them — at three times
+    /// their old size they were never going to fit up here, and the plate no
+    /// longer needs to open and close because there is nothing in it to hide.
+    static let height: CGFloat = 108
 
     /// Which dial is being held, so the others can step back.
     @State private var focused: ActiveDial.Key?
@@ -1055,24 +1169,20 @@ struct TopPlateBand: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            LinearGradient(colors: [Color(hex: 0x302D28), Color(hex: 0x1C1A17)],
+            // Semi-transparent, over material rather than a solid slab. The
+            // frame now runs behind the plate instead of starting below it, so
+            // the top of the picture is visible rather than paid for.
+            LinearGradient(colors: [Color(hex: 0x302D28).opacity(0.82),
+                                    Color(hex: 0x1C1A17).opacity(0.72)],
                            startPoint: .top, endPoint: .bottom)
+                .background(.ultraThinMaterial)
                 .overlay(alignment: .bottom) {
-                    Rectangle().fill(Color(hex: 0x0A0A0A)).frame(height: 2)
+                    Rectangle().fill(Color(hex: 0x0A0A0A).opacity(0.6)).frame(height: 1)
                 }
 
-            VStack(spacing: 0) {
-                utilities.padding(.top, 46)
-
-                if app.proMode {
-                    dials
-                        .padding(.top, 8)
-                        .padding(.horizontal, 6)
-                        .transition(.opacity.combined(with: .offset(y: -14)))
-                }
-            }
+            utilities.padding(.top, 46)
         }
-        .frame(height: Self.height(proOpen: app.proMode))
+        .frame(height: Self.height)
         .frame(maxWidth: .infinity)
         .clipped()
     }
@@ -1148,62 +1258,13 @@ struct TopPlateBand: View {
         .buttonStyle(.plain)
         .accessibilityLabel(label)
     }
-
-    private var dials: some View {
-        HStack(alignment: .bottom, spacing: 0) {
-            Group {
-                PlateDial(label: AppState.apertureLabels[app.apertureIndex],
-                          barrelKey: .aperture, barrelName: "APERTURE",
-                          barrelReading: AppState.apertureLabels[app.apertureIndex],
-                          value: apertureBinding,
-                          stops: AppState.apertureStops.count,
-                          diameter: 44, rotation: rotation, compact: compact,
-                          receded: receded(.aperture), onTurn: onDialTurn,
-                          onFocusChange: focus(.aperture))
-
-                PlateDial(label: app.isoLabel,
-                          barrelKey: .iso, barrelName: "ISO", barrelReading: app.isoLabel,
-                          value: $app.iso,
-                          stops: AppState.isoStops.count,
-                          diameter: 50, rotation: rotation, compact: compact,
-                          receded: receded(.iso), onTurn: onDialTurn,
-                          onFocusChange: focus(.iso),
-                          onEngage: { app.autoExposure = false })
-
-                PlateDial(label: "SHUTTER", inlineReading: app.shutterLabel,
-                          barrelKey: .shutter, barrelName: "SHUTTER", barrelReading: app.shutterLabel,
-                          value: $app.shutter, stops: AppState.shutterStops.count,
-                          diameter: 70, highlighted: true, rotation: rotation,
-                          compact: compact, receded: receded(.shutter), onTurn: onDialTurn,
-                          onFocusChange: focus(.shutter),
-                          onEngage: { app.autoExposure = false })
-
-                PlateDial(label: app.kelvinLabel,
-                          barrelKey: .white, barrelName: "WHITE BALANCE", barrelReading: app.kelvinLabel,
-                          value: $app.whiteBalance,
-                          stops: AppState.whiteBalanceStops.count,
-                          diameter: 50, rotation: rotation, compact: compact,
-                          receded: receded(.white), onTurn: onDialTurn,
-                          onFocusChange: focus(.white))
-
-                PlateDial(label: String(format: "%+.1fEV", app.evValue),
-                          barrelKey: .exposure, barrelName: "EXPOSURE",
-                          barrelReading: String(format: "%+.1f EV", app.evValue),
-                          value: $app.exposureComp, stops: AppState.evDetents,
-                          diameter: 44, rotation: rotation, compact: compact,
-                          receded: receded(.exposure), onTurn: onDialTurn,
-                          onFocusChange: focus(.exposure))
-            }
-            .frame(maxWidth: .infinity)
-        }
-    }
 }
 
-/// Everything below the plate: the HUD chips, the film carousel (or the pro
-/// barrels in its place), the focal-length row, and the bottom bar.
+/// Everything below the plate: the HUD chips, the film carousel, the dial rail,
+/// the focal-length row, and the bottom bar.
 ///
-/// PRO is not down here any more — it moved to the plate, where it belongs with
-/// the instruments it reveals.
+/// PRO sits in the bottom bar and gates the dial rail: on, the rail slides up
+/// under the hand; off, the camera is on auto and there is nothing to set.
 struct TopPlateDeck: View {
     @EnvironmentObject var app: AppState
     var rotation: Angle = .zero
@@ -1216,6 +1277,8 @@ struct TopPlateDeck: View {
     var onFilmSim: () -> Void
     var onLibrary: () -> Void
     var onFire: () -> Void
+    var onDialTurn: (ActiveDial) -> Void = { _ in }
+    var onResetDial: (ActiveDial.Key) -> Void = { _ in }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -1228,6 +1291,14 @@ struct TopPlateDeck: View {
 
             // Portrait keeps film in the stack with everything else.
             if !landscape { filmBand }
+
+            // Portrait: the rail sits at the bottom, right above the hand.
+            if !landscape && app.proMode {
+                DialStrip(rotation: rotation, compact: false,
+                          onDialTurn: onDialTurn, onReset: onResetDial)
+                    .padding(.bottom, 6)
+                    .transition(.opacity.combined(with: .offset(y: 20)))
+            }
 
             lensRow.padding(.bottom, 10)
             bottomBar.padding(.bottom, 30)

@@ -278,9 +278,10 @@ struct ViewfinderScreen: View {
                         .zIndex(3)
                 }
             }
-            .padding(.top, controlStyle == "Top Plate"
-                     ? TopPlateBand.height(proOpen: app.proMode) : 0)
-            .ignoresSafeArea(edges: controlStyle == "Top Plate" ? [] : .all)
+            // The plate is translucent now, so the picture runs the full height
+            // behind it instead of being inset below opaque metal — the top of
+            // the frame is visible rather than paid for.
+            .ignoresSafeArea()
 
             chrome
 
@@ -362,7 +363,9 @@ struct ViewfinderScreen: View {
                 onSettings: { app.go(.settings) },
                 onFilmSim: { app.go(.filmSim) },
                 onLibrary: { app.go(.library) },
-                onFire: fire
+                onFire: fire,
+                onDialTurn: showBarrel,
+                onResetDial: resetDial
             )
             .background(alignment: .bottom) {
                 deckShade.frame(height: 260)
@@ -375,7 +378,7 @@ struct ViewfinderScreen: View {
                 DialBarrel(dial: activeDial, rotation: .zero,
                            onScrub: { scrub(activeDial.key, by: $0) })
                     .padding(.horizontal, 12)
-                    .padding(.top, TopPlateBand.height(proOpen: app.proMode) + 10)
+                    .padding(.top, TopPlateBand.height + 10)
                     .transition(.opacity.combined(with: .offset(y: -10)))
                     .zIndex(4)
             }
@@ -403,21 +406,32 @@ struct ViewfinderScreen: View {
                         thickness: 54, at: skyEdge, in: geo.size
                     )
 
-                    // Film sits just inside them, still on the sky side, so the
-                    // ground edge stays clear for the hand.
+                    // Film moves to the leading side of the frame, beside the
+                    // release rather than opposite it — asked for, and it keeps
+                    // the sky edge for reading and the ground edge for turning.
                     rotatedBand(
                         TopPlateDeck.landscapeFilm(rotation: .zero,
                                                    onOpen: { app.go(.filmSim) }),
-                        thickness: 118, at: skyEdge, in: geo.size, inset: 62
+                        thickness: 118, at: .leading, in: geo.size
                     )
                     .opacity(activeDial == nil ? 1 : 0.25)
+
+                    // The rail takes the ground edge, under the hand.
+                    if app.proMode {
+                        rotatedBand(
+                            DialStrip(rotation: .zero, compact: true,
+                                      onDialTurn: showBarrel, onReset: resetDial),
+                            thickness: DialStrip.height, at: orientation.edge, in: geo.size
+                        )
+                    }
 
                     if let activeDial {
                         rotatedBand(
                             DialBarrel(dial: activeDial, rotation: .zero,
                                        onScrub: { scrub(activeDial.key, by: $0) })
                                 .padding(.horizontal, 14),
-                            thickness: 62, at: orientation.edge, in: geo.size
+                            thickness: 62, at: orientation.edge, in: geo.size,
+                            inset: app.proMode ? DialStrip.height + 4 : 0
                         )
                     }
                 }
@@ -453,7 +467,7 @@ struct ViewfinderScreen: View {
     /// end reached up into the plate and its foot came down onto the shutter
     /// row, which is the overlap that was reported.
     private func viewfinderRegion(in size: CGSize) -> CGRect {
-        let top = TopPlateBand.height(proOpen: app.proMode)
+        let top = TopPlateBand.height
         // Lens row, the release, and the padding under it.
         let bottom: CGFloat = 170
         return CGRect(
@@ -488,6 +502,23 @@ struct ViewfinderScreen: View {
             .frame(width: region.height - 28, height: thickness)
             .rotationEffect(orientation.angle)
             .position(centre)
+    }
+
+    /// Double tapping a dial puts that one control back to automatic, the way
+    /// clicking a lens ring back to A does. Only the dial touched — a reset
+    /// that quietly took the other four with it would be a trap.
+    private func resetDial(_ key: ActiveDial.Key) {
+        switch key {
+        case .iso, .shutter:
+            app.autoExposure = true
+        case .white:
+            app.whiteBalance = AppState.defaultControls.whiteBalance
+        case .exposure:
+            app.exposureComp = AppState.defaultControls.exposureComp
+        case .aperture:
+            app.apertureIndex = 2
+        }
+        activeDial = nil
     }
 
     /// Dragging the barrel drives the same value its dial does. The key is
