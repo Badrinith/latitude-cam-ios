@@ -140,9 +140,12 @@ final class AppStateWiringTests: XCTestCase {
     /// left the app insisting it was "already at the default".
     func testMovingOnlyApertureCountsAsAChange() {
         let app = AppState()
-        app.aperture = AppState.defaultControls.aperture
-        XCTAssertEqual(app.controls, AppState.defaultControls,
-                       "a fresh app should start at the defaults")
+        // Start from the defaults explicitly. A fresh AppState does *not* sit
+        // there — init restores the persisted shoot settings and snaps them to
+        // the nearest ladder position, so shutter and ISO land a hair off the
+        // shipped numbers.
+        app.apply(AppState.defaultControls)
+        XCTAssertEqual(app.controls, AppState.defaultControls)
 
         app.aperture = 0.9
         XCTAssertNotEqual(app.controls, AppState.defaultControls,

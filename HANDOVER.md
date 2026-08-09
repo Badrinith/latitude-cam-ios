@@ -1,13 +1,42 @@
 # Latitude Cam iOS — Handover
 
 **Status:** Live camera pipeline and full-resolution RAW capture working on device.
-351 tests passing. Currently on build **1.0.1 (40)**.
+**417 tests passing.** Currently on build **1.0.1 (73+)**.
 
 **Deployment:** Debug builds install and run on device. Not yet submitted to TestFlight.
 
-**Branch:** `feat/camera-pipeline-dials-splash` — **68 commits ahead of `origin/main`, none pushed.**
-The remote has only `main`, and that commit is already contained in this branch. All of this work
-exists on one machine; pushing is the single highest-value thing an incoming maintainer can do.
+**Branch:** `feat/camera-pipeline-dials-splash` — pushed, and tracking
+`origin/feat/camera-pipeline-dials-splash`. No PR has been opened yet.
+
+---
+
+## Start here
+
+1. **Open a PR.** The branch is pushed but has never been reviewed or merged. It is ~90 commits
+   of work against a `main` that has one commit.
+2. **Boot the simulator before running tests** — otherwise the suite times out during boot and
+   looks broken when it is not. See *Testing notes → when the suite will not finish*.
+3. **Read *Bugs fixed this session → the dial session*** before touching the viewfinder. Five of
+   those six bugs share one shape and you will meet it again.
+
+### The one thing that mattered most
+
+Layout and orientation bugs here are invisible in code and obvious on glass. Several took three
+or four attempts because they were being verified by screenshot rather than by test, and one
+took *four* rounds of me adjusting a padding constant that could never have been right, because
+it was duplicating geometry that lived somewhere else.
+
+Two patterns broke that cycle, and both are worth reaching for early:
+
+- **Put it in the layout instead of computing an offset.** The dial barrel was an overlay
+  positioned by a hand-written `.padding(.top,)` that had to restate the plate's inset, its PRO
+  state and its height. Three attempts at that arithmetic each landed it on the histogram.
+  Making it a child of the stack — so it displaces what is below it — removed the number
+  entirely, and with it the bug.
+- **Name the constants and assert the relationship.** `KnobMath`, `LeafShutterGeometry`,
+  `viewfinderRegion`, and now `PlateDial.Band` all exist because the thing they describe was
+  getting silently violated. If you find yourself trying another value for a constant, that is
+  the signal to make it testable rather than to guess again.
 
 ---
 
@@ -219,11 +248,45 @@ returning after the exposure.
 | Gallery delete removed nothing | `deletePhotos` derives Photos asset ids and bails when there are none, but `addPhoto` creates frames with `assetID: nil` until the roll reloads. Correct behaviour — an unmirrored frame has nothing to delete — but the tests were written against the old immediate-removal contract and had to be rewritten, not forced back. |
 | Gallery back button did nothing | Grid cells sized the `Image` directly, so a 1080px photo laid out far larger than its cell. `.clipped()` hides overflow but **hit testing still used the full bounds** — the top row swallowed taps meant for the back button. Fixed with `Color.clear` + `overlay` + `contentShape`. |
 
+### The dial session (commit `8ba4206`)
+
+Six faults, and the shape of five of them is the same: **something declared but never
+connected**, or **a value standing in for something it could not represent**. Worth reading as
+a set, because the next one will almost certainly rhyme.
+
+| Bug | Root cause |
+|---|---|
+| Numerals 90° off their marks in landscape, correct in portrait | `.offset` is a *render-time* translation — it does not move the layout frame. So a `.rotationEffect` applied **after** it pivots about the view's layout centre, which is the centre of the dial, swinging each numeral's position round the face. At `rotation == .zero` the two orders are identical, which is exactly why portrait looked right. Rotate the glyph, *then* carry it out. Note the same `offset → rotationEffect` pair appears four other times on the face (ticks, knurling, pointer) and is **correct** there — that is the deliberate idiom for radial placement. The numerals were the one place it got mixed with a device-orientation rotation. |
+| Aperture could not be turned slowly, worst in landscape | It was the only control stored as an `Int` index. Each scrub frame recomputed the continuous position *from the rounded index*, so any movement shorter than half a stop was discarded rather than accumulated — the dial did nothing, then jumped a whole stop. Landscape was worse only because the drag is projected onto the rotated axis, making each frame's delta smaller. Now a continuous `aperture: Double` with the index derived from it. |
+| PRO reset left aperture untouched | Aperture was **absent from `ControlSnapshot`** entirely. That struct is what reset, undo, redo and the "already at the default" guard all travel through. Two further consequences beyond the reported one: undo/redo stepped over aperture, and because the guard compares whole snapshots, moving *only* aperture left the app reporting "Already at the default" and refusing to reset anything. |
+| Shutter/ISO barrel always read `AUTO` | `PlateDial` calls `onEngage()` at the start of every turn — and had since an earlier fix — but `DialStrip` never *passed* one, so it resolved to the default no-op. The dial wrote a new position while `autoExposure` stayed `true`, and `shutterLabel` returns `"AUTO"` whenever that flag is set. |
+| Barrel showed the value from *before* the change | `showBarrel` trusted the `reading` string handed to it by the dial. A SwiftUI view's stored properties are the values it was last **built** with, so that string arrived one render stale. Most visible on a reset, where the old value sat until something else forced a redraw. The barrel now takes only the key and name from the caller and reads text and position live from `AppState`. |
+| Shooting RAW at 0.5× returned you to 1× | `onLensesReady` used `zoom == 1` to mean "the camera has not reported where wide is yet". On a virtual back camera **the ultra-wide is factor 1.0 exactly**, so a deliberate 0.5× was indistinguishable from unset. A RAW capture swaps to the physical sensor and back, and republishing the lens list is part of returning — so the guard fired and overwrote the lens. Adoption is a one-shot flag now. |
+| Amber focus ring cut every numeral in half | The ring sat at `0.44 × diameter`; the numeral plates span `0.335–0.455`. Diagnosed by measuring numeral positions in a screenshot the owner sent. The face is now an explicit stack of concentric bands — see below. |
+
+**`PlateDial.Band`.** The dial face is five rings drawn by five unrelated pieces of code, and an
+overlap is only visible on a device with a dial physically held down. The radii are named and
+asserted (`testNothingOnTheDialFaceSharesABand`) rather than eyeballed:
+
+| band | radius (× diameter) |
+|---|---|
+| pointer | 0.09–0.21 |
+| focus ring | 0.245 |
+| ticks | 0.278–0.353 |
+| numerals | 0.36–0.48 |
+| rim | 0.50 |
+
+**Engraved scales are built from the stop ladders, never the label lists.** `isoLabels` and
+`shutterLabels` are `["A"] + stops` — one entry longer than the stop count the dial indexes.
+Engraving one puts every mark after the first off by one. `testEachEngravedScaleMatchesItsStopCount`
+holds this, and a companion test asserts the `"A"` lists are *still* one longer, so the first
+test cannot start passing for the wrong reason.
+
 ---
 
 ## Verified vs not
 
-**Verified:** all 351 tests; every screen rendered and inspected via `LAT_SCREEN`; the live camera
+**Verified:** all 417 tests; every screen rendered and inspected via `LAT_SCREEN`; the live camera
 feed, film look, and RAW + JPEG capture reaching Apple Photos, all confirmed on device by the owner.
 
 **A note on how this session went, because it matters for the next one.** Several bugs took three or
@@ -359,9 +422,40 @@ and the id to both the group `children` and the target's `files`.
 | `LandscapeEdgeTests` · `ViewfinderRegionTests` | Sky/ground edge arithmetic; bands staying inside the picture |
 | `DialEngagesExposureTests` | Shutter and ISO leaving auto; the other dials not disturbing it |
 | `CaptureExifOrientationTests` | The orientation tag written for each capture rotation |
+| `DialScaleTests` | Engraved scales match their stop counts, marks read back as their own detent, nothing on the face shares a band, pointer and reading name the same stop |
 
 `testEveryFilterNameResolves` exists because CoreImage returns the input **unchanged** for an unknown
 filter name. A typo would present as a dead toggle rather than a build error.
+
+### When the suite will not finish
+
+In the most recent session, five consecutive `xcodebuild test` runs were killed by their own
+timeout — every one during simulator boot, none on a test failure. The logs end at
+`** BUILD INTERRUPTED **` after a successful compile. Booting the simulator first and letting
+the run find it warm fixed it, and the suite then completed in **under two seconds**.
+
+What to do, in order:
+
+```bash
+# 1. Boot the simulator first and let the run find it warm.
+xcrun simctl shutdown all
+xcrun simctl boot 22FE7BC3-F461-46A9-8F86-E22D27707531
+xcrun simctl bootstatus 22FE7BC3-F461-46A9-8F86-E22D27707531 -b
+
+# 2. Then run, redirecting to a file — never pipe through grep.
+cd ~/latitude-cam-ios/LatitudeCam
+xcodebuild test -scheme LatitudeCam -configuration Debug \
+  -destination 'id=22FE7BC3-F461-46A9-8F86-E22D27707531' \
+  -derivedDataPath build > /tmp/lt.log 2>&1
+grep -E "Executed [0-9]+ tests|TEST SUCCEEDED|TEST FAILED" /tmp/lt.log | tail -5
+```
+
+If it still stalls, `xcrun simctl erase` the device — a wedged simulator reporting
+"Busy / preflight checks" has caused this before, and once produced a **false** `TEST FAILED`
+when two runs raced each other.
+
+`-destination 'generic/platform=iOS Simulator'` does **not** work for testing — it fails with
+"Tests must be run on a concrete device". Use a specific simulator UDID.
 
 ---
 
