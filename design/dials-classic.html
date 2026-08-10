@@ -1,0 +1,396 @@
+<meta charset="utf-8">
+<title>Latitude — classic controls, judged on use</title>
+<style>
+  :root {
+    --ink: #14120F; --paper: #E8E2D4; --muted: #8A8478;
+    --amber: #E0A44E; --green: #6FBF8F; --dim: #6A6459;
+    --mono: ui-monospace, "SF Mono", Menlo, monospace;
+    --sans: -apple-system, "Helvetica Neue", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:44px 24px 90px; background:var(--ink); color:var(--paper);
+         font-family:var(--sans); -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:1180px; margin:0 auto; }
+  header { max-width:700px; margin-bottom:44px; }
+  h1 { font-size:32px; line-height:1.1; letter-spacing:-0.02em; margin:0 0 14px; font-weight:600; }
+  .lede { color:var(--muted); font-size:14.5px; line-height:1.65; margin:0 0 10px; }
+  .lede b { color:var(--paper); font-weight:500; }
+
+  .rule { border:1px solid #302C26; border-radius:12px; padding:14px 16px; margin-top:24px; background:#1A1815; }
+  .rule h3 { margin:0 0 7px; font-size:10.5px; letter-spacing:.14em; color:var(--muted); font-weight:600; }
+  .rule p { margin:0 0 6px; font-size:13.5px; line-height:1.6; color:var(--muted); }
+  .rule p:last-child { margin-bottom:0; }
+
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(340px,1fr)); gap:20px; }
+  .card { border:1px solid #302C26; border-radius:14px; overflow:hidden;
+          background:linear-gradient(180deg,#1E1B18,#171512); display:flex; flex-direction:column; }
+  .stage { height:196px; display:grid; place-items:center;
+           background:radial-gradient(120% 90% at 50% 0%, #302C26 0%, #1B1916 70%);
+           border-bottom:1px solid #302C26; }
+  .body { padding:15px 17px 18px; }
+  .n { font-family:var(--mono); font-size:9.5px; letter-spacing:.16em; color:var(--amber); margin-bottom:6px; }
+  h2 { font-size:16.5px; margin:0 0 3px; letter-spacing:-0.01em; font-weight:600; }
+  .from { font-family:var(--mono); font-size:10px; color:var(--dim); margin-bottom:9px; letter-spacing:.04em; }
+  .premise { font-size:13px; line-height:1.58; color:#B8B2A6; margin:0 0 12px; }
+  .meta { display:grid; gap:5px; font-size:11.5px; }
+  .row { display:grid; grid-template-columns:60px 1fr; gap:9px; align-items:start; }
+  .k { font-family:var(--mono); font-size:9px; letter-spacing:.1em; color:var(--muted); padding-top:2px; }
+  .v { color:#A9A296; line-height:1.5; }
+  .v.cost { color:#9A8E7E; }
+  .g { color:var(--green); font-family:var(--mono); }
+  text { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+</style>
+
+<div class="wrap">
+<header>
+  <h1>Classic controls, judged on use</h1>
+  <p class="lede">
+    The last set chased interesting mechanisms. This one starts from controls people
+    already know how to work, and asks a different question of each: <b>can you use it
+    one-handed, without looking, while the picture is happening?</b>
+  </p>
+
+  <div class="rule">
+    <h3>WHAT "SIMPLE" MEANS HERE</h3>
+    <p><b style="color:var(--paper)">Reachable.</b> A phone is held low and gripped one-handed. Controls belong in the bottom
+    third, near the thumb — not on a top plate, which is the far corner of the screen.</p>
+    <p><b style="color:var(--paper)">Nothing to learn.</b> If it needs explaining once, it is already too clever. Every
+    control below is one somebody has used before.</p>
+    <p><b style="color:var(--paper)">Auto is the resting state.</b> The camera works untouched. A control exists to take
+    one thing off automatic, not to demand a decision.</p>
+    <p><b style="color:var(--paper)">Nothing hidden.</b> No mode you can be in without seeing it. Wrong-mode surprise is
+    the most expensive error a camera can make.</p>
+  </div>
+</header>
+
+<div class="grid">
+
+  <!-- 01 -->
+  <div class="card">
+    <div class="stage">
+      <svg width="290" height="168" viewBox="0 0 290 168">
+        <rect x="30" y="34" width="230" height="96" rx="8" fill="#1A1815" stroke="#302C26"/>
+        <line x1="145" y1="46" x2="145" y2="118" stroke="#4A453D" stroke-width="1"/>
+        <g font-size="9" fill="#6A6459" text-anchor="middle">
+          <text x="75" y="130">−2</text><text x="110" y="130">−1</text>
+          <text x="145" y="130">0</text><text x="180" y="130">+1</text><text x="215" y="130">+2</text>
+        </g>
+        <g stroke="#4A453D"><line x1="75" y1="104" x2="75" y2="112"/><line x1="110" y1="104" x2="110" y2="112"/>
+          <line x1="180" y1="104" x2="180" y2="112"/><line x1="215" y1="104" x2="215" y2="112"/></g>
+        <path d="M145 118 L128 52" stroke="#E8E2D4" stroke-width="2.5" stroke-linecap="round"/>
+        <circle cx="145" cy="118" r="4" fill="#8A8478"/>
+        <path d="M138 46 h14 v10 h-14 z" fill="none" stroke="#6FBF8F" stroke-width="2"/>
+        <text x="145" y="26" fill="#6FBF8F" font-size="9" letter-spacing="1.4" text-anchor="middle">CENTRE THE NEEDLE</text>
+        <circle cx="252" cy="150" r="13" fill="#2E2B26" stroke="#6A6459" stroke-width="1.5"/>
+        <line x1="252" y1="150" x2="252" y2="141" stroke="#E0A44E" stroke-width="2"/>
+      </svg>
+    </div>
+    <div class="body">
+      <div class="n">01</div>
+      <h2>Match Needle</h2>
+      <div class="from">Nikon F · Pentax Spotmatic · Canon FTb</div>
+      <p class="premise">One wheel, one needle. Turn until the needle sits in the notch and the
+      exposure is right. You never read a number or know what changed — the camera picks the pair.
+      This is how a generation learned to shoot.</p>
+      <div class="meta">
+        <div class="row"><div class="k">CONTROLS</div><div class="v"><span class="g">1</span> wheel</div></div>
+        <div class="row"><div class="k">TO LEARN</div><div class="v"><span class="g">nothing</span> — the target is drawn on screen</div></div>
+        <div class="row"><div class="k">COST</div><div class="v cost">Can't ask for a specific shutter speed.</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 02 -->
+  <div class="card">
+    <div class="stage">
+      <svg width="290" height="168" viewBox="0 0 290 168">
+        <g>
+          <circle cx="72" cy="80" r="34" fill="#2A2721" stroke="#6A6459" stroke-width="2"/>
+          <text x="72" y="76" fill="#E0A44E" font-size="15" font-weight="700" text-anchor="middle">A</text>
+          <text x="72" y="90" fill="#6A6459" font-size="8" text-anchor="middle">1/125</text>
+          <text x="72" y="128" fill="#8A8478" font-size="8.5" letter-spacing="1.2" text-anchor="middle">SHUTTER</text>
+
+          <circle cx="145" cy="80" r="34" fill="#2A2721" stroke="#6A6459" stroke-width="2"/>
+          <text x="145" y="76" fill="#E0A44E" font-size="15" font-weight="700" text-anchor="middle">A</text>
+          <text x="145" y="90" fill="#6A6459" font-size="8" text-anchor="middle">400</text>
+          <text x="145" y="128" fill="#8A8478" font-size="8.5" letter-spacing="1.2" text-anchor="middle">ISO</text>
+
+          <circle cx="218" cy="80" r="34" fill="#332F29" stroke="#E0A44E" stroke-width="2"/>
+          <text x="218" y="80" fill="#E8E2D4" font-size="13" font-weight="700" text-anchor="middle">f/2.8</text>
+          <text x="218" y="128" fill="#E0A44E" font-size="8.5" letter-spacing="1.2" text-anchor="middle">APERTURE</text>
+        </g>
+        <text x="145" y="26" fill="#6A6459" font-size="9" text-anchor="middle">two on A · one taken by hand</text>
+      </svg>
+    </div>
+    <div class="body">
+      <div class="n">02</div>
+      <h2>Everything on A</h2>
+      <div class="from">Fujifilm X100 · Nikon FA</div>
+      <p class="premise">Every dial has an <b>A</b> at the end of its scale. All on A is full auto.
+      Turn one off A and you have taken just that one — the camera keeps the rest. There are no
+      modes, because the dials <i>are</i> the mode, and you can see it.</p>
+      <div class="meta">
+        <div class="row"><div class="k">CONTROLS</div><div class="v">3, all resting on auto</div></div>
+        <div class="row"><div class="k">TO LEARN</div><div class="v"><span class="g">nothing</span> — no P/A/S/M to decode</div></div>
+        <div class="row"><div class="k">COST</div><div class="v cost">Still three dials on the glass.</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 03 -->
+  <div class="card">
+    <div class="stage">
+      <svg width="290" height="168" viewBox="0 0 290 168">
+        <rect x="24" y="26" width="242" height="112" rx="10" fill="#0F0E0C" stroke="#302C26"/>
+        <text x="145" y="66" fill="#4A453D" font-size="10" text-anchor="middle">the picture</text>
+        <path d="M34 122 h222" stroke="#302C26"/>
+        <circle cx="62" cy="122" r="22" fill="#2E2B26" stroke="#6A6459" stroke-width="2"/>
+        <line x1="62" y1="122" x2="62" y2="106" stroke="#E0A44E" stroke-width="2.5" stroke-linecap="round"/>
+        <text x="62" y="156" fill="#8A8478" font-size="8" text-anchor="middle">1/125</text>
+        <circle cx="228" cy="122" r="22" fill="#2E2B26" stroke="#6A6459" stroke-width="2"/>
+        <line x1="228" y1="122" x2="240" y2="111" stroke="#E0A44E" stroke-width="2.5" stroke-linecap="round"/>
+        <text x="228" y="156" fill="#8A8478" font-size="8" text-anchor="middle">f/2.8</text>
+        <ellipse cx="145" cy="140" rx="52" ry="20" fill="none" stroke="#6FBF8F" stroke-opacity=".35" stroke-dasharray="3 4"/>
+        <text x="145" y="146" fill="#6FBF8F" font-size="8.5" text-anchor="middle">thumb arc</text>
+      </svg>
+    </div>
+    <div class="body">
+      <div class="n">03</div>
+      <h2>Two Wheels, Down Low</h2>
+      <div class="from">Nikon F4 · every modern SLR</div>
+      <p class="premise">Two wheels in the bottom corners, where the thumbs already sit when you
+      hold a phone to shoot. Nothing sits above the frame at all. The single best ergonomic idea
+      in fifty years of camera design, and the one this app currently ignores.</p>
+      <div class="meta">
+        <div class="row"><div class="k">CONTROLS</div><div class="v"><span class="g">2</span>, both in the thumb arc</div></div>
+        <div class="row"><div class="k">TO LEARN</div><div class="v">which wheel is which — once</div></div>
+        <div class="row"><div class="k">COST</div><div class="v cost">Only two things without a second layer.</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 04 -->
+  <div class="card">
+    <div class="stage">
+      <svg width="290" height="168" viewBox="0 0 290 168">
+        <g font-size="9" fill="#8A8478" text-anchor="middle">
+          <text x="52" y="126">SUN</text><text x="112" y="126">HAZE</text>
+          <text x="176" y="126">CLOUD</text><text x="240" y="126">SHADE</text>
+        </g>
+        <circle cx="52" cy="82" r="22" fill="#3A3018" stroke="#E0A44E" stroke-width="2"/>
+        <circle cx="52" cy="82" r="9" fill="#E0A44E"/>
+        <g stroke="#E0A44E" stroke-width="1.5"><line x1="52" y1="63" x2="52" y2="68"/><line x1="52" y1="96" x2="52" y2="101"/>
+          <line x1="33" y1="82" x2="38" y2="82"/><line x1="66" y1="82" x2="71" y2="82"/></g>
+        <circle cx="112" cy="82" r="22" fill="#242119" stroke="#4A453D"/>
+        <circle cx="112" cy="82" r="9" fill="#5E5850"/><path d="M100 88 q12 -6 24 0" stroke="#4A453D" fill="none"/>
+        <circle cx="176" cy="82" r="22" fill="#242119" stroke="#4A453D"/>
+        <path d="M164 86 q6 -12 16 -6 q10 -2 8 6 z" fill="#4A453D"/>
+        <circle cx="240" cy="82" r="22" fill="#242119" stroke="#4A453D"/>
+        <path d="M230 72 h20 v20 h-20 z" fill="#332F29"/>
+        <text x="145" y="34" fill="#6A6459" font-size="9" letter-spacing="1.4" text-anchor="middle">WHAT IS THE LIGHT DOING?</text>
+        <text x="145" y="152" fill="#4A453D" font-size="8.5" text-anchor="middle">f/16 · 1/125 · 100 — the rest follows</text>
+      </svg>
+    </div>
+    <div class="body">
+      <div class="n">04</div>
+      <h2>Weather</h2>
+      <div class="from">Sunny 16 · every box camera ever made</div>
+      <p class="premise">No numbers at all. Say what the light is doing and the camera exposes for
+      it. Box cameras carried these four symbols for eighty years because they are the only
+      exposure question a person can answer by looking up.</p>
+      <div class="meta">
+        <div class="row"><div class="k">CONTROLS</div><div class="v"><span class="g">1</span> tap, 4 choices</div></div>
+        <div class="row"><div class="k">TO LEARN</div><div class="v"><span class="g">nothing</span> — you already know the weather</div></div>
+        <div class="row"><div class="k">COST</div><div class="v cost">Too coarse for tricky light.</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 05 -->
+  <div class="card">
+    <div class="stage">
+      <svg width="290" height="168" viewBox="0 0 290 168">
+        <rect x="24" y="24" width="242" height="118" rx="10" fill="#0F0E0C" stroke="#302C26"/>
+        <rect x="236" y="34" width="22" height="98" rx="11" fill="#1A1815" stroke="#302C26"/>
+        <g stroke="#4A453D" stroke-width="1">
+          <line x1="242" y1="52" x2="252" y2="52"/><line x1="242" y1="70" x2="252" y2="70"/>
+          <line x1="240" y1="88" x2="254" y2="88"/><line x1="242" y1="106" x2="252" y2="106"/>
+          <line x1="242" y1="124" x2="252" y2="124"/>
+        </g>
+        <circle cx="247" cy="70" r="9" fill="#E0A44E"/>
+        <text x="215" y="74" fill="#E0A44E" font-size="11" text-anchor="end">+0.7</text>
+        <text x="150" y="88" fill="#4A453D" font-size="10" text-anchor="middle">the picture, uncovered</text>
+        <text x="247" y="26" fill="#6A6459" font-size="8" text-anchor="middle">+</text>
+        <text x="247" y="152" fill="#6A6459" font-size="8" text-anchor="middle">−</text>
+      </svg>
+    </div>
+    <div class="body">
+      <div class="n">05</div>
+      <h2>The Edge Meter</h2>
+      <div class="from">In-finder meter scale · Leica M6</div>
+      <p class="premise">One strip down the edge of the frame: brighter at the top, darker at the
+      bottom. Slide your thumb along it. It is the only control, it never covers the picture, and
+      it answers the one thing people actually want to change.</p>
+      <div class="meta">
+        <div class="row"><div class="k">CONTROLS</div><div class="v"><span class="g">1</span> strip, full-height target</div></div>
+        <div class="row"><div class="k">TO LEARN</div><div class="v"><span class="g">nothing</span> — up is brighter</div></div>
+        <div class="row"><div class="k">COST</div><div class="v cost">Exposure only; no character control.</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 06 -->
+  <div class="card">
+    <div class="stage">
+      <svg width="290" height="168" viewBox="0 0 290 168">
+        <line x1="34" y1="96" x2="256" y2="96" stroke="#4A453D" stroke-width="2"/>
+        <g font-size="8.5" fill="#6A6459" text-anchor="middle">
+          <text x="52" y="118">0.5</text><text x="106" y="118">1m</text>
+          <text x="160" y="118">3m</text><text x="214" y="118">10m</text><text x="250" y="118">∞</text>
+        </g>
+        <rect x="106" y="86" width="108" height="20" rx="4" fill="#E0A44E" fill-opacity=".14" stroke="#E0A44E" stroke-opacity=".5"/>
+        <rect x="140" y="74" width="40" height="44" rx="8" fill="#3A3630" stroke="#E0A44E" stroke-width="2"/>
+        <line x1="152" y1="86" x2="152" y2="106" stroke="#8A8478" stroke-width="1.5"/>
+        <line x1="160" y1="86" x2="160" y2="106" stroke="#8A8478" stroke-width="1.5"/>
+        <line x1="168" y1="86" x2="168" y2="106" stroke="#8A8478" stroke-width="1.5"/>
+        <text x="160" y="58" fill="#E8E2D4" font-size="10" text-anchor="middle">SHARP 1 – 3 m</text>
+        <text x="145" y="146" fill="#6A6459" font-size="8.5" letter-spacing="1.2" text-anchor="middle">SLIDE THE TAB · IT STAYS PUT</text>
+      </svg>
+    </div>
+    <div class="body">
+      <div class="n">06</div>
+      <h2>The Focus Tab</h2>
+      <div class="from">Leica focus tab · zone focusing</div>
+      <p class="premise">A ridged tab you push along a distance scale with one thumb, showing the
+      band that will be sharp. Set it to 1–3m and shoot all afternoon without focusing again —
+      which is how street photography was done before autofocus, and it was faster.</p>
+      <div class="meta">
+        <div class="row"><div class="k">CONTROLS</div><div class="v"><span class="g">1</span> tab, thumb-sized</div></div>
+        <div class="row"><div class="k">TO LEARN</div><div class="v">the band means sharp — one glance</div></div>
+        <div class="row"><div class="k">COST</div><div class="v cost">Focus only. Needs a partner for light.</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 07 -->
+  <div class="card">
+    <div class="stage">
+      <svg width="290" height="168" viewBox="0 0 290 168">
+        <rect x="24" y="24" width="242" height="90" rx="10" fill="#0F0E0C" stroke="#302C26"/>
+        <text x="145" y="72" fill="#4A453D" font-size="10" text-anchor="middle">nothing on the frame</text>
+        <path d="M42 130 h180 a14 14 0 0 1 0 28 h-180 z" fill="#2A2721" stroke="#6A6459" stroke-width="1.5"/>
+        <path d="M222 130 l30 -12 a10 10 0 0 1 6 18 l-32 22 z" fill="#3A3630" stroke="#E0A44E" stroke-width="1.5"/>
+        <g stroke="#4A453D"><line x1="70" y1="138" x2="70" y2="150"/><line x1="100" y1="138" x2="100" y2="150"/>
+          <line x1="130" y1="138" x2="130" y2="150"/><line x1="160" y1="138" x2="160" y2="150"/></g>
+        <text x="115" y="122" fill="#6A6459" font-size="8.5" letter-spacing="1.2" text-anchor="middle">PULL TO OPEN</text>
+      </svg>
+    </div>
+    <div class="body">
+      <div class="n">07</div>
+      <h2>The Advance Lever</h2>
+      <div class="from">Film advance · Leica M · Nikon FM</div>
+      <p class="premise">A lever stowed flush along the bottom edge. Nothing is on the frame until
+      you hook it with a thumb and swing it out, and the dials come with it. The most satisfying
+      gesture on any camera, doing the job of a menu.</p>
+      <div class="meta">
+        <div class="row"><div class="k">CONTROLS</div><div class="v"><span class="g">0</span> until asked</div></div>
+        <div class="row"><div class="k">TO LEARN</div><div class="v">one pull — the lever shows its own affordance</div></div>
+        <div class="row"><div class="k">COST</div><div class="v cost">A gesture between you and every setting.</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 08 -->
+  <div class="card">
+    <div class="stage">
+      <svg width="290" height="168" viewBox="0 0 290 168">
+        <circle cx="145" cy="84" r="52" fill="#2A2721" stroke="#6A6459" stroke-width="2"/>
+        <circle cx="145" cy="84" r="40" fill="none" stroke="#000" stroke-opacity=".35"/>
+        <g font-size="9.5" fill="#6A6459" text-anchor="middle">
+          <text x="145" y="22">1000</text><text x="212" y="60">250</text>
+          <text x="212" y="112">60</text><text x="145" y="150">15</text>
+          <text x="78" y="112">B</text><text x="78" y="60">A</text>
+        </g>
+        <line x1="145" y1="84" x2="145" y2="40" stroke="#E0A44E" stroke-width="3.5" stroke-linecap="round"/>
+        <circle cx="145" cy="84" r="8" fill="#4A453D"/>
+        <text x="145" y="92" fill="#E8E2D4" font-size="0" text-anchor="middle"></text>
+        <text x="145" y="166" fill="#8A8478" font-size="8.5" letter-spacing="1.4" text-anchor="middle">ONE DIAL · A AT THE END</text>
+      </svg>
+    </div>
+    <div class="body">
+      <div class="n">08</div>
+      <h2>The Only Dial</h2>
+      <div class="from">Nikon FM2 · Leica M — the whole top plate</div>
+      <p class="premise">An FM2's top plate was a shutter dial and nothing else worth turning. One
+      big dial, numbers engraved around it, <b>A</b> at the end of the travel. Big enough to hit
+      without looking, and the honest answer to "which of these six do I need?"</p>
+      <div class="meta">
+        <div class="row"><div class="k">CONTROLS</div><div class="v"><span class="g">1</span>, large</div></div>
+        <div class="row"><div class="k">TO LEARN</div><div class="v"><span class="g">nothing</span></div></div>
+        <div class="row"><div class="k">COST</div><div class="v cost">Aperture and ISO go fully automatic.</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 09 -->
+  <div class="card">
+    <div class="stage">
+      <svg width="290" height="168" viewBox="0 0 290 168">
+        <rect x="24" y="26" width="242" height="94" rx="10" fill="#0F0E0C" stroke="#302C26"/>
+        <circle cx="145" cy="73" r="26" fill="none" stroke="#4A453D" stroke-dasharray="3 3"/>
+        <rect x="125" y="63" width="40" height="20" fill="#1A1815" stroke="#6A6459"/>
+        <line x1="125" y1="73" x2="165" y2="73" stroke="#E0A44E" stroke-width="1.5"/>
+        <path d="M128 68 h16 M146 78 h16" stroke="#8A8478" stroke-width="2"/>
+        <text x="145" y="112" fill="#6FBF8F" font-size="9" text-anchor="middle">aligned — in focus</text>
+        <rect x="60" y="136" width="170" height="20" rx="10" fill="#2A2721" stroke="#6A6459"/>
+        <circle cx="150" cy="146" r="12" fill="#3A3630" stroke="#E0A44E" stroke-width="1.5"/>
+        <g stroke="#8A8478"><line x1="146" y1="141" x2="146" y2="151"/><line x1="154" y1="141" x2="154" y2="151"/></g>
+      </svg>
+    </div>
+    <div class="body">
+      <div class="n">09</div>
+      <h2>Split Prism</h2>
+      <div class="from">Rangefinder patch · split-image screen</div>
+      <p class="premise">Manual focus with no scale and no number: the centre of the frame is
+      split, and you slide until the two halves line up. You watch the subject, not a readout, and
+      you know it is sharp because it <i>looks</i> joined.</p>
+      <div class="meta">
+        <div class="row"><div class="k">CONTROLS</div><div class="v"><span class="g">1</span> slider</div></div>
+        <div class="row"><div class="k">TO LEARN</div><div class="v"><span class="g">nothing</span> — aligned is obviously aligned</div></div>
+        <div class="row"><div class="k">COST</div><div class="v cost">Needs an edge in the centre to work on.</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 10 -->
+  <div class="card">
+    <div class="stage">
+      <svg width="290" height="168" viewBox="0 0 290 168">
+        <rect x="24" y="24" width="242" height="80" rx="10" fill="#0F0E0C" stroke="#302C26"/>
+        <text x="145" y="68" fill="#4A453D" font-size="10" text-anchor="middle">picture</text>
+        <rect x="38" y="118" width="214" height="34" rx="17" fill="#1A1815" stroke="#302C26"/>
+        <circle cx="72" cy="135" r="13" fill="#3A3018" stroke="#E0A44E" stroke-width="1.5"/>
+        <text x="72" y="139" fill="#E0A44E" font-size="9" text-anchor="middle">A</text>
+        <text x="122" y="139" fill="#8A8478" font-size="10" text-anchor="middle">1/125</text>
+        <text x="168" y="139" fill="#8A8478" font-size="10" text-anchor="middle">f/2.8</text>
+        <text x="212" y="139" fill="#8A8478" font-size="10" text-anchor="middle">400</text>
+        <text x="145" y="166" fill="#6A6459" font-size="8.5" text-anchor="middle">tap A to take one by hand</text>
+      </svg>
+    </div>
+    <div class="body">
+      <div class="n">10</div>
+      <h2>The Strip</h2>
+      <div class="from">Rangefinder finder readout</div>
+      <p class="premise">A single slim strip under the frame showing what the camera chose. It is a
+      readout until you tap a value, and then that one value becomes a wheel under your thumb. The
+      <b>A</b> at the left puts everything back.</p>
+      <div class="meta">
+        <div class="row"><div class="k">CONTROLS</div><div class="v"><span class="g">0</span> → 1 on tap</div></div>
+        <div class="row"><div class="k">TO LEARN</div><div class="v">tap a number to change it</div></div>
+        <div class="row"><div class="k">COST</div><div class="v cost">Values are small until touched.</div></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</div>
