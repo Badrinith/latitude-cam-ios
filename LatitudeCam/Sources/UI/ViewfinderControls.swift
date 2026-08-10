@@ -762,11 +762,19 @@ struct PlateDial: View {
 
             if let text = compact ? (inlineReading ?? label) : inlineReading {
                 Text(text)
-                    .font(.mono(max(8, diameter * 0.13), .bold))
+                    // One step down. The brushed pad is 0.62 of the dial
+                    // across, and at the old 0.13 a five-character reading
+                    // ("1/1000") reached the pad's edge and looked like it was
+                    // escaping the knob.
+                    .font(.mono(max(7, diameter * 0.115), .bold))
                     .foregroundStyle(Color(hex: 0xE8E2D4))
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
-                    .frame(maxWidth: diameter * 0.55)
+                    // Inside the chord the pad offers at this text's height,
+                    // not the pad's full width — the widest part of a circle
+                    // is a line through its centre, and the type has to fit
+                    // where it actually sits rather than where it is widest.
+                    .frame(maxWidth: diameter * 0.5)
                     .shadow(color: .black.opacity(0.7), radius: 1, y: 1)
                     .rotationEffect(rotation)
             }
