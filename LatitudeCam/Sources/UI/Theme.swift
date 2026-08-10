@@ -244,7 +244,7 @@ enum Pref {
     static let galleryLayoutOptions = ["Organizer", "Contact Roll", "Archive", "Storyboard", "Darkroom"]
     /// How the viewfinder presents its settings. Film Label keeps the active
     /// stock readable below the shutter and opens its selector only on intent.
-    static let viewfinderControlOptions = ["Film Label", "Bellows Drawer", "Crown", "Top Plate"]
+    static let viewfinderControlOptions = ["Film Label", "Bellows Drawer", "Crown", "Top Plate", "Strip"]
 
     static func string(_ key: String, default fallback: String) -> String {
         UserDefaults.standard.string(forKey: key) ?? fallback
@@ -552,6 +552,113 @@ final class AppState: ObservableObject {
     var exposureIndex: Int {
         get { stopIndex(Self.evDetents, at: exposureComp) }
         set { exposureComp = position(forIndex: newValue, of: Self.evDetents) }
+    }
+
+    // MARK: - One ladder per control
+
+    /// What a control is, flattened: its name, the stops it offers, where it
+    /// sits, and whether it is currently on automatic.
+    ///
+    /// The Strip needs the same six answers for every token, and asking each
+    /// control in its own dialect is how the plate ended up with a switch
+    /// statement per question. One shape, asked once.
+    struct DialLadder: Equatable {
+        var name: String
+        /// The stops, without any "A" at the head — the ladder the index
+        /// actually addresses.
+        var labels: [String]
+        var index: Int
+        /// True when the camera is deciding this one for itself.
+        var isAuto: Bool
+        /// Whether handing it back to the camera is even meaningful. Aperture
+        /// and white balance have no automatic on this camera, so offering it
+        /// would be a control that does nothing.
+        var hasAuto: Bool
+    }
+
+    func ladder(for key: ActiveDial.Key) -> DialLadder {
+        switch key {
+        case .shutter:
+            return DialLadder(
+                name: "SHUTTER", labels: Self.shutterStops.map { "1/\($0)" },
+                index: stopIndex(Self.shutterStops.count, at: shutter),
+                isAuto: autoExposure, hasAuto: true)
+        case .iso:
+            return DialLadder(
+                name: "ISO", labels: Self.isoStops.map(String.init),
+                index: stopIndex(Self.isoStops.count, at: iso),
+                isAuto: autoExposure, hasAuto: true)
+        case .aperture:
+            return DialLadder(
+                name: "APERTURE", labels: Self.apertureLabels,
+                index: stopIndex(Self.apertureStops.count, at: aperture),
+                isAuto: false, hasAuto: false)
+        case .white:
+            return DialLadder(
+                name: "WHITE BALANCE", labels: Self.whiteBalanceLabels,
+                index: stopIndex(Self.whiteBalanceStops.count, at: whiteBalance),
+                isAuto: false, hasAuto: false)
+        case .exposure:
+            return DialLadder(
+                name: "EXPOSURE", labels: Self.exposureLabels,
+                index: stopIndex(Self.evDetents, at: exposureComp),
+                isAuto: false, hasAuto: false)
+        case .focus:
+            return DialLadder(
+                name: "FOCUS", labels: Self.focusStops.map(\.label),
+                index: max(0, focusIndex - 1),
+                isAuto: autoFocus, hasAuto: true)
+        }
+    }
+
+    /// Puts a control on a stop. Shutter, ISO and focus come off automatic on
+    /// the way through, for the same reason touching their dial does it.
+    func select(_ key: ActiveDial.Key, stop: Int) {
+        switch key {
+        case .shutter:
+            if autoExposure { autoExposure = false }
+            shutter = position(forIndex: stop, of: Self.shutterStops.count)
+        case .iso:
+            if autoExposure { autoExposure = false }
+            iso = position(forIndex: stop, of: Self.isoStops.count)
+        case .aperture:
+            aperture = position(forIndex: stop, of: Self.apertureStops.count)
+        case .white:
+            whiteBalance = position(forIndex: stop, of: Self.whiteBalanceStops.count)
+        case .exposure:
+            exposureComp = position(forIndex: stop, of: Self.evDetents)
+        case .focus:
+            if autoFocus { autoFocus = false }
+            focusDial = position(forIndex: stop, of: Self.focusStops.count)
+        }
+    }
+
+    /// Hands one control back to the camera.
+    func handBackToAuto(_ key: ActiveDial.Key) {
+        switch key {
+        case .shutter, .iso: autoExposure = true
+        case .focus:         autoFocus = true
+        case .aperture:      aperture = Self.defaultControls.aperture
+        case .white:         whiteBalance = Self.defaultControls.whiteBalance
+        case .exposure:      exposureComp = Self.defaultControls.exposureComp
+        }
+    }
+
+    /// Everything back to the camera at once — what the strip's leading A does.
+    func handEverythingBack() {
+        autoExposure = true
+        autoFocus = true
+        aperture = Self.defaultControls.aperture
+        whiteBalance = Self.defaultControls.whiteBalance
+        exposureComp = Self.defaultControls.exposureComp
+    }
+
+    /// True when the camera is deciding everything itself.
+    var isFullyAutomatic: Bool {
+        autoExposure && autoFocus
+            && abs(aperture - Self.defaultControls.aperture) < 0.001
+            && abs(whiteBalance - Self.defaultControls.whiteBalance) < 0.001
+            && abs(exposureComp - Self.defaultControls.exposureComp) < 0.001
     }
 
     // MARK: - The hardware Camera Control

@@ -1169,6 +1169,11 @@ struct FilmCardStack: View {
                 .font(.mono(8, .semibold))
                 .kerning(1.4)
                 .foregroundStyle(Color.white.opacity(0.34))
+                // Turned with the body, like every other engraving in the app.
+                // This view took a rotation and never used it, so the stock
+                // names stayed upright while the phone was on its side.
+                .rotationEffect(rotation)
+                .fixedSize()
         }
         .contentShape(Rectangle())
         .onTapGesture { Haptics.tap(); onOpen() }
@@ -1239,7 +1244,10 @@ struct FilmCardStack: View {
                 .foregroundStyle(Color(hex: 0xFFF6E8).opacity(0.94))
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
-                .rotationEffect(invertNames ? .degrees(180) : .zero)
+                .fixedSize()
+                // Turned with the body. A stock name is an engraving like any
+                // other and has to be readable whichever way the phone is held.
+                .rotationEffect(rotation + (invertNames ? .degrees(180) : .zero))
         }
         .padding(5)
         .frame(width: 54, height: 74)
@@ -2347,9 +2355,28 @@ struct LeafShutterButton: View {
 
     var body: some View {
         ZStack {
-            // Outer ring — the shutter housing.
+            // The well the button sits down into. Drawn first and never moved,
+            // so the button has something to travel *against* — without a fixed
+            // reference the press is just a shrink.
             Circle()
-                .strokeBorder(Color.white, lineWidth: 3)
+                .fill(
+                    RadialGradient(
+                        colors: [Color.black.opacity(0.55), Color.black.opacity(0.18)],
+                        center: .center, startRadius: diameter * 0.34, endRadius: diameter * 0.6
+                    )
+                )
+                .frame(width: diameter * 1.16, height: diameter * 1.16)
+                .blur(radius: 3)
+
+            // Outer ring — the shutter housing. Machined, lit from above.
+            Circle()
+                .strokeBorder(
+                    LinearGradient(
+                        colors: [Color.white, Color(hex: 0xC8C2B6), Color(hex: 0x8E8880)],
+                        startPoint: .top, endPoint: .bottom
+                    ),
+                    lineWidth: 3
+                )
                 .frame(width: diameter, height: diameter)
 
             // The blades themselves, seated just inside the housing.
@@ -2365,6 +2392,7 @@ struct LeafShutterButton: View {
                         .overlay {
                             LeafBlade().stroke(Color.black.opacity(0.16), lineWidth: 0.5)
                         }
+                        .brightness(pressed ? -0.06 : 0)
                         .rotationEffect(.degrees(
                             LeafShutterGeometry.bladeAngle(index: index, closure: closure)
                         ))
@@ -2386,7 +2414,14 @@ struct LeafShutterButton: View {
                 }
         }
         .frame(width: diameter, height: diameter)
-        .scaleEffect(pressed ? 0.94 : 1)
+        // A real button travels *into* its housing: it moves down, gets a
+        // little smaller, and its shadow collapses because it is now close to
+        // the surface casting it. Scaling alone reads as a picture shrinking.
+        .scaleEffect(pressed ? 0.955 : 1)
+        .offset(y: pressed ? diameter * 0.022 : 0)
+        .shadow(color: .black.opacity(pressed ? 0.32 : 0.5),
+                radius: pressed ? 2 : 7,
+                y: pressed ? 1 : 4)
         .contentShape(Circle())
         .accessibilityLabel("Shutter")
         .accessibilityAddTraits(.isButton)

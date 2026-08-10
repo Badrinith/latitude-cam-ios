@@ -38,9 +38,14 @@ final class DeviceOrientation: ObservableObject {
     /// Below this the reading is ambiguous and the last good answer stands, so
     /// the controls do not flick about while the phone is being picked up.
     private static let commitment = 0.62
-    /// Above this the phone is flat on its back or face and has no meaningful
-    /// left or right at all.
-    private static let flat = 0.80
+    /// How much of gravity has to lie in the screen's plane before there is any
+    /// left or right to read. Below this the phone is flat on its back or face
+    /// and the last good answer stands.
+    ///
+    /// Deliberately small: a phone aimed down at a table still has a clear
+    /// which-way-up, and the old test threw that away along with the genuinely
+    /// flat case.
+    private static let level = 0.18
 
     init() {
         // A forced orientation for screenshots. The app is portrait-locked and
@@ -105,19 +110,38 @@ final class DeviceOrientation: ObservableObject {
     /// backwards and impossible to see in code — can be tested rather than
     /// discovered by turning a phone over and squinting at it.
     static func reading(x: Double, y: Double, z: Double) -> (angle: Angle, edge: Edge)? {
-        // Face up or face down: no left or right to speak of.
-        guard abs(z) < flat else { return nil }
+        // Only the part of gravity lying in the screen's plane says anything
+        // about which way up the phone is. Judge it on its own terms rather
+        // than against the whole vector.
+        //
+        // This used to test |x| and |y| against an absolute threshold, which
+        // quietly meant "and the phone must also be roughly upright". Point the
+        // camera down at a table — the commonest thing anyone does with a
+        // camera app — and most of gravity goes into z, both horizontal terms
+        // fall under the threshold, and the reading freezes at whatever it last
+        // saw. The controls then stayed rotated 90° while the phone was plainly
+        // upright, which is what it looked like on the glass.
+        let horizontal = (x * x + y * y).squareRoot()
 
-        if abs(x) > abs(y) {
-            guard abs(x) > commitment else { return nil }
+        // Genuinely flat, screen up or down: there is no left or right, and
+        // holding the last answer is the right thing to do.
+        guard horizontal > level else { return nil }
+
+        // Direction within the screen's plane, independent of how far the phone
+        // is tilted toward or away from you.
+        let nx = x / horizontal
+        let ny = y / horizontal
+
+        if abs(nx) > abs(ny) {
+            guard abs(nx) > commitment else { return nil }
             // Turned anticlockwise the phone's left edge swings down, so the
             // controls go there and the block turns +90 to face the user.
-            return x < 0 ? (.degrees(90), .leading) : (.degrees(-90), .trailing)
+            return nx < 0 ? (.degrees(90), .leading) : (.degrees(-90), .trailing)
         } else {
-            guard abs(y) > commitment else { return nil }
+            guard abs(ny) > commitment else { return nil }
             // Upside down keeps the last good answer rather than turning the
             // whole camera over for a grip nobody shoots with.
-            return y < 0 ? (.zero, .bottom) : nil
+            return ny < 0 ? (.zero, .bottom) : nil
         }
     }
 

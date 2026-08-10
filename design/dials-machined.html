@@ -1,0 +1,249 @@
+<meta charset="utf-8">
+<title>Latitude — machined rings, both orientations</title>
+<style>
+  :root{--ink:#0E0D0C;--paper:#E8E2D4;--muted:#8A8478;--amber:#E0A44E;
+        --copper:#B4784A;--dim:#6A6459;
+        --mono:ui-monospace,"SF Mono",Menlo,monospace;
+        --sans:-apple-system,"Helvetica Neue",sans-serif}
+  *{box-sizing:border-box}
+  body{margin:0;padding:44px 24px 90px;background:var(--ink);color:var(--paper);
+       font-family:var(--sans);-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1180px;margin:0 auto}
+  h1{font-size:31px;line-height:1.1;letter-spacing:-.02em;margin:0 0 14px;font-weight:600}
+  .lede{color:var(--muted);font-size:14.5px;line-height:1.65;margin:0 0 10px;max-width:720px}
+  .lede b{color:var(--paper);font-weight:500}
+  .rule{border:1px solid #2A2622;border-radius:12px;padding:14px 16px;margin:22px 0 38px;
+        background:#161412;max-width:720px}
+  .rule h3{margin:0 0 7px;font-size:10.5px;letter-spacing:.14em;color:var(--muted);font-weight:600}
+  .rule p{margin:0 0 6px;font-size:13.5px;line-height:1.6;color:var(--muted)}
+  .rule p:last-child{margin:0}
+  .row{display:flex;flex-wrap:wrap;gap:36px;align-items:flex-start;margin-bottom:40px}
+  .cap{font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--amber);margin-bottom:5px}
+  .sub{font-size:12.5px;color:var(--muted);margin-bottom:12px;max-width:320px;line-height:1.5}
+  .note{font-size:12px;color:var(--dim);margin-top:10px;max-width:320px;line-height:1.55}
+  .note b{color:#A9A296;font-weight:500}
+  .phone{background:#000;border:2px solid #33302A;border-radius:30px;padding:9px}
+  text{font-family:ui-monospace,"SF Mono",Menlo,monospace}
+</style>
+
+<div class="wrap">
+  <h1>Machined rings — before I build it</h1>
+  <p class="lede">
+    Same geometry you have now: two semicircles struck from the shutter, Level 1 naming the
+    setting and Level 2 its values. What changes is only how they are <b>made</b> — the
+    reference's milled rim, copper hairline, engraved ticks and centre readout, applied to the
+    arcs rather than to floating round dials.
+  </p>
+
+  <div class="rule">
+    <h3>WHAT I AM TAKING FROM THE REFERENCE</h3>
+    <p><b style="color:var(--paper)">A milled rim.</b> Fine dot knurling across the band, not the flat stripes there now.</p>
+    <p><b style="color:var(--paper)">A copper hairline.</b> One warm line along each edge of the ring — the single detail that makes the reference read as machined rather than drawn.</p>
+    <p><b style="color:var(--paper)">Engraved ticks.</b> A cut mark between values, so the scale reads as continuous metal instead of spaced words.</p>
+    <p><b style="color:var(--paper)">A centre readout.</b> The reference states the setting, its value and its auto state as a stacked block. Ours goes in the well between shutter and inner ring, where PRO already is — so PRO becomes the readout, and reset sits beside it.</p>
+    <p><b style="color:var(--paper)">Not taking:</b> full circles. The reference's dials are round because they sit on a panel with room. Ours circle the shutter, which is what makes them thumb-reachable and edge-to-edge.</p>
+  </div>
+
+  <div class="row">
+    <div>
+      <div class="cap">PORTRAIT · PRO OPEN</div>
+      <div class="sub">Inner ring names the setting, outer carries its values. The readout sits in the well.</div>
+      <div class="phone"><svg width="300" height="620" viewBox="0 0 300 620">
+        <defs>
+          <linearGradient id="pic" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#3B3A34"/><stop offset=".55" stop-color="#23262A"/>
+            <stop offset="1" stop-color="#14161A"/>
+          </linearGradient>
+          <linearGradient id="metal" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#4A443B"/><stop offset=".5" stop-color="#2A2722"/>
+            <stop offset="1" stop-color="#1A1815"/>
+          </linearGradient>
+          <radialGradient id="knob" cx="36%" cy="30%">
+            <stop offset="0" stop-color="#F7F4EE"/><stop offset="1" stop-color="#B9B3A7"/>
+          </radialGradient>
+          <clipPath id="scr"><rect x="0" y="0" width="300" height="620" rx="22"/></clipPath>
+        </defs>
+
+        <g clip-path="url(#scr)">
+          <rect width="300" height="620" fill="url(#pic)"/>
+          <g opacity=".18" stroke="#E8E2D4"><line x1="100" y1="0" x2="100" y2="620"/>
+            <line x1="200" y1="0" x2="200" y2="620"/></g>
+
+          <!-- top switches -->
+          <g fill="#000" fill-opacity=".34" stroke="#fff" stroke-opacity=".09">
+            <rect x="72" y="16" width="28" height="28" rx="7"/><rect x="106" y="16" width="28" height="28" rx="7"/>
+            <rect x="140" y="16" width="28" height="28" rx="7"/>
+            <rect x="174" y="16" width="28" height="28" rx="7" fill="#E0A44E" fill-opacity=".85"/>
+            <rect x="208" y="16" width="28" height="28" rx="7"/>
+          </g>
+
+          <!-- exposure meter, right edge -->
+          <rect x="270" y="96" width="20" height="230" rx="10" fill="#0E0D0C" fill-opacity=".55"
+                stroke="#fff" stroke-opacity=".09"/>
+          <text x="280" y="110" fill="#6A6459" font-size="8" text-anchor="middle">+</text>
+          <text x="280" y="320" fill="#6A6459" font-size="8" text-anchor="middle">−</text>
+          <circle cx="280" cy="196" r="6.5" fill="#E0A44E"/>
+
+          <!-- ===== OUTER RING · values ===== -->
+          <g>
+            <path d="M -52 545 A 202 202 0 0 1 352 545" fill="none" stroke="url(#metal)" stroke-width="46"/>
+            <path d="M -52 545 A 202 202 0 0 1 352 545" fill="none" stroke="#B4784A" stroke-opacity=".55"
+                  stroke-width="1" transform="translate(0,-23)"/>
+            <path d="M -52 545 A 202 202 0 0 1 352 545" fill="none" stroke="#000" stroke-opacity=".5"
+                  stroke-width="1" transform="translate(0,23)"/>
+            <path d="M -52 545 A 202 202 0 0 1 352 545" fill="none" stroke="#fff" stroke-opacity=".07"
+                  stroke-width="44" stroke-dasharray="1 4"/>
+            <path id="oArc" d="M -40 545 A 190 190 0 0 1 340 545" fill="none"/>
+            <text font-size="9.5" fill="#8A8478" letter-spacing="1">
+              <textPath href="#oArc" startOffset="16%">f/1.4</textPath></text>
+            <text font-size="9.5" fill="#8A8478" letter-spacing="1">
+              <textPath href="#oArc" startOffset="30%">f/2.0</textPath></text>
+            <text font-size="13" fill="#E0A44E" font-weight="700" letter-spacing="1">
+              <textPath href="#oArc" startOffset="46.5%">f/2.8</textPath></text>
+            <text font-size="9.5" fill="#8A8478" letter-spacing="1">
+              <textPath href="#oArc" startOffset="63%">f/4.0</textPath></text>
+            <text font-size="9.5" fill="#8A8478" letter-spacing="1">
+              <textPath href="#oArc" startOffset="77%">f/5.6</textPath></text>
+            <line x1="150" y1="320" x2="150" y2="332" stroke="#E0A44E" stroke-width="2"/>
+          </g>
+
+          <!-- ===== INNER RING · settings ===== -->
+          <g>
+            <path d="M 0 545 A 150 150 0 0 1 300 545" fill="none" stroke="url(#metal)" stroke-width="44"/>
+            <path d="M 0 545 A 150 150 0 0 1 300 545" fill="none" stroke="#B4784A" stroke-opacity=".5"
+                  stroke-width="1" transform="translate(0,-22)"/>
+            <path d="M 0 545 A 150 150 0 0 1 300 545" fill="none" stroke="#000" stroke-opacity=".5"
+                  stroke-width="1" transform="translate(0,22)"/>
+            <path d="M 0 545 A 150 150 0 0 1 300 545" fill="none" stroke="#fff" stroke-opacity=".06"
+                  stroke-width="42" stroke-dasharray="1 4"/>
+            <path id="iArc" d="M 10 545 A 140 140 0 0 1 290 545" fill="none"/>
+            <text font-size="8.5" fill="#8A8478" letter-spacing="1.2">
+              <textPath href="#iArc" startOffset="12%">SHUTTER</textPath></text>
+            <text font-size="11" fill="#F2EFE8" font-weight="700" letter-spacing="1.2">
+              <textPath href="#iArc" startOffset="41%">APERTURE</textPath></text>
+            <text font-size="8.5" fill="#8A8478" letter-spacing="1.2">
+              <textPath href="#iArc" startOffset="68%">ISO</textPath></text>
+            <text font-size="8.5" fill="#8A8478" letter-spacing="1.2">
+              <textPath href="#iArc" startOffset="82%">WHITE</textPath></text>
+            <line x1="150" y1="373" x2="150" y2="385" stroke="#E0A44E" stroke-width="2"/>
+          </g>
+
+          <!-- readout in the well, where PRO was -->
+          <g>
+            <rect x="96" y="430" width="108" height="52" rx="12" fill="#0E0D0C" fill-opacity=".62"
+                  stroke="#B4784A" stroke-opacity=".4"/>
+            <text x="150" y="446" fill="#E0A44E" font-size="7.5" letter-spacing="1.4" text-anchor="middle">APERTURE</text>
+            <text x="150" y="465" fill="#F2EFE8" font-size="17" font-weight="700" text-anchor="middle">f/2.8</text>
+            <text x="150" y="476" fill="#8A8478" font-size="6.5" letter-spacing="1" text-anchor="middle">PRO ⌄</text>
+            <circle cx="76" cy="456" r="14" fill="#0E0D0C" fill-opacity=".55" stroke="#fff" stroke-opacity=".14"/>
+            <text x="76" y="460" fill="#C9C2B4" font-size="10" text-anchor="middle">↺</text>
+          </g>
+
+          <!-- release row -->
+          <rect x="16" y="518" width="46" height="46" rx="9" fill="#1C1A17" stroke="#fff" stroke-opacity=".12"/>
+          <circle cx="150" cy="545" r="30" fill="url(#knob)" stroke="#8E8880" stroke-width="2"/>
+          <circle cx="150" cy="545" r="12" fill="#0E0D0C"/>
+          <g>
+            <rect x="222" y="518" width="40" height="52" rx="6" fill="#A33F2C" fill-opacity=".85"
+                  stroke="#E0A44E" stroke-opacity=".7"/>
+            <text x="242" y="580" fill="#C9C2B4" font-size="6" letter-spacing=".8" text-anchor="middle">VERMILION</text>
+            <text x="242" y="594" fill="#6A6459" font-size="6" text-anchor="middle">‹ SWIPE ›</text>
+          </g>
+        </g>
+      </svg></div>
+      <p class="note">The well between shutter and inner ring becomes the <b>readout</b> — setting, value,
+      and PRO as its own footer. Reset sits to its left, clear of both rings.</p>
+    </div>
+
+    <div>
+      <div class="cap">LANDSCAPE · PRO OPEN</div>
+      <div class="sub">Same rings, same shutter. Only the engravings turn.</div>
+      <div class="phone"><svg width="620" height="300" viewBox="0 0 620 300">
+        <defs><clipPath id="scrL"><rect x="0" y="0" width="620" height="300" rx="22"/></clipPath></defs>
+        <g clip-path="url(#scrL)">
+          <rect width="620" height="300" fill="url(#pic)"/>
+          <g opacity=".18" stroke="#E8E2D4"><line x1="0" y1="100" x2="620" y2="100"/>
+            <line x1="0" y1="200" x2="620" y2="200"/></g>
+
+          <!-- switches, along the screen's top edge = user's right -->
+          <g fill="#000" fill-opacity=".34" stroke="#fff" stroke-opacity=".09">
+            <rect x="566" y="60" width="28" height="28" rx="7"/><rect x="566" y="94" width="28" height="28" rx="7"/>
+            <rect x="566" y="128" width="28" height="28" rx="7" fill="#E0A44E" fill-opacity=".85"/>
+            <rect x="566" y="162" width="28" height="28" rx="7"/>
+          </g>
+
+          <!-- meter follows gravity: vertical in the user's view -->
+          <rect x="26" y="70" width="20" height="160" rx="10" fill="#0E0D0C" fill-opacity=".55"
+                stroke="#fff" stroke-opacity=".09"/>
+          <circle cx="36" cy="140" r="6.5" fill="#E0A44E"/>
+
+          <!-- rings struck from the shutter, which is at the screen's bottom = user's right -->
+          <g transform="translate(545,150) rotate(-90)">
+            <path d="M -202 0 A 202 202 0 0 1 202 0" fill="none" stroke="url(#metal)" stroke-width="46"
+                  transform="rotate(0)"/>
+            <path d="M -202 0 A 202 202 0 0 1 202 0" fill="none" stroke="#B4784A" stroke-opacity=".55"
+                  stroke-width="1" transform="translate(0,-23)"/>
+            <path d="M -202 0 A 202 202 0 0 1 202 0" fill="none" stroke="#fff" stroke-opacity=".07"
+                  stroke-width="44" stroke-dasharray="1 4"/>
+            <path d="M -150 0 A 150 150 0 0 1 150 0" fill="none" stroke="url(#metal)" stroke-width="44"/>
+            <path d="M -150 0 A 150 150 0 0 1 150 0" fill="none" stroke="#B4784A" stroke-opacity=".5"
+                  stroke-width="1" transform="translate(0,-22)"/>
+            <path d="M -150 0 A 150 150 0 0 1 150 0" fill="none" stroke="#fff" stroke-opacity=".06"
+                  stroke-width="42" stroke-dasharray="1 4"/>
+          </g>
+          <!-- engravings upright to the user -->
+          <g font-size="9.5" fill="#8A8478" text-anchor="middle">
+            <text x="395" y="66" transform="rotate(-90 395 66)">f/1.4</text>
+            <text x="352" y="112" transform="rotate(-90 352 112)">f/2.0</text>
+            <text x="343" y="230" transform="rotate(-90 343 230)">f/4.0</text>
+            <text x="392" y="264" transform="rotate(-90 392 264)">f/5.6</text>
+          </g>
+          <text x="343" y="150" fill="#E0A44E" font-size="13" font-weight="700" text-anchor="middle"
+                transform="rotate(-90 343 150)">f/2.8</text>
+          <g font-size="8.5" fill="#8A8478" text-anchor="middle" letter-spacing="1.2">
+            <text x="424" y="86" transform="rotate(-90 424 86)">SHUTTER</text>
+            <text x="399" y="222" transform="rotate(-90 399 222)">ISO</text>
+            <text x="418" y="256" transform="rotate(-90 418 256)">WHITE</text>
+          </g>
+          <text x="395" y="150" fill="#F2EFE8" font-size="11" font-weight="700" text-anchor="middle"
+                letter-spacing="1.2" transform="rotate(-90 395 150)">APERTURE</text>
+          <line x1="333" y1="150" x2="345" y2="150" stroke="#E0A44E" stroke-width="2"/>
+          <line x1="386" y1="150" x2="398" y2="150" stroke="#E0A44E" stroke-width="2"/>
+
+          <!-- readout in the well -->
+          <g>
+            <rect x="452" y="124" width="52" height="108" rx="12" fill="#0E0D0C" fill-opacity=".62"
+                  stroke="#B4784A" stroke-opacity=".4" transform="rotate(-90 478 178)"/>
+            <text x="478" y="150" fill="#E0A44E" font-size="7.5" letter-spacing="1.4" text-anchor="middle"
+                  transform="rotate(-90 478 150)">APERTURE</text>
+            <text x="497" y="150" fill="#F2EFE8" font-size="17" font-weight="700" text-anchor="middle"
+                  transform="rotate(-90 497 150)">f/2.8</text>
+            <circle cx="478" cy="86" r="14" fill="#0E0D0C" fill-opacity=".55" stroke="#fff" stroke-opacity=".14"/>
+            <text x="478" y="90" fill="#C9C2B4" font-size="10" text-anchor="middle"
+                  transform="rotate(-90 478 90)">↺</text>
+          </g>
+
+          <!-- release row along the screen's bottom = user's right -->
+          <rect x="522" y="30" width="46" height="46" rx="9" fill="#1C1A17" stroke="#fff" stroke-opacity=".12"/>
+          <circle cx="545" cy="150" r="30" fill="url(#knob)" stroke="#8E8880" stroke-width="2"/>
+          <circle cx="545" cy="150" r="12" fill="#0E0D0C"/>
+          <rect x="524" y="222" width="42" height="52" rx="6" fill="#A33F2C" fill-opacity=".85"
+                stroke="#E0A44E" stroke-opacity=".7"/>
+          <text x="580" y="248" fill="#C9C2B4" font-size="6" letter-spacing=".8" text-anchor="middle"
+                transform="rotate(-90 580 248)">VERMILION</text>
+        </g>
+      </svg></div>
+      <p class="note">The rings and shutter keep their station; <b>only the engravings rotate</b>. The meter
+      moves to stay vertical in the hand, as it already does.</p>
+    </div>
+  </div>
+
+  <div class="rule" style="max-width:860px">
+    <h3>ALSO IN THIS PASS, ONCE YOU APPROVE THE LOOK</h3>
+    <p><b style="color:var(--paper)">Film strip.</b> Swipe left-and-right and back, with the stock names and the
+      swipe hint turning with the body. The names now rotate; the strip still needs its swipe to read
+      along the strip as drawn, both ways, in both orientations.</p>
+    <p><b style="color:var(--paper)">The right-hand control</b> in your screenshot is exposure compensation — up
+      brighter, down darker, ticks at whole stops. It stays where it is.</p>
+  </div>
+</div>

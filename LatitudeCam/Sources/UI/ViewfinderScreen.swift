@@ -344,10 +344,10 @@ struct ViewfinderScreen: View {
     /// buttons grow to 42.
     @ViewBuilder private var chrome: some View {
         Group {
-            if controlStyle == "Top Plate" {
-                topPlateChrome
-            } else {
-                classicChrome
+            switch controlStyle {
+            case "Top Plate": topPlateChrome
+            case "Strip":     stripChrome
+            default:          classicChrome
             }
         }
         // The system's Camera Control HUD draws over the frame while the
@@ -766,6 +766,82 @@ struct ViewfinderScreen: View {
         case "Crown": crownDeck
         default: filmLabelDeck
         }
+    }
+
+    /// The fifth style: an edge meter and a strip, with the switches from the
+    /// plate kept at the top. Everything the deck draws is stacked upward from
+    /// the bottom of the screen, so no station can land on another.
+    private var stripChrome: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                if app.cameraManager.supportsPortrait {
+                    switchButton(systemImage: "person.and.background.dotted",
+                                 on: app.portrait, label: "Portrait") { app.togglePortrait() }
+                }
+                switchButton(systemImage: "grid", on: false, label: "Grid", action: cycleGrid)
+                switchButton(text: aspect, on: false, label: "Aspect ratio", action: cycleAspect)
+                switchButton(systemImage: "camera.filters", on: app.focusPeaking,
+                             label: "Focus peaking") { app.focusPeaking.toggle() }
+                switchButton(systemImage: "gearshape", on: false, label: "Settings") {
+                    app.go(.settings)
+                }
+            }
+            .padding(.top, 8)
+
+            Spacer(minLength: 0)
+        }
+        .overlay {
+            StripDeck(
+                rotation: orientation.angle,
+                edge: orientation.edge,
+                onSettings: { app.go(.settings) },
+                onCycleGrid: cycleGrid,
+                onCycleAspect: cycleAspect,
+                aspect: aspect,
+                onFilmSim: { app.go(.filmSim) },
+                onLibrary: { app.go(.library) },
+                onFire: fire
+            )
+        }
+    }
+
+    /// The plate's switch, borrowed. Square so a rotated glyph never outgrows
+    /// its button, and sized from the body like everything else.
+    private func switchButton(
+        systemImage: String? = nil, text: String? = nil,
+        on: Bool, label: String, action: @escaping () -> Void
+    ) -> some View {
+        GeometryReader { geo in
+            let side = PlateMetrics.switchSide(forWidth: geo.size.width * 5)
+            Button {
+                Haptics.toggle()
+                action()
+            } label: {
+                Group {
+                    if let systemImage {
+                        Image(systemName: systemImage).font(.system(size: 17, weight: .medium))
+                    } else if let text {
+                        Text(text).font(.mono(10, .semibold)).fixedSize()
+                    }
+                }
+                .foregroundStyle(on ? Ink.base : Color(hex: 0xA09A8D))
+                .rotationEffect(orientation.angle)
+                .frame(width: side, height: side)
+                .background {
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .fill(on ? Accent.amber : Color.black.opacity(0.34))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                .strokeBorder(on ? .clear : Color.white.opacity(0.09), lineWidth: 1)
+                        }
+                        .padding(3)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(label)
+        }
+        .frame(width: 52, height: 52)
     }
 
     /// 11 · The selected stock rests as a tactile label below the shutter. The

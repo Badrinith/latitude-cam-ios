@@ -297,18 +297,23 @@ struct SettingsScreen: View {
                         }
                     }
 
-                    // Hidden for now: Top Plate is the camera, and the other
-                    // three styles are parked rather than removed. Everything
-                    // behind this still builds and is still tested — uncomment
-                    // this group to put the choice back, and drop
-                    // Pref.viewfinderControlsPinned so the one-time move to Top
-                    // Plate does not immediately overwrite the new selection.
+                    // Back, because there is something to choose between again.
                     //
-                    // SettingsGroup(header: "Viewfinder") {
-                    //     OptionRow(title: "Controls",
-                    //               options: Pref.viewfinderControlOptions, selection: $viewfinderControls,
-                    //               isLast: true)
-                    // }
+                    // It was hidden when Top Plate became the camera and the
+                    // other three were parked. Strip is a genuine alternative
+                    // rather than a parked experiment, and a style you cannot
+                    // select is a style nobody can judge.
+                    //
+                    // The one-time pin to Top Plate does not fight this: it is
+                    // guarded by Pref.viewfinderControlsPinned and has already
+                    // run on every device that has launched the app, so it
+                    // returns before touching the selection.
+                    SettingsGroup(header: "Viewfinder") {
+                        OptionRow(title: "Controls",
+                                  options: Pref.viewfinderControlOptions,
+                                  selection: $viewfinderControls,
+                                  isLast: true)
+                    }
 
                     SettingsGroup(header: "Library") {
                         OptionRow(title: "Gallery Layout",

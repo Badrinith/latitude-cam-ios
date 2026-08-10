@@ -924,6 +924,114 @@ final class DialScaleTests: XCTestCase {
     }
 }
 
+/// The Strip deck's stations, which must not touch.
+///
+/// The layout is a running total measured up from the bottom of the screen, so
+/// overlap is meant to be impossible by construction. That is only true while
+/// the arithmetic stays a running total — this is what stops someone
+/// "simplifying" it back into independent offsets.
+@MainActor
+final class StripLayoutTests: XCTestCase {
+
+    private let widths: [CGFloat] = [320, 375, 390, 393, 430, 440]
+
+    /// A ring struck from the shutter with radius width/2 passes through both
+    /// screen edges at the shutter's own height.
+    ///
+    /// This is the point of centring on the release: reaching the edges stops
+    /// being a constant to tune and becomes a fact about the geometry. Three
+    /// earlier versions widened an arc centred somewhere else, and each fell
+    /// short differently.
+    func testTheRingsLeaveTheScreenOnBothSides() {
+        for width in widths {
+            for turned in [false, true] {
+                let thickness = StripMetrics.barrelHeight(forWidth: width, turned: turned)
+                let shutter = CGPoint(x: width / 2, y: 800)
+
+                for radius in [StripMetrics.innerRadius(forWidth: width),
+                               StripMetrics.outerRadius(forWidth: width, turned: turned)] {
+                    let drawn = ArcBand(centre: shutter, radius: radius, thickness: thickness)
+                        .path(in: CGRect(x: 0, y: 0, width: width, height: 900))
+                        .boundingRect
+
+                    XCTAssertLessThanOrEqual(drawn.minX, 0,
+                        "a gap at the left edge, \(width)pt r\(Int(radius)) turned:\(turned)")
+                    XCTAssertGreaterThanOrEqual(drawn.maxX, width,
+                        "a gap at the right edge, \(width)pt r\(Int(radius)) turned:\(turned)")
+                }
+            }
+        }
+    }
+
+    /// The rings must clear the shutter they are struck from, or the controls
+    /// sit on the release.
+    func testTheRingsClearTheShutter() {
+        let shutterRadius: CGFloat = 39
+        for width in widths {
+            for turned in [false, true] {
+                let thickness = StripMetrics.barrelHeight(forWidth: width, turned: turned)
+                let inner = StripMetrics.innerRadius(forWidth: width) - thickness / 2
+                XCTAssertGreaterThan(inner, shutterRadius + 16,
+                                     "the inner ring crowds the shutter at \(width)")
+            }
+        }
+    }
+
+    /// The two rings are concentric and must not touch.
+    func testTheRingsDoNotTouch() {
+        for width in widths {
+            for turned in [false, true] {
+                let thickness = StripMetrics.barrelHeight(forWidth: width, turned: turned)
+                let innerOuterEdge = StripMetrics.innerRadius(forWidth: width) + thickness / 2
+                let outerInnerEdge = StripMetrics.outerRadius(forWidth: width, turned: turned)
+                    - thickness / 2
+                XCTAssertGreaterThan(outerInnerEdge, innerOuterEdge,
+                                     "the rings overlap at \(width), turned: \(turned)")
+            }
+        }
+    }
+
+    /// PRO and reset sit above the shutter and below the inner ring, and the
+    /// release row keeps its own space.
+    func testNoStationBorrowsAnother() {
+        for width in widths {
+            for turned in [false, true] {
+                let s = StripMetrics.stack(forWidth: width, safeBottom: 34, turned: turned)
+                XCTAssertGreaterThan(s.handleBottom, s.releaseTop,
+                                     "PRO reaches into the release row at \(width)")
+
+                let thickness = StripMetrics.barrelHeight(forWidth: width, turned: turned)
+                let ringInnerEdge = s.shutterCentre
+                    + StripMetrics.innerRadius(forWidth: width) - thickness / 2
+                XCTAssertLessThan(s.handleTop, ringInnerEdge,
+                                  "PRO reaches into the inner ring at \(width)")
+            }
+        }
+    }
+
+    /// Readable type in a control that stays out of the way.
+    func testTheReadingIsLegibleAndTheBandStaysSlim() {
+        for width in widths {
+            let reading = StripMetrics.readingSize(forWidth: width)
+            XCTAssertGreaterThanOrEqual(reading, 16, "the reading is too small at \(width)")
+            XCTAssertLessThanOrEqual(StripMetrics.barrelHeight(forWidth: width), 76,
+                                     "the band has grown into a slab at \(width)")
+        }
+    }
+
+    /// Turned, the band has to be deep enough for its own lettering: a rotated
+    /// word needs its width in the frame's height.
+    func testTheTurnedBandHasRoomForTurnedLettering() {
+        for width in widths {
+            let turned = StripMetrics.barrelHeight(forWidth: width, turned: true)
+            XCTAssertGreaterThan(turned, StripMetrics.barrelHeight(forWidth: width))
+            let laidOver = CGFloat("1/1000".count) * StripMetrics.readingSize(forWidth: width) * 0.6
+            XCTAssertLessThan(laidOver, turned,
+                              "a turned reading still overruns the band at \(width)")
+        }
+    }
+}
+
 final class KnobMathTests: XCTestCase {
 
     func testMidValueSitsStraightUp() {
@@ -1585,6 +1693,34 @@ final class GravityOrientationTests: XCTestCase {
     func testFlatGivesNoAnswer() {
         XCTAssertNil(read(0, 0, -1), "face up should hold the last reading")
         XCTAssertNil(read(0, 0, 1), "face down should hold the last reading")
+    }
+
+    /// **Aimed down at a table, still upright.** The commonest thing anyone
+    /// does with a camera app, and the case that used to freeze the reading.
+    ///
+    /// Most of gravity goes into z, so both horizontal terms fall well under
+    /// an absolute threshold — the old test read that as "no answer" and the
+    /// controls stayed however they were last seen, which on the glass meant
+    /// a portrait phone wearing its landscape layout. Only the *direction* of
+    /// the in-plane component says which way up the phone is, so that is what
+    /// gets judged.
+    func testAimedDownAtATableIsStillPortrait() {
+        // ~70° down from vertical: z dominates, y is small but unambiguous.
+        XCTAssertEqual(read(0, -0.34, -0.94)?.edge, .bottom)
+        // Steeper still.
+        XCTAssertEqual(read(0, -0.22, -0.97)?.edge, .bottom)
+    }
+
+    /// And the same courtesy turned sideways — aimed down, but landscape.
+    func testAimedDownWhileTurnedIsStillLandscape() {
+        XCTAssertEqual(read(-0.34, 0, -0.94)?.edge, .leading)
+        XCTAssertEqual(read(0.34, 0, -0.94)?.edge, .trailing)
+    }
+
+    /// The dead zone survives: pointed straight down at the floor there is
+    /// genuinely nothing to read, and the last answer must stand.
+    func testStraightDownStillHoldsTheLastReading() {
+        XCTAssertNil(read(0.02, -0.05, -0.998))
     }
 
     /// Neither does a phone held at a diagonal, until it is committed.
