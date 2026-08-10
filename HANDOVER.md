@@ -329,6 +329,41 @@ With a working Simulator, `mcp__Claude_Code_iOS_Simulator__control` drives all o
 
 ---
 
+## The hardware Camera Control
+
+The capacitive button on an iPhone 16/17 turns shutter, ISO, aperture and exposure
+compensation. `Sources/CameraControls.swift` holds all of it; `CameraManager` owns a bridge
+and `AppState` supplies the ladders.
+
+**Four controls, five dials.** `session.maxControlsCount` is 4. White balance is the omission —
+least likely to change shot to shot, and the only one whose effect is already plain in the
+preview. Swap it in `CameraControlDial.allCases` if you disagree; the ladders come from
+`AppState.hardwareControlLadders()`.
+
+**Gated twice, because the two conditions are independent.** `#available(iOS 18.0, *)` for the
+API and `session.supportsControls` for the hardware — iOS 18 on an iPhone 15 compiles every
+line and answers `false`. Deployment target stays 17.0. On a body without the button nothing
+registers, `hasHardwareControls` and `cameraControlActive` stay false for the life of the app,
+and the on-screen dials are untouched. `testNothingBreaksWithoutTheHardwareButton` pins that.
+
+**Two rules this cost a crash each to learn.** Both are the same lesson from opposite ends —
+*the thread you are on is part of the API contract*:
+
+| Rule | What breaks |
+|---|---|
+| Never let `cameraQueue` read `AppState` | `AppState` is `@MainActor`; the session configures on a background queue. A closure that reached back for the ladders was a cross-actor read, and Swift trapped it at launch. Ladders are **pushed across as a value** now — `setCameraControlLadders` — never pulled. |
+| Never touch an `AVCaptureControl` off its action queue | `AVCaptureControl` *asserts*: `setSelectedIndex:` calls `dispatch_assert_queue` and fails hard. `syncCamera` pushed the new stop in from the main actor and the first dial turn killed the app. The bridge now takes the camera's own **serial** queue, so attach, sync and the system's actions all share one — which is also why `attached` needs no lock. |
+
+Set a control's action queue **before** its value; the queue is what the assertion tests
+against. And hop the whole read-compare-write across, not just the write — reading
+`selectedIndex` counts as touching the control.
+
+**Still unimplemented:** `AVCaptureEventInteraction` (iOS 17.2, no version gate needed) for the
+*press* rather than the slide — half-press to lock focus/exposure, full press to fire. Only the
+on-screen release fires the shutter today.
+
+---
+
 ## Viewfinder control styles
 
 The viewfinder has four selectable presentations, chosen in **Settings → Viewfinder → Controls**
@@ -426,6 +461,39 @@ and the id to both the group `children` and the target's `files`.
 
 `testEveryFilterNameResolves` exists because CoreImage returns the input **unchanged** for an unknown
 filter name. A typo would present as a dead toggle rather than a build error.
+
+### When the app crashes on device — get the report first
+
+**Do this before reading a single line of code.** A device crash was diagnosed three times by
+reasoning about the source in the last session, wrongly each time, and then in one minute from
+the actual stack. `devicectl` will hand you the crash reports:
+
+```bash
+mkdir -p /tmp/crash
+xcrun devicectl device copy from --device <device-udid> \
+  --domain-type systemCrashLogs --source . --destination /tmp/crash
+```
+
+The phone must be **unlocked** and stays reachable only briefly — it re-locks in well under a
+minute. Wrap the call in a retry loop and unlock while it spins:
+
+```bash
+for i in $(seq 1 60); do
+  xcrun devicectl device copy from --device <device-udid> \
+    --domain-type systemCrashLogs --source . --destination /tmp/crash && break
+  sleep 5
+done
+```
+
+`.ips` files are two JSON documents concatenated — a one-line header, then the body. Parse the
+second and walk `threads[faultingThread].frames`, mapping each `imageIndex` through
+`usedImages`. `--console` on `devicectl process launch` is **not** a substitute: it reports
+only `App terminated due to signal 5` with no reason, and `log stream` has no device flag on
+this macOS.
+
+Signal 5 / `EXC_BREAKPOINT` is a Swift runtime trap *or* a dispatch queue assertion — the
+latter is what `dispatch_assert_queue` in the top frames means, and it is not a crash any
+amount of source reading will suggest.
 
 ### When the suite will not finish
 
