@@ -557,7 +557,7 @@ struct CrownControl: View {
 struct ActiveDial: Equatable {
     /// Which control the barrel is currently attached to. The barrel is a live
     /// control, not a readout, so it has to be able to say what it is driving.
-    enum Key: String { case aperture, iso, shutter, white, exposure }
+    enum Key: String { case aperture, iso, shutter, white, exposure, focus }
 
     var key: Key
     var name: String
@@ -738,17 +738,17 @@ struct PlateDial: View {
             ZStack {
                 Capsule()
                     .fill(Color.black.opacity(0.75))
-                    .frame(width: max(2, diameter * 0.042),
-                           height: diameter * 0.12)
+                    .frame(width: max(2, diameter * 0.038),
+                           height: diameter * 0.105)
                 Capsule()
                     .fill(Accent.amber.opacity(pressing ? 1 : 0.92))
-                    .frame(width: max(1.5, diameter * 0.028),
-                           height: diameter * 0.10)
+                    .frame(width: max(1.5, diameter * 0.026),
+                           height: diameter * 0.09)
             }
             // Innermost band, 0.09–0.21. On the pad rather than out on the rim,
             // where it sat on top of the numerals and hid whichever one it was
             // pointing at — the one you most needed to read.
-            .offset(y: -diameter * 0.15)
+            .offset(y: -diameter * 0.1325)
             .rotationEffect(.degrees(KnobMath.pointerAngle(for: value)))
 
             // Focus ring, on the pad well inside the scale. At 0.44 it ran
@@ -758,7 +758,7 @@ struct PlateDial: View {
             Circle()
                 .strokeBorder(Accent.amber.opacity(pressing ? 0.9 : 0),
                               lineWidth: max(1.2, diameter * 0.02))
-                .padding(diameter * 0.255)
+                .padding(diameter * 0.285)
 
             if let text = compact ? (inlineReading ?? label) : inlineReading {
                 Text(text)
@@ -766,7 +766,7 @@ struct PlateDial: View {
                     // across, and at the old 0.13 a five-character reading
                     // ("1/1000") reached the pad's edge and looked like it was
                     // escaping the knob.
-                    .font(.mono(max(7, diameter * 0.115), .bold))
+                    .font(.mono(max(7, diameter * 0.10), .bold))
                     .foregroundStyle(Color(hex: 0xE8E2D4))
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
@@ -774,7 +774,7 @@ struct PlateDial: View {
                     // not the pad's full width — the widest part of a circle
                     // is a line through its centre, and the type has to fit
                     // where it actually sits rather than where it is widest.
-                    .frame(maxWidth: diameter * 0.5)
+                    .frame(maxWidth: diameter * 0.46)
                     .shadow(color: .black.opacity(0.7), radius: 1, y: 1)
                     .rotationEffect(rotation)
             }
@@ -829,7 +829,7 @@ struct PlateDial: View {
     /// and a scale you can only read in one orientation is half a scale.
     private var showsNumerals: Bool {
         pressing && !scaleLabels.isEmpty
-            && diameter * Self.pressScale * 0.115 >= 7.5
+            && diameter * Self.pressScale * Band.numeralFont >= 6.5
     }
 
     /// How much the face grows under the thumb. Named because the numerals'
@@ -846,11 +846,28 @@ struct PlateDial: View {
     /// are five rings drawn by five unrelated pieces of code, and an overlap is
     /// only visible on a device with a dial held down.
     enum Band {
-        static let pointer: ClosedRange<CGFloat> = 0.09...0.21
-        static let focusRing: CGFloat = 0.245
-        static let ticks: ClosedRange<CGFloat> = 0.278...0.353
-        /// Numerals are centred on 0.42 and stand about 0.06 tall either side.
-        static let numerals: ClosedRange<CGFloat> = 0.36...0.48
+        static let pointer: ClosedRange<CGFloat> = 0.08...0.185
+        static let focusRing: CGFloat = 0.215
+        static let ticks: ClosedRange<CGFloat> = 0.23...0.28
+
+        /// Where a numeral's plate sits radially — its centre plus half its
+        /// height either side.
+        static let numerals: ClosedRange<CGFloat> = 0.287...0.384
+        static let numeralRadius: CGFloat = 0.335
+        static let numeralFont: CGFloat = 0.085
+        static let numeralPadH: CGFloat = 0.015
+        static let numeralPadV: CGFloat = 0.006
+
+        /// How far the *corner* of the widest numeral gets from the centre.
+        ///
+        /// The number that actually matters, and the one whose absence let the
+        /// numerals hang off the knob. The plates are axis-aligned, not turned
+        /// to the tangent, so at three o'clock a numeral's half-*width* adds
+        /// radially rather than its half-height. At the old radius of 0.42 that
+        /// put the corner at 0.588 against a rim of 0.5 — a quarter of the
+        /// label outside the metal. Checking the radial band alone said it fit.
+        static let numeralReach: CGFloat = 0.455
+
         /// The knob's own edge.
         static let rim: CGFloat = 0.5
     }
@@ -891,7 +908,7 @@ struct PlateDial: View {
         // barely any — five marks over the sweep at a small radius bunch into
         // a smear however small the type is. This is also where a real dial
         // carries its numbers.
-        let radius = diameter * 0.42
+        let radius = diameter * Band.numeralRadius
         return CGSize(width: radius * sin(radians), height: -radius * cos(radians))
     }
 
@@ -907,17 +924,17 @@ struct PlateDial: View {
                 ZStack {
                     Capsule()
                         .fill(Color.black.opacity(0.7))
-                        .frame(width: max(1, diameter * 0.016),
-                               height: diameter * (marked ? 0.075 : 0.05))
+                        .frame(width: max(1, diameter * 0.014),
+                               height: diameter * (marked ? 0.05 : 0.034))
                     Capsule()
                         .fill(live ? Accent.amber
                                    : Color.white.opacity(marked ? 0.5 : 0.26))
-                        .frame(width: max(0.8, diameter * 0.011),
-                               height: diameter * (marked ? 0.065 : 0.042))
+                        .frame(width: max(0.8, diameter * 0.010),
+                               height: diameter * (marked ? 0.042 : 0.028))
                 }
                 // Third band, 0.278–0.353 — clear of the focus ring below it
                 // and the numerals above.
-                .offset(y: -diameter * 0.315)
+                .offset(y: -diameter * 0.255)
                 .rotationEffect(.degrees(angle(forDetent: index)))
             }
 
@@ -925,7 +942,7 @@ struct PlateDial: View {
                 ForEach(numeralDetents, id: \.self) { index in
                     if index < scaleLabels.count {
                         Text(engraved(scaleLabels[index]))
-                            .font(.mono(max(6, diameter * 0.115), .semibold))
+                            .font(.mono(max(6, diameter * Band.numeralFont), .semibold))
                             .foregroundStyle(
                                 index == activeDetent
                                     ? Accent.amber
@@ -935,8 +952,8 @@ struct PlateDial: View {
                             // The rim is knurled, and small type laid straight
                             // onto that texture is unreadable at any contrast.
                             // Each numeral gets its own milled flat to sit on.
-                            .padding(.horizontal, diameter * 0.026)
-                            .padding(.vertical, diameter * 0.008)
+                            .padding(.horizontal, diameter * Band.numeralPadH)
+                            .padding(.vertical, diameter * Band.numeralPadV)
                             .background {
                                 Capsule()
                                     .fill(Color.black.opacity(0.62))
@@ -1576,7 +1593,7 @@ enum PlateMetrics {
 
     /// Relative sizes, not point sizes. The proportions are the design; the
     /// scale is the device's.
-    static let dialWeights: [CGFloat] = [44, 50, 70, 50, 44]
+    static let dialWeights: [CGFloat] = [44, 50, 70, 50, 44, 50]
     static let dialSpacing: CGFloat = 4
     static let rowPadding: CGFloat = 8
 
@@ -1732,6 +1749,15 @@ struct DialStrip: View {
                      name: "EXPOSURE", reading: String(format: "%+.1f EV", app.evValue),
                      value: $app.exposureComp, stops: AppState.evDetents,
                      scale: AppState.exposureLabels, base: 44)
+
+                // Manual focus. Driven through `focusDial` rather than `focus`
+                // itself: the lens positions are not evenly spaced, and a dial
+                // that turns uniformly over them would light a mark the reading
+                // disagreed with. Double-tap hands focus back to the camera.
+                dial(.focus, label: app.focusLabel, name: "FOCUS",
+                     reading: app.focusLabel, value: $app.focusDial,
+                     stops: AppState.focusStops.count,
+                     scale: AppState.focusStops.map(\.label), base: 50)
             }
             .frame(maxWidth: .infinity)
             .padding(.horizontal, PlateMetrics.rowPadding)
@@ -1784,6 +1810,10 @@ struct DialStrip: View {
                 switch key {
                 case .iso, .shutter:
                     if app.autoExposure { app.autoExposure = false }
+                case .focus:
+                    // Same bargain on the focus dial: touching it is what takes
+                    // focus off the camera and gives it to the hand.
+                    if app.autoFocus { app.autoFocus = false }
                 case .aperture, .white, .exposure:
                     break
                 }
@@ -1933,6 +1963,16 @@ struct TopPlateBand: View {
 
             utility(systemImage: "grid", on: false, label: "Grid", action: onCycleGrid)
             utility(text: aspect, on: false, label: "Aspect ratio", action: onCycleAspect)
+
+            // Focus peaking belongs here rather than on the dial rail: it is a
+            // switch, and this row is where the switches are. The focus
+            // *distance* is a ladder, so it is a dial — same split as
+            // everything else on the plate.
+            utility(systemImage: "camera.filters", on: app.focusPeaking,
+                    label: "Focus peaking") {
+                app.focusPeaking.toggle()
+            }
+
             utility(systemImage: "gearshape", on: false, label: "Settings", action: onSettings)
 
             if app.proMode {

@@ -471,6 +471,18 @@ final class AppState: ObservableObject {
     }
 
     /// Dial index 0 is AF; the stops follow.
+    /// The focus dial's own position, uniform across its ladder.
+    ///
+    /// `focus` is a *lens position*, and its stops are deliberately not evenly
+    /// spaced — 0.1m to 0.5m occupies less of the barrel's travel than 1m to ∞,
+    /// as it does on a real lens. A dial turning uniformly cannot drive that
+    /// directly: every mark would sit somewhere the reading disagreed with.
+    /// So the dial gets an even ladder and the lens position is derived.
+    var focusDial: Double {
+        get { position(forIndex: max(0, focusIndex - 1), of: Self.focusStops.count) }
+        set { focusIndex = stopIndex(Self.focusStops.count, at: newValue) + 1 }
+    }
+
     var focusIndex: Int {
         get {
             guard !autoFocus else { return 0 }

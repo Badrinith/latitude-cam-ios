@@ -522,6 +522,10 @@ struct ViewfinderScreen: View {
             // second opinion about what "default aperture" means, and the two
             // drift apart silently.
             app.aperture = AppState.defaultControls.aperture
+        case .focus:
+            // Focus goes back to the camera, the same way shutter and ISO go
+            // back to metering for themselves.
+            app.autoFocus = true
         }
         activeDial = nil
     }
@@ -546,6 +550,13 @@ struct ViewfinderScreen: View {
             step(\.shutter, by: delta, stops: AppState.shutterStops.count)
         case .white:    step(\.whiteBalance, by: delta, stops: AppState.whiteBalanceStops.count)
         case .exposure: step(\.exposureComp, by: delta, stops: AppState.evDetents)
+        case .focus:
+            // Scrubbing focus takes it off auto, as turning its dial does.
+            if app.autoFocus { app.autoFocus = false }
+            let stops = AppState.focusStops.count
+            let before = KnobMath.detent(app.focusDial, stops: stops)
+            app.focusDial = KnobMath.clamp(app.focusDial + delta)
+            if KnobMath.detent(app.focusDial, stops: stops) != before { Haptics.detent() }
         }
         refreshBarrel(key)
     }
@@ -573,6 +584,7 @@ struct ViewfinderScreen: View {
         case .shutter:  return app.shutterLabel
         case .white:    return app.kelvinLabel
         case .exposure: return String(format: "%+.1f EV", app.evValue)
+        case .focus:    return app.focusLabel
         }
     }
 
@@ -584,6 +596,7 @@ struct ViewfinderScreen: View {
         case .shutter:  return app.shutter
         case .white:    return app.whiteBalance
         case .exposure: return app.exposureComp
+        case .focus:    return app.focusDial
         }
     }
 

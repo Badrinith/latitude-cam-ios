@@ -881,6 +881,36 @@ final class DialScaleTests: XCTestCase {
                                  "the numerals run off the edge of the knob")
     }
 
+    /// The numeral plates are axis-aligned, not turned to the tangent, so at
+    /// three o'clock a numeral's half-*width* is what adds radially — not its
+    /// half-height. Checking only the radial band said the old layout fit while
+    /// a quarter of every side numeral hung off the metal.
+    ///
+    /// This recomputes the corner distance from the same constants the view
+    /// draws with, so the two cannot drift.
+    func testTheWidestNumeralStaysInsideTheKnob() {
+        typealias Band = PlateDial.Band
+
+        // Monospace advance, as a fraction of point size.
+        let advance: CGFloat = 0.6
+        // "1000", "2500" — the longest engraved labels on any of the ladders.
+        let widest = 4
+
+        let width = CGFloat(widest) * advance * Band.numeralFont + 2 * Band.numeralPadH
+        let height = Band.numeralFont + 2 * Band.numeralPadV
+
+        let atSide = ((Band.numeralRadius + width / 2) * (Band.numeralRadius + width / 2)
+                      + (height / 2) * (height / 2)).squareRoot()
+        let atTop = ((Band.numeralRadius + height / 2) * (Band.numeralRadius + height / 2)
+                     + (width / 2) * (width / 2)).squareRoot()
+        let reach = max(atSide, atTop)
+
+        XCTAssertLessThan(reach, Band.rim,
+                          "the widest numeral reaches \(reach) against a rim of \(Band.rim)")
+        XCTAssertEqual(reach, Band.numeralReach, accuracy: 0.01,
+                       "Band.numeralReach no longer describes the geometry")
+    }
+
     /// And the marks run in ladder order round the sweep — the first at the low
     /// stop, the last at the high one, never doubling back.
     func testMarksAscendAcrossTheSweep() {

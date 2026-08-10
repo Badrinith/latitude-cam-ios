@@ -31,6 +31,50 @@ final class AppStateWiringTests: XCTestCase {
         super.tearDown()
     }
 
+    // MARK: - Manual focus
+
+    /// The focus stops are deliberately *not* evenly spaced — near distances
+    /// take less of the barrel's travel than far ones, as on a real lens. That
+    /// is why the dial drives `focusDial` and not `focus`: a uniform dial over
+    /// a non-uniform ladder lights a mark the reading disagrees with.
+    func testTheFocusLadderIsNotEvenlySpaced() {
+        let gaps = zip(AppState.focusStops, AppState.focusStops.dropFirst())
+            .map { $1.position - $0.position }
+        XCTAssertGreaterThan(gaps.count, 1)
+        XCTAssertFalse(
+            gaps.allSatisfy { abs($0 - gaps[0]) < 0.001 },
+            "the ladder is uniform now — focusDial's indirection is no longer needed"
+        )
+    }
+
+    /// Every focus stop the dial can land on reads back as itself, and the
+    /// label matches — the same guarantee the other five dials have.
+    func testEachFocusStopReadsBackAsItself() {
+        let app = AppState()
+        let stops = AppState.focusStops.count
+
+        for index in 0..<stops {
+            app.focusDial = (Double(index) + 0.5) / Double(stops)
+            XCTAssertEqual(KnobMath.detent(app.focusDial, stops: stops), index,
+                           "focus stop \(index) does not read back as itself")
+            XCTAssertEqual(app.focusLabel, AppState.focusStops[index].label,
+                           "the reading disagrees with the lit mark")
+            XCTAssertFalse(app.autoFocus, "setting a distance should leave autofocus")
+        }
+    }
+
+    /// And the dial hands focus back to the camera, as shutter and ISO hand
+    /// back metering.
+    func testFocusReturnsToAutomatic() {
+        let app = AppState()
+        app.focusDial = 0.9
+        XCTAssertFalse(app.autoFocus)
+        XCTAssertNotEqual(app.focusLabel, "AF")
+
+        app.autoFocus = true
+        XCTAssertEqual(app.focusLabel, "AF")
+    }
+
     // MARK: - The hardware Camera Control
 
     /// The button's ladders must be the ones the dials index.
