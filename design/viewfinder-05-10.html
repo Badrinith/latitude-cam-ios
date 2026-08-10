@@ -1,0 +1,309 @@
+<meta charset="utf-8">
+<title>Latitude — Edge Meter + Strip, both orientations</title>
+<style>
+  :root {
+    --ink:#14120F; --paper:#E8E2D4; --muted:#8A8478; --amber:#E0A44E;
+    --green:#6FBF8F; --dim:#6A6459; --glass:rgba(20,18,15,.62);
+    --mono: ui-monospace,"SF Mono",Menlo,monospace;
+    --sans: -apple-system,"Helvetica Neue",sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;padding:44px 24px 90px;background:var(--ink);color:var(--paper);
+       font-family:var(--sans);-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1200px;margin:0 auto}
+  h1{font-size:31px;line-height:1.1;letter-spacing:-.02em;margin:0 0 14px;font-weight:600}
+  .lede{color:var(--muted);font-size:14.5px;line-height:1.65;margin:0 0 10px;max-width:700px}
+  .lede b{color:var(--paper);font-weight:500}
+  .rule{border:1px solid #302C26;border-radius:12px;padding:14px 16px;margin:22px 0 40px;
+        background:#1A1815;max-width:700px}
+  .rule h3{margin:0 0 7px;font-size:10.5px;letter-spacing:.14em;color:var(--muted);font-weight:600}
+  .rule p{margin:0 0 6px;font-size:13.5px;line-height:1.6;color:var(--muted)}
+  .rule p:last-child{margin:0}
+
+  .row{display:flex;flex-wrap:wrap;gap:34px;align-items:flex-start;margin-bottom:46px}
+  .item{}
+  .cap{font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--amber);margin-bottom:4px}
+  .sub{font-size:12.5px;color:var(--muted);margin-bottom:12px;max-width:300px;line-height:1.5}
+
+  /* ---------- phone shells ---------- */
+  .phone{background:#000;border:2px solid #35312A;border-radius:30px;padding:9px;position:relative}
+  .screen{position:relative;overflow:hidden;border-radius:22px;background:#0B0A09}
+  .p .screen{width:286px;height:600px}
+  .l .screen{width:600px;height:286px}
+
+  /* the live picture */
+  .pic{position:absolute;inset:0;
+    background:
+      radial-gradient(60% 40% at 30% 26%, #4B4437 0%, transparent 60%),
+      radial-gradient(50% 40% at 74% 62%, #2C3A3A 0%, transparent 62%),
+      linear-gradient(168deg,#20211E 0%,#151614 55%,#0E0F0E 100%);}
+  .pic::after{content:"";position:absolute;inset:0;
+    background:linear-gradient(to top, rgba(0,0,0,.55), transparent 34%)}
+  .horizon{position:absolute;left:0;right:0;top:52%;height:1px;background:rgba(232,226,212,.07)}
+
+  /* top utility row */
+  .utils{position:absolute;top:14px;left:0;right:0;display:flex;justify-content:center;gap:7px;z-index:3}
+  .u{width:29px;height:29px;border-radius:7px;background:rgba(0,0,0,.34);
+     border:1px solid rgba(255,255,255,.09);display:grid;place-items:center;
+     font-family:var(--mono);font-size:8.5px;color:#A09A8D}
+
+  /* ---------- 05 · the edge meter ---------- */
+  .meter{position:absolute;width:26px;border-radius:13px;background:var(--glass);
+         border:1px solid rgba(255,255,255,.08);z-index:4;
+         display:flex;flex-direction:column;align-items:center;justify-content:space-between;
+         padding:9px 0;backdrop-filter:blur(6px)}
+  .meter .pm{font-family:var(--mono);font-size:9px;color:var(--dim)}
+  .ticks{position:relative;flex:1;width:100%;display:flex;flex-direction:column;
+         align-items:center;justify-content:space-around;padding:4px 0}
+  .tick{width:8px;height:1px;background:#4A453D}
+  .tick.mid{width:14px;background:#6A6459}
+  .knob{position:absolute;width:17px;height:17px;border-radius:50%;
+        background:var(--amber);box-shadow:0 0 0 3px rgba(224,164,78,.16)}
+  .evtag{position:absolute;font-family:var(--mono);font-size:10.5px;color:var(--amber);
+         background:var(--glass);border:1px solid rgba(224,164,78,.3);border-radius:5px;
+         padding:2px 6px;z-index:4;white-space:nowrap}
+
+  /* ---------- 10 · the strip ---------- */
+  .strip{position:absolute;display:flex;align-items:center;gap:0;
+         background:var(--glass);border:1px solid rgba(255,255,255,.08);
+         border-radius:15px;backdrop-filter:blur(6px);z-index:5;
+         font-family:var(--mono);font-size:10.5px;color:#A9A296}
+  .tok{padding:7px 9px;white-space:nowrap}
+  .tok.a{color:var(--amber);font-weight:700;padding-left:11px}
+  .tok.live{color:var(--amber);background:rgba(224,164,78,.13);border-radius:9px}
+  .dot{color:#3E3A34}
+
+  /* the wheel that a tapped token becomes */
+  .wheel{position:absolute;background:var(--glass);border:1px solid rgba(255,255,255,.09);
+         border-radius:13px;backdrop-filter:blur(6px);z-index:5;overflow:hidden}
+  .wheel .lbl{position:absolute;top:5px;left:0;right:0;text-align:center;
+              font-family:var(--mono);font-size:8px;letter-spacing:.14em;color:var(--muted)}
+  .wr{position:absolute;left:0;right:0;bottom:7px;height:30px;
+      display:flex;align-items:flex-end;justify-content:space-around}
+  .wr span{font-family:var(--mono);font-size:9.5px;color:#6A6459}
+  .wr span.on{color:var(--amber);font-size:12.5px;font-weight:700}
+  .idx{position:absolute;left:50%;top:20px;width:1.5px;height:22px;background:var(--amber);
+       transform:translateX(-50%);box-shadow:0 0 5px rgba(224,164,78,.6)}
+
+  /* ---------- release row ---------- */
+  .rel{position:absolute;display:flex;align-items:center;justify-content:space-between;z-index:5}
+  .shut{width:56px;height:56px;border-radius:50%;background:#E8E2D4;
+        box-shadow:0 0 0 3px rgba(232,226,212,.22)}
+  .shut i{display:block;width:22px;height:22px;border-radius:50%;background:#0E0D0C;
+          margin:17px auto}
+  .sq{width:34px;height:34px;border-radius:7px;background:rgba(0,0,0,.4);
+      border:1px solid rgba(255,255,255,.11)}
+  .sq.film{background:linear-gradient(160deg,#4A423A,#2A2521)}
+  .lens{font-family:var(--mono);font-size:10px;color:#A9A296;background:rgba(0,0,0,.4);
+        border:1px solid rgba(255,255,255,.11);border-radius:11px;padding:4px 9px}
+
+  .rot90{transform:rotate(-90deg)}
+  .note{font-size:12px;color:var(--dim);margin-top:10px;max-width:300px;line-height:1.55}
+  .note b{color:#A9A296;font-weight:500}
+</style>
+
+<div class="wrap">
+  <h1>05 + 10, working together</h1>
+  <p class="lede">
+    The <b>Edge Meter</b> takes the one thing people change constantly — how bright — and gives it a
+    full-length target down the side of the frame. The <b>Strip</b> takes everything else and reduces
+    it to a line of type that only becomes a control when you touch it.
+  </p>
+  <p class="lede">
+    Together they cover the whole exposure group with <b>nothing covering the picture</b>: one thumb
+    slide for brightness, one tap for anything else.
+  </p>
+
+  <div class="rule">
+    <h3>THE RULE THAT DECIDES THE LANDSCAPE LAYOUT</h3>
+    <p><b style="color:var(--paper)">The meter follows gravity. The release follows the screen.</b></p>
+    <p>Brighter must always be physically up, or the gesture stops being obvious the moment you
+      turn the phone — so the meter moves to whichever edge is vertical in your hand. The release
+      does the opposite and never moves, because a shutter you have to hunt for is worse than one
+      at an odd angle. The Strip sits with the release, and only its lettering turns.</p>
+  </div>
+
+  <!-- ============ PORTRAIT ============ -->
+  <div class="row">
+    <div class="item">
+      <div class="cap">PORTRAIT · AT REST</div>
+      <div class="sub">Nothing but a meter and a line of type. The camera is on auto and says so.</div>
+      <div class="phone p"><div class="screen">
+        <div class="pic"><div class="horizon"></div></div>
+        <div class="utils"><div class="u">#</div><div class="u">3:2</div><div class="u">⚙</div></div>
+
+        <!-- edge meter, right side -->
+        <div class="meter" style="right:10px;top:96px;bottom:150px">
+          <div class="pm">+</div>
+          <div class="ticks">
+            <div class="tick"></div><div class="tick"></div><div class="tick mid"></div>
+            <div class="tick"></div><div class="tick"></div>
+            <div class="knob" style="top:50%;margin-top:-8.5px"></div>
+          </div>
+          <div class="pm">−</div>
+        </div>
+
+        <!-- the strip -->
+        <div class="strip" style="left:14px;right:46px;bottom:104px">
+          <div class="tok a">A</div>
+          <div class="tok">1/125</div><div class="dot">·</div>
+          <div class="tok">f/2.8</div><div class="dot">·</div>
+          <div class="tok">400</div><div class="dot">·</div>
+          <div class="tok">5600K</div>
+        </div>
+
+        <div class="rel" style="left:16px;right:16px;bottom:26px">
+          <div class="sq film"></div>
+          <div class="shut"><i></i></div>
+          <div class="lens">1×</div>
+        </div>
+      </div></div>
+      <p class="note">The meter's target is <b>the whole height of the frame</b> — the easiest thing
+      on screen to hit without looking.</p>
+    </div>
+
+    <div class="item">
+      <div class="cap">PORTRAIT · SHUTTER TAPPED</div>
+      <div class="sub">Touch a value and it becomes a wheel above the strip. Nothing else moves.</div>
+      <div class="phone p"><div class="screen">
+        <div class="pic"><div class="horizon"></div></div>
+        <div class="utils"><div class="u">#</div><div class="u">3:2</div><div class="u">⚙</div></div>
+
+        <div class="meter" style="right:10px;top:96px;bottom:196px">
+          <div class="pm">+</div>
+          <div class="ticks">
+            <div class="tick"></div><div class="tick"></div><div class="tick mid"></div>
+            <div class="tick"></div><div class="tick"></div>
+            <div class="knob" style="top:34%;margin-top:-8.5px"></div>
+          </div>
+          <div class="pm">−</div>
+        </div>
+        <div class="evtag" style="right:44px;top:194px">+0.7</div>
+
+        <div class="wheel" style="left:14px;right:14px;bottom:150px;height:56px">
+          <div class="lbl">SHUTTER</div>
+          <div class="idx"></div>
+          <div class="wr">
+            <span>15</span><span>30</span><span>60</span>
+            <span class="on">125</span>
+            <span>250</span><span>500</span><span>1000</span>
+          </div>
+        </div>
+
+        <div class="strip" style="left:14px;right:46px;bottom:104px">
+          <div class="tok a">A</div>
+          <div class="tok live">1/125</div><div class="dot">·</div>
+          <div class="tok">f/2.8</div><div class="dot">·</div>
+          <div class="tok">400</div><div class="dot">·</div>
+          <div class="tok">5600K</div>
+        </div>
+
+        <div class="rel" style="left:16px;right:16px;bottom:26px">
+          <div class="sq film"></div>
+          <div class="shut"><i></i></div>
+          <div class="lens">1×</div>
+        </div>
+      </div></div>
+      <p class="note">The tapped token stays lit in the strip, so <b>what you are holding is never
+      ambiguous</b>. Tapping <b>A</b> hands it all back.</p>
+    </div>
+  </div>
+
+  <!-- ============ LANDSCAPE ============ -->
+  <div class="row">
+    <div class="item">
+      <div class="cap">LANDSCAPE · AT REST</div>
+      <div class="sub">The phone turned. The meter has moved to stay vertical; the release has not
+        moved at all.</div>
+      <div class="phone l"><div class="screen">
+        <div class="pic"><div class="horizon" style="top:48%"></div></div>
+
+        <!-- meter now on the physically-left vertical edge, away from the release hand -->
+        <div class="meter" style="left:12px;top:34px;bottom:34px">
+          <div class="pm">+</div>
+          <div class="ticks">
+            <div class="tick"></div><div class="tick"></div><div class="tick mid"></div>
+            <div class="tick"></div><div class="tick"></div>
+            <div class="knob" style="top:50%;margin-top:-8.5px"></div>
+          </div>
+          <div class="pm">−</div>
+        </div>
+
+        <!-- strip runs with the release, lettering turned -->
+        <div class="strip" style="right:104px;top:50%;transform:translateY(-50%) rotate(-90deg);
+             transform-origin:center">
+          <div class="tok a">A</div>
+          <div class="tok">1/125</div><div class="dot">·</div>
+          <div class="tok">f/2.8</div><div class="dot">·</div>
+          <div class="tok">400</div><div class="dot">·</div>
+          <div class="tok">5600K</div>
+        </div>
+
+        <div class="rel" style="right:22px;top:26px;bottom:26px;flex-direction:column">
+          <div class="sq film"></div>
+          <div class="shut"><i></i></div>
+          <div class="lens">1×</div>
+        </div>
+      </div></div>
+      <p class="note">Meter under the left thumb, release under the right. <b>The two hands do
+      different jobs</b> instead of competing for one corner.</p>
+    </div>
+
+    <div class="item">
+      <div class="cap">LANDSCAPE · ISO TAPPED</div>
+      <div class="sub">The wheel opens along the same edge as the strip, still clear of the frame.</div>
+      <div class="phone l"><div class="screen">
+        <div class="pic"><div class="horizon" style="top:48%"></div></div>
+
+        <div class="meter" style="left:12px;top:34px;bottom:34px">
+          <div class="pm">+</div>
+          <div class="ticks">
+            <div class="tick"></div><div class="tick"></div><div class="tick mid"></div>
+            <div class="tick"></div><div class="tick"></div>
+            <div class="knob" style="top:62%;margin-top:-8.5px"></div>
+          </div>
+          <div class="pm">−</div>
+        </div>
+        <div class="evtag" style="left:46px;top:168px">−0.3</div>
+
+        <div class="wheel" style="right:166px;top:50%;width:214px;height:50px;
+             transform:translateY(-50%) rotate(-90deg);transform-origin:center">
+          <div class="lbl">ISO</div>
+          <div class="idx"></div>
+          <div class="wr">
+            <span>50</span><span>100</span><span>200</span>
+            <span class="on">400</span>
+            <span>800</span><span>1600</span><span>3200</span>
+          </div>
+        </div>
+
+        <div class="strip" style="right:104px;top:50%;transform:translateY(-50%) rotate(-90deg);
+             transform-origin:center">
+          <div class="tok a">A</div>
+          <div class="tok">1/125</div><div class="dot">·</div>
+          <div class="tok">f/2.8</div><div class="dot">·</div>
+          <div class="tok live">400</div><div class="dot">·</div>
+          <div class="tok">5600K</div>
+        </div>
+
+        <div class="rel" style="right:22px;top:26px;bottom:26px;flex-direction:column">
+          <div class="sq film"></div>
+          <div class="shut"><i></i></div>
+          <div class="lens">1×</div>
+        </div>
+      </div></div>
+      <p class="note">Only the <b>lettering</b> rotates. The strip and wheel keep their station, so
+      nothing jumps across the screen when you turn the phone.</p>
+    </div>
+  </div>
+
+  <div class="rule" style="max-width:860px">
+    <h3>WHAT THIS REPLACES</h3>
+    <p>Six dials, the PRO button, the dial rail and the barrel readout — all of it — with a strip
+      that is 22pt tall and a meter 26pt wide. Focus peaking and grid stay in the top switches;
+      manual focus becomes a token in the strip like the rest.</p>
+    <p><b style="color:var(--paper)">The honest cost:</b> a token is a smaller target than a 70pt dial,
+      and nothing here is knurled metal. This trades the pleasure of the object for the picture
+      being visible. That is a real trade, and worth seeing on the phone before deciding.</p>
+  </div>
+</div>
