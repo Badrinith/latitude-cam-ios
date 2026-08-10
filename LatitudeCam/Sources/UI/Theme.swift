@@ -542,6 +542,68 @@ final class AppState: ObservableObject {
         set { exposureComp = position(forIndex: newValue, of: Self.evDetents) }
     }
 
+    // MARK: - The hardware Camera Control
+
+    /// The ladders offered to the button, built from the same arrays the dials
+    /// index. Note the "A"-headed label lists are deliberately not used: they
+    /// carry an entry the stop count knows nothing about, and the button would
+    /// be off by one for every stop past the first.
+    func hardwareControlLadders() -> [CameraControlDial: CameraControlLadder] {
+        // Copied out before the closures capture them. The title closures are
+        // @Sendable — the system calls them off the main thread — and these
+        // ladders are main-actor state. Snapshotting the values here is what
+        // makes them safe to read from the HUD; reaching back into `Self` from
+        // inside the closure would not be.
+        let shutterStops = Self.shutterStops
+        let isoStops = Self.isoStops
+        let apertureLabels = Self.apertureLabels
+
+        return [
+            .shutter: CameraControlLadder(
+                count: shutterStops.count,
+                selected: stopIndex(shutterStops.count, at: shutter),
+                title: { "1/\(shutterStops[min(max($0, 0), shutterStops.count - 1)])" }
+            ),
+            .iso: CameraControlLadder(
+                count: isoStops.count,
+                selected: stopIndex(isoStops.count, at: iso),
+                title: { "\(isoStops[min(max($0, 0), isoStops.count - 1)])" }
+            ),
+            .aperture: CameraControlLadder(
+                count: apertureLabels.count,
+                selected: stopIndex(apertureLabels.count, at: aperture),
+                title: { apertureLabels[min(max($0, 0), apertureLabels.count - 1)] }
+            ),
+            .exposure: CameraControlLadder(
+                count: Self.evDetents,
+                selected: stopIndex(Self.evDetents, at: exposureComp),
+                title: { String(format: "%+.1f EV", -2.5 + Double($0) * 0.5) }
+            )
+        ]
+    }
+
+    /// A turn of the hardware button, routed to the same setters the dials use.
+    ///
+    /// Shutter and ISO leave automatic on the way through, for the same reason
+    /// touching their dial does: a camera the user is setting by hand is not
+    /// metering for itself, and a control that moves while the exposure does
+    /// not is a dead control.
+    func applyHardwareControl(_ dial: CameraControlDial, index: Int) {
+        Haptics.detent()
+        switch dial {
+        case .shutter:
+            if autoExposure { autoExposure = false }
+            shutter = position(forIndex: index, of: Self.shutterStops.count)
+        case .iso:
+            if autoExposure { autoExposure = false }
+            iso = position(forIndex: index, of: Self.isoStops.count)
+        case .aperture:
+            aperture = position(forIndex: index, of: Self.apertureStops.count)
+        case .exposure:
+            exposureComp = position(forIndex: index, of: Self.evDetents)
+        }
+    }
+
     /// Haptics live here rather than at each call site, so a new navigation
     /// cannot ship without feedback.
     func go(_ next: Screen) {
@@ -587,6 +649,10 @@ final class AppState: ObservableObject {
         s.portrait = portrait
         s.aperture = apertureValue
         cameraManager.apply(s)
+        // Every path that changes a setting comes through here, so this is the
+        // one place the hardware HUD has to be told the dial moved without it.
+        // A no-op on a body without the button.
+        cameraManager.refreshCameraControls()
     }
 
     /// Families in shelf order, derived from the roll so the two cannot disagree.
@@ -1146,6 +1212,22 @@ final class AppState: ObservableObject {
             guard let self, !self.hasAdoptedWideZoom else { return }
             self.hasAdoptedWideZoom = true
             self.zoom = Double(wide)
+        }
+
+        // The hardware Camera Control, on the bodies that have one. Both of
+        // these are read only by code already gated on iOS 18 and on the
+        // session reporting the button, so on every other phone they are set
+        // and never called.
+        //
+        // The ladders are the same arrays the dials index, and the changes go
+        // back through the same index setters, so the button and the dial
+        // cannot come to different conclusions about what a stop is.
+        cameraManager.cameraControlLadders = { [weak self] in
+            guard let self else { return [:] }
+            return self.hardwareControlLadders()
+        }
+        cameraManager.onCameraControlChange = { [weak self] dial, index in
+            self?.applyHardwareControl(dial, index: index)
         }
 
         // A persisted manual exposure must not outlive the controls that set it.

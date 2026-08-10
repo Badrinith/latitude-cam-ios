@@ -31,6 +31,95 @@ final class AppStateWiringTests: XCTestCase {
         super.tearDown()
     }
 
+    // MARK: - The hardware Camera Control
+
+    /// The button's ladders must be the ones the dials index.
+    ///
+    /// Same trap as the engraved scales: the "A"-headed label lists are one
+    /// entry longer than the stop count, and building a picker from one would
+    /// put the button off by one for every stop past the first.
+    func testHardwareLaddersMatchTheStopCounts() {
+        let ladders = AppState().hardwareControlLadders()
+
+        XCTAssertEqual(ladders[.shutter]?.count, AppState.shutterStops.count)
+        XCTAssertEqual(ladders[.iso]?.count, AppState.isoStops.count)
+        XCTAssertEqual(ladders[.aperture]?.count, AppState.apertureStops.count)
+        XCTAssertEqual(ladders[.exposure]?.count, AppState.evDetents)
+
+        XCTAssertNotEqual(ladders[.shutter]?.count, AppState.shutterLabels.count,
+                          "the shutter picker is built from the A-headed list")
+        XCTAssertNotEqual(ladders[.iso]?.count, AppState.isoLabels.count,
+                          "the ISO picker is built from the A-headed list")
+    }
+
+    /// Four dials, because the system takes four. Five would mean one silently
+    /// never reaches the button.
+    func testEveryOfferedDialHasALadder() {
+        let ladders = AppState().hardwareControlLadders()
+        for dial in CameraControlDial.allCases {
+            XCTAssertNotNil(ladders[dial], "\(dial.rawValue) is offered but has no ladder")
+        }
+        XCTAssertEqual(CameraControlDial.allCases.count, 4)
+    }
+
+    /// A turn of the button has to land on the same stop the dial would.
+    func testTheButtonSelectsTheStopItNames() {
+        let app = AppState()
+
+        for index in 0..<AppState.shutterStops.count {
+            app.applyHardwareControl(.shutter, index: index)
+            XCTAssertEqual(app.shutterIndex - 1, index, "shutter stop \(index)")
+            XCTAssertFalse(app.autoExposure, "the button did not leave automatic")
+        }
+
+        for index in 0..<AppState.apertureStops.count {
+            app.applyHardwareControl(.aperture, index: index)
+            XCTAssertEqual(app.apertureIndex, index, "aperture stop \(index)")
+        }
+
+        for index in 0..<AppState.evDetents {
+            app.applyHardwareControl(.exposure, index: index)
+            XCTAssertEqual(app.exposureIndex, index, "exposure stop \(index)")
+        }
+    }
+
+    /// Exposure and aperture must *not* drag the camera off automatic — only
+    /// the two that actually set the exposure do.
+    func testApertureAndExposureLeaveMeteringAlone() {
+        let app = AppState()
+        app.autoExposure = true
+
+        app.applyHardwareControl(.aperture, index: 5)
+        XCTAssertTrue(app.autoExposure, "aperture should not take the camera off auto")
+
+        app.applyHardwareControl(.exposure, index: 8)
+        XCTAssertTrue(app.autoExposure, "exposure compensation should not take the camera off auto")
+    }
+
+    /// **The graceful-degradation case.** On a body with no Camera Control the
+    /// published flags stay false and the on-screen dials keep working exactly
+    /// as they do now. This is the one thing that cannot be checked on the
+    /// owner's phone, because that phone *has* the button.
+    func testNothingBreaksWithoutTheHardwareButton() {
+        let app = AppState()
+
+        XCTAssertFalse(app.cameraManager.hasHardwareControls,
+                       "no controls should be claimed before a session reports the button")
+        XCTAssertFalse(app.cameraManager.cameraControlActive,
+                       "the HUD cannot be active on a body without the button")
+
+        // Safe to call whether or not anything is attached — the app calls it
+        // from syncCamera on every settings change.
+        app.cameraManager.refreshCameraControls()
+
+        // And the dials still work.
+        app.autoExposure = false
+        app.shutter = 0.9
+        let high = app.shutterLabel
+        app.shutter = 0.1
+        XCTAssertNotEqual(app.shutterLabel, high, "the on-screen dial stopped working")
+    }
+
     // MARK: - What the barrel reads
 
     /// Turning the shutter or ISO dial has to take the camera off automatic.

@@ -265,6 +265,71 @@ public final class CameraManager: NSObject, ObservableObject {
     /// actually is and the UI follows.
     public var onLensesReady: ((CGFloat) -> Void)?
 
+    // MARK: - The hardware Camera Control
+
+    /// True while the system's Camera Control HUD is on screen, so the app can
+    /// stand its own chrome down rather than talk over it.
+    ///
+    /// Stays false forever on a body without the button, which is what makes it
+    /// safe for the UI to read unconditionally.
+    @Published public private(set) var cameraControlActive = false
+
+    /// Whether the hardware button is driving anything. False on every body
+    /// that lacks it and on every OS before 18 — the dials on screen are
+    /// unaffected either way.
+    @Published public private(set) var hasHardwareControls = false
+
+    /// Asked for the ladders when the controls are built or refreshed. Left nil
+    /// by anything that does not care, in which case no controls are attached.
+    ///
+    /// `CameraManager` deliberately does not know what an f-stop is; this is
+    /// the seam through which whoever owns the ladders supplies them.
+    public var cameraControlLadders: (() -> [CameraControlDial: CameraControlLadder])?
+
+    /// Called on the main queue when the hardware button moves a dial.
+    public var onCameraControlChange: ((CameraControlDial, Int) -> Void)?
+
+    /// Held as `Any` so the stored property itself carries no availability.
+    /// A `@available` stored property of an availability-gated type is not
+    /// expressible on a class that also has to compile for iOS 17.
+    private var controlBridgeStorage: Any?
+
+    @available(iOS 18.0, *)
+    private var controlBridge: CameraControlBridge? {
+        get { controlBridgeStorage as? CameraControlBridge }
+        set { controlBridgeStorage = newValue }
+    }
+
+    /// Attaches the hardware dials, if this body has the button and the OS
+    /// knows what one is. Silent and harmless everywhere else.
+    ///
+    /// Must be called inside a session configuration block.
+    private func configureCameraControls(on session: AVCaptureSession) {
+        guard #available(iOS 18.0, *), let ladders = cameraControlLadders?() else { return }
+
+        let bridge = controlBridge ?? CameraControlBridge(
+            onChange: { [weak self] dial, index in
+                self?.onCameraControlChange?(dial, index)
+            },
+            onActiveChange: { [weak self] active in
+                self?.cameraControlActive = active
+            }
+        )
+        controlBridge = bridge
+
+        let attached = bridge.attach(to: session, ladders: ladders)
+        DispatchQueue.main.async { [weak self] in self?.hasHardwareControls = attached }
+    }
+
+    /// Pushes the current stops back into the HUD, for the times a value moved
+    /// on screen rather than under the thumb. A no-op without the button.
+    public func refreshCameraControls() {
+        guard #available(iOS 18.0, *),
+              let bridge = controlBridge,
+              let ladders = cameraControlLadders?() else { return }
+        bridge.sync(ladders)
+    }
+
     static func camera(at position: AVCaptureDevice.Position) -> AVCaptureDevice? {
         // The virtual device represents the lenses actually fitted to this iPhone
         // and exposes its hand-over factors for the model-aware lens selector.
@@ -715,6 +780,11 @@ public final class CameraManager: NSObject, ObservableObject {
 
         orient(output.connection(with: .video), front: false)
         orient(photoOutput.connection(with: .video), front: false)
+
+        // Inside the configuration block, and after the inputs — controls are
+        // part of the session's configuration, not something bolted on once it
+        // is running. Does nothing on a body without the button.
+        configureCameraControls(on: session)
 
         session.commitConfiguration()
 

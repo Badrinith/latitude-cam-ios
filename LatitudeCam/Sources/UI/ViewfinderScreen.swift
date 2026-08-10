@@ -343,11 +343,23 @@ struct ViewfinderScreen: View {
     /// for while framing. A row along the top is clear of the grip, and the
     /// buttons grow to 42.
     @ViewBuilder private var chrome: some View {
-        if controlStyle == "Top Plate" {
-            topPlateChrome
-        } else {
-            classicChrome
+        Group {
+            if controlStyle == "Top Plate" {
+                topPlateChrome
+            } else {
+                classicChrome
+            }
         }
+        // The system's Camera Control HUD draws over the frame while the
+        // hardware button is in use. Standing our own dials down for that
+        // moment keeps two sets of controls from arguing over the same
+        // setting in the same corner of the glass.
+        //
+        // On every body without the button this flag is false for the life of
+        // the app, so this modifier resolves to full opacity and nothing else
+        // changes.
+        .opacity(app.cameraManager.cameraControlActive ? 0.25 : 1)
+        .animation(.easeOut(duration: 0.2), value: app.cameraManager.cameraControlActive)
     }
 
     /// The handoff's screen. Unlike the other three styles this is not a deck

@@ -29,6 +29,7 @@
 		A020 /* RotaryDial.swift in Sources */ = {isa = PBXBuildFile; fileRef = B020 /* RotaryDial.swift */; };
 		A021 /* Barrel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B021 /* Barrel.swift */; };
 		A022 /* ViewfinderControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = B022 /* ViewfinderControls.swift */; };
+		A023 /* CameraControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = B023 /* CameraControls.swift */; };
 		A100 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B100 /* Assets.xcassets */; };
 		A200 /* FilmProfileTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B200 /* FilmProfileTests.swift */; };
 		A201 /* ExposureControlTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B201 /* ExposureControlTests.swift */; };
@@ -58,6 +59,7 @@
 		B002 /* FilmProfiles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilmProfiles.swift; sourceTree = "<group>"; };
 		B003 /* ExposureControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExposureControl.swift; sourceTree = "<group>"; };
 		B004 /* CameraManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraManager.swift; sourceTree = "<group>"; };
+		B023 /* CameraControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraControls.swift; sourceTree = "<group>"; };
 		B005 /* PhotoExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoExporter.swift; sourceTree = "<group>"; };
 		B006 /* PreviewEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewEngine.swift; sourceTree = "<group>"; };
 		B007 /* PhotoGallery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoGallery.swift; sourceTree = "<group>"; };
@@ -120,6 +122,7 @@
 				B002 /* FilmProfiles.swift */,
 				B003 /* ExposureControl.swift */,
 				B004 /* CameraManager.swift */,
+				B023 /* CameraControls.swift */,
 				B005 /* PhotoExporter.swift */,
 				B006 /* PreviewEngine.swift */,
 				B007 /* PhotoGallery.swift */,
@@ -273,6 +276,7 @@
 				A020 /* RotaryDial.swift in Sources */,
 				A021 /* Barrel.swift in Sources */,
 				A022 /* ViewfinderControls.swift in Sources */,
+				A023 /* CameraControls.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
