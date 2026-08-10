@@ -344,6 +344,10 @@ public final class CameraManager: NSObject, ObservableObject {
         guard #available(iOS 18.0, *), !ladders.isEmpty else { return }
 
         let bridge = controlBridge ?? CameraControlBridge(
+            // The camera's own serial queue. Controls assert on the queue they
+            // were given, and this method already runs here — so attaching,
+            // syncing and the system's own actions all land on one queue.
+            queue: cameraQueue,
             onChange: { [weak self] dial, index in
                 self?.onCameraControlChange?(dial, index)
             },

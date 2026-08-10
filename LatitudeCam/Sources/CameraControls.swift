@@ -98,16 +98,26 @@ final class CameraControlBridge: NSObject, AVCaptureSessionControlsDelegate {
     /// system's own away with them.
     private var attached: [AVCaptureControl] = []
 
-    /// Actions arrive here rather than on the session queue. The system calls
-    /// these off the main thread and the values feed straight into published
-    /// state, so the hop has to happen somewhere; doing it here keeps every
-    /// call site honest.
-    private let actionQueue = DispatchQueue(label: "com.latitude.camera.controls")
+    /// The one queue every control is touched on.
+    ///
+    /// `AVCaptureControl` is not merely thread-*unsafe*: it asserts. Setting
+    /// `selectedIndex` from the wrong queue calls `dispatch_assert_queue`,
+    /// which fails hard — the app died with SIGTRAP on the first turn of any
+    /// dial, because the app updates its state on the main actor and was
+    /// pushing the new stop straight into the picker from there.
+    ///
+    /// So this is the camera's own serial queue, handed in rather than made
+    /// here. Attaching already happens on it, syncing hops onto it, and the
+    /// system dispatches its actions to it — one serial queue for all three,
+    /// which also means `attached` needs no lock of its own.
+    private let queue: DispatchQueue
 
     init(
+        queue: DispatchQueue,
         onChange: @escaping @MainActor (CameraControlDial, Int) -> Void,
         onActiveChange: @escaping @MainActor (Bool) -> Void
     ) {
+        self.queue = queue
         self.onChange = onChange
         self.onActiveChange = onActiveChange
         super.init()
@@ -143,10 +153,13 @@ final class CameraControlBridge: NSObject, AVCaptureSessionControlsDelegate {
                 numberOfIndexes: ladder.count,
                 localizedTitleTransform: { index in ladder.title(index) }
             )
-            picker.selectedIndex = min(max(ladder.selected, 0), ladder.count - 1)
-            picker.setActionQueue(actionQueue) { [onChange] index in
+            // Action queue first, then the value. The queue is what the
+            // control asserts against, so it has to know about it before
+            // anything is set on it.
+            picker.setActionQueue(queue) { [onChange] index in
                 Task { @MainActor in onChange(dial, index) }
             }
+            picker.selectedIndex = min(max(ladder.selected, 0), ladder.count - 1)
 
             // Asked, not assumed. A control the session will not take is a
             // control that must not go in `attached`, or detaching later
@@ -157,7 +170,7 @@ final class CameraControlBridge: NSObject, AVCaptureSessionControlsDelegate {
         }
 
         guard !attached.isEmpty else { return false }
-        session.setControlsDelegate(self, queue: actionQueue)
+        session.setControlsDelegate(self, queue: queue)
         return true
     }
 
@@ -172,12 +185,20 @@ final class CameraControlBridge: NSObject, AVCaptureSessionControlsDelegate {
 
     /// Keeps the HUD's idea of each dial in step with the app's, for the times
     /// the value moved on screen rather than under the thumb.
+    ///
+    /// Called from the main actor — every settings change goes through
+    /// `syncCamera` — and hops to the control queue, because that is where a
+    /// control may be touched. Reading `selectedIndex` counts as touching it,
+    /// so the whole comparison goes across, not just the write.
     func sync(_ ladders: [CameraControlDial: CameraControlLadder]) {
-        for (dial, control) in zip(CameraControlDial.allCases, attached) {
-            guard let picker = control as? AVCaptureIndexPicker,
-                  let ladder = ladders[dial] else { continue }
-            let index = min(max(ladder.selected, 0), ladder.count - 1)
-            if picker.selectedIndex != index { picker.selectedIndex = index }
+        queue.async { [weak self] in
+            guard let self else { return }
+            for (dial, control) in zip(CameraControlDial.allCases, self.attached) {
+                guard let picker = control as? AVCaptureIndexPicker,
+                      let ladder = ladders[dial], ladder.count > 0 else { continue }
+                let index = min(max(ladder.selected, 0), ladder.count - 1)
+                if picker.selectedIndex != index { picker.selectedIndex = index }
+            }
         }
     }
 
