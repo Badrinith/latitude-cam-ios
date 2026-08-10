@@ -279,12 +279,47 @@ public final class CameraManager: NSObject, ObservableObject {
     /// unaffected either way.
     @Published public private(set) var hasHardwareControls = false
 
-    /// Asked for the ladders when the controls are built or refreshed. Left nil
-    /// by anything that does not care, in which case no controls are attached.
+    /// The ladders the hardware controls are built from, pushed in by whoever
+    /// owns them rather than fetched back out on demand.
     ///
-    /// `CameraManager` deliberately does not know what an f-stop is; this is
-    /// the seam through which whoever owns the ladders supplies them.
-    public var cameraControlLadders: (() -> [CameraControlDial: CameraControlLadder])?
+    /// This is a stored snapshot and not a closure on purpose, and the
+    /// distinction is the whole bug it replaces. `AppState` is `@MainActor`;
+    /// the session configures on `cameraQueue`. A closure here meant the camera
+    /// queue reached into main-actor state to ask what an f-stop was, which
+    /// Swift's isolation checking traps at runtime — the app died on launch
+    /// with SIGTRAP the moment the session came up.
+    ///
+    /// Pushing a plain value across instead means the main actor does its own
+    /// reading, on its own thread, and the camera queue only ever sees the
+    /// result.
+    private var controlLadders: [CameraControlDial: CameraControlLadder] = [:]
+    private let controlLaddersLock = NSLock()
+
+    /// Hands the camera the current ladders. Call from the main actor.
+    ///
+    /// If the session is already up, the controls are rebuilt to match — the
+    /// camera usually finishes configuring before the app has said what the
+    /// dials are, so without this the button would stay empty until something
+    /// else reconfigured the session.
+    public func setCameraControlLadders(_ ladders: [CameraControlDial: CameraControlLadder]) {
+        controlLaddersLock.lock()
+        let firstTime = controlLadders.isEmpty
+        controlLadders = ladders
+        controlLaddersLock.unlock()
+
+        guard firstTime, let session = captureSession else { return }
+        cameraQueue.async { [weak self] in
+            session.beginConfiguration()
+            self?.configureCameraControls(on: session)
+            session.commitConfiguration()
+        }
+    }
+
+    private func currentControlLadders() -> [CameraControlDial: CameraControlLadder] {
+        controlLaddersLock.lock()
+        defer { controlLaddersLock.unlock() }
+        return controlLadders
+    }
 
     /// Called on the main queue when the hardware button moves a dial.
     public var onCameraControlChange: ((CameraControlDial, Int) -> Void)?
@@ -305,7 +340,8 @@ public final class CameraManager: NSObject, ObservableObject {
     ///
     /// Must be called inside a session configuration block.
     private func configureCameraControls(on session: AVCaptureSession) {
-        guard #available(iOS 18.0, *), let ladders = cameraControlLadders?() else { return }
+        let ladders = currentControlLadders()
+        guard #available(iOS 18.0, *), !ladders.isEmpty else { return }
 
         let bridge = controlBridge ?? CameraControlBridge(
             onChange: { [weak self] dial, index in
@@ -324,9 +360,9 @@ public final class CameraManager: NSObject, ObservableObject {
     /// Pushes the current stops back into the HUD, for the times a value moved
     /// on screen rather than under the thumb. A no-op without the button.
     public func refreshCameraControls() {
-        guard #available(iOS 18.0, *),
-              let bridge = controlBridge,
-              let ladders = cameraControlLadders?() else { return }
+        guard #available(iOS 18.0, *), let bridge = controlBridge else { return }
+        let ladders = currentControlLadders()
+        guard !ladders.isEmpty else { return }
         bridge.sync(ladders)
     }
 

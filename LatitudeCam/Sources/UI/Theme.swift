@@ -651,7 +651,11 @@ final class AppState: ObservableObject {
         cameraManager.apply(s)
         // Every path that changes a setting comes through here, so this is the
         // one place the hardware HUD has to be told the dial moved without it.
-        // A no-op on a body without the button.
+        // Both calls are no-ops on a body without the button.
+        //
+        // The ladders are read here, on the main actor, and handed over — the
+        // camera never reaches back for them.
+        cameraManager.setCameraControlLadders(hardwareControlLadders())
         cameraManager.refreshCameraControls()
     }
 
@@ -1214,18 +1218,18 @@ final class AppState: ObservableObject {
             self.zoom = Double(wide)
         }
 
-        // The hardware Camera Control, on the bodies that have one. Both of
-        // these are read only by code already gated on iOS 18 and on the
-        // session reporting the button, so on every other phone they are set
-        // and never called.
+        // The hardware Camera Control, on the bodies that have one.
         //
-        // The ladders are the same arrays the dials index, and the changes go
+        // Pushed across as a value, never left as a callback the camera can
+        // pull on. AppState is @MainActor and the session configures on a
+        // background queue; letting that queue ask the app what an f-stop is
+        // is a cross-actor read, and Swift traps it at runtime — the app died
+        // on launch with SIGTRAP the moment the session came up.
+        //
+        // The ladders are the same arrays the dials index, and the changes come
         // back through the same index setters, so the button and the dial
         // cannot come to different conclusions about what a stop is.
-        cameraManager.cameraControlLadders = { [weak self] in
-            guard let self else { return [:] }
-            return self.hardwareControlLadders()
-        }
+        cameraManager.setCameraControlLadders(hardwareControlLadders())
         cameraManager.onCameraControlChange = { [weak self] dial, index in
             self?.applyHardwareControl(dial, index: index)
         }
